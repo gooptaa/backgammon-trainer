@@ -1,0 +1,101 @@
+:root {
+  --board-surface: #b57f55;
+  --point-tone-a: #e8cfa5;
+  --point-tone-b: #7f3728;
+  --checker-light: #f7f4ee;
+  --checker-dark: #1e2126;
+  --checker-white-outline: #4f4b45;
+  --checker-black-outline: #15171b;
+  --board-frame: #664022;
+  --board-inset: #845934;
+  --bar-surface: #4f2d1b;
+  --bar-divider: #3e2213;
+  --bearoff-surface: #9f6a41;
+  --dice-surface: #f5f2ea;
+  --dice-outline: #3a342f;
+  --dice-pip: #27231f;
+  --coord-label: rgba(33, 26, 20, 0.5);
+}
+
+.boardRoot {
+  width: 100%;
+  max-width: 100%;
+}
+
+.boardSvg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  border-radius: 12px;
+}
+
+.boardFrame {
+  fill: var(--board-frame);
+}
+
+.boardInset {
+  fill: none;
+  stroke: var(--board-inset);
+  stroke-width: 10;
+}
+
+.boardSurface {
+  fill: var(--board-surface);
+  stroke: rgba(56, 30, 15, 0.55);
+  stroke-width: 2.5;
+}
+
+.barSurface {
+  fill: var(--bar-surface);
+}
+
+.barDivider {
+  stroke: var(--bar-divider);
+  stroke-width: 3;
+}
+
+.bearOffSurface {
+  fill: var(--bearoff-surface);
+  stroke: rgba(56, 30, 15, 0.42);
+  stroke-width: 1.5;
+}
+
+.pointToneA {
+  fill: var(--point-tone-a);
+  stroke: rgba(42, 24, 13, 0.48);
+  stroke-width: 1;
+}
+
+.pointToneB {
+  fill: var(--point-tone-b);
+  stroke: rgba(42, 24, 13, 0.48);
+  stroke-width: 1;
+}
+
+.checkerWhite {
+  fill: var(--checker-light);
+  stroke: var(--checker-white-outline);
+}
+
+.checkerBlack {
+  fill: var(--checker-dark);
+  stroke: var(--checker-black-outline);
+}
+
+.dieBody {
+  fill: var(--dice-surface);
+  stroke: var(--dice-outline);
+  stroke-width: 2.2;
+}
+
+.diePip {
+  fill: var(--dice-pip);
+}
+
+.pointLabel {
+  fill: var(--coord-label);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}

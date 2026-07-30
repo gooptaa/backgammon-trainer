@@ -9,3 +9,4 @@ test-results/
 .env.local
 pnpm-debug.log*
 .DS_Store
+.tmp
