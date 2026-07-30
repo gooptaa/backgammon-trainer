@@ -489,11 +489,14 @@ export const WHITE_ONE_ORDER_CONTINUES_OTHER_STOPS_FIXTURE: BoardPosition = crea
  */
 export const WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE: BoardPosition = createPosition({
   points: {
-    2: { player: "white", checkerCount: 1 }
+    8: { player: "white", checkerCount: 1 },
+    2: { player: "white", checkerCount: 1 },
+    7: { player: "black", checkerCount: 2 },
+    6: { player: "black", checkerCount: 2 }
   },
   borneOff: {
-    white: 14,
-    black: 15
+    white: 13,
+    black: 11
   }
 });
 
@@ -532,11 +535,14 @@ export const WHITE_BOTH_DICE_BOTH_ORDERS_SEQUENCE_FIXTURE: BoardPosition = creat
 export const WHITE_ONLY_LARGER_DIE_PLAYABLE_FIXTURE: BoardPosition = createPosition({
   points: {
     8: { player: "white", checkerCount: 1 },
-    5: { player: "black", checkerCount: 2 }
+    24: { player: "white", checkerCount: 1 },
+    5: { player: "black", checkerCount: 2 },
+    21: { player: "black", checkerCount: 2 },
+    18: { player: "black", checkerCount: 2 }
   },
   borneOff: {
-    white: 14,
-    black: 13
+    white: 13,
+    black: 9
   }
 });
 
@@ -545,11 +551,15 @@ export const WHITE_ONLY_LARGER_DIE_PLAYABLE_FIXTURE: BoardPosition = createPosit
  */
 export const WHITE_ONLY_SMALLER_DIE_PLAYABLE_FIXTURE: BoardPosition = createPosition({
   points: {
-    4: { player: "white", checkerCount: 1 }
+    8: { player: "white", checkerCount: 1 },
+    24: { player: "white", checkerCount: 1 },
+    2: { player: "black", checkerCount: 2 },
+    21: { player: "black", checkerCount: 2 },
+    18: { player: "black", checkerCount: 2 }
   },
   borneOff: {
-    white: 14,
-    black: 15
+    white: 13,
+    black: 9
   }
 });
 
@@ -558,11 +568,14 @@ export const WHITE_ONLY_SMALLER_DIE_PLAYABLE_FIXTURE: BoardPosition = createPosi
  */
 export const WHITE_BOTH_DICE_INDIVIDUAL_ONLY_FIXTURE: BoardPosition = createPosition({
   points: {
-    7: { player: "white", checkerCount: 1 }
+    8: { player: "white", checkerCount: 1 },
+    24: { player: "white", checkerCount: 1 },
+    21: { player: "black", checkerCount: 2 },
+    18: { player: "black", checkerCount: 2 }
   },
   borneOff: {
-    white: 14,
-    black: 15
+    white: 13,
+    black: 11
   }
 });
 
@@ -596,5 +609,189 @@ export const WHITE_BAR_ONLY_ONE_DIE_PLAYABLE_FIXTURE: BoardPosition = createPosi
   borneOff: {
     white: 14,
     black: 11
+  }
+});
+
+/**
+ * White has all active checkers in home board.
+ */
+export const WHITE_BEAR_OFF_ALL_HOME_FIXTURE: BoardPosition = createPosition({
+  points: {
+    6: { player: "white", checkerCount: 2 },
+    3: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 12,
+    black: 15
+  }
+});
+
+/**
+ * White has a checker outside home board, so bearing off is not allowed.
+ */
+export const WHITE_BEAR_OFF_OUTSIDE_HOME_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    3: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
+
+/**
+ * White has a checker on the bar, so bearing off is not allowed.
+ */
+export const WHITE_BEAR_OFF_BAR_PRESENT_FIXTURE: BoardPosition = createPosition({
+  points: {
+    6: { player: "white", checkerCount: 1 },
+    3: { player: "white", checkerCount: 1 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 12,
+    black: 15
+  }
+});
+
+/**
+ * White has an exact bearing-off move from point 6 with die 6.
+ */
+export const WHITE_BEAR_OFF_EXACT_FIXTURE: BoardPosition = createPosition({
+  points: {
+    6: { player: "white", checkerCount: 1 },
+    5: { player: "black", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 14,
+    black: 13
+  }
+});
+
+/**
+ * White can use an oversized die to bear off from point 5.
+ */
+export const WHITE_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE: BoardPosition = createPosition({
+  points: {
+    5: { player: "white", checkerCount: 1 },
+    4: { player: "black", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 14,
+    black: 13
+  }
+});
+
+/**
+ * White oversized bear off is blocked by a checker on a higher point.
+ */
+export const WHITE_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE: BoardPosition = createPosition({
+  points: {
+    5: { player: "white", checkerCount: 1 },
+    3: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
+
+/**
+ * White oversized die may bear off only the farthest eligible point.
+ */
+export const WHITE_BEAR_OFF_FARTHEST_ONLY_FIXTURE: BoardPosition = createPosition({
+  points: {
+    5: { player: "white", checkerCount: 1 },
+    4: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
+
+/**
+ * White first bear-off step can change second-step legality.
+ */
+export const WHITE_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE: BoardPosition = createPosition({
+  points: {
+    3: { player: "white", checkerCount: 1 },
+    1: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
+
+/**
+ * White bearing-off position where only one die is playable.
+ */
+export const WHITE_BEAR_OFF_ONLY_ONE_DIE_PLAYABLE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    1: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * Black has an exact bearing-off move from point 19 with die 6.
+ */
+export const BLACK_BEAR_OFF_EXACT_FIXTURE: BoardPosition = createPosition({
+  points: {
+    19: { player: "black", checkerCount: 1 },
+    20: { player: "white", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 13,
+    black: 14
+  }
+});
+
+/**
+ * Black can use an oversized die to bear off from point 20.
+ */
+export const BLACK_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE: BoardPosition = createPosition({
+  points: {
+    20: { player: "black", checkerCount: 1 },
+    21: { player: "white", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 13,
+    black: 14
+  }
+});
+
+/**
+ * Black oversized bear off is blocked by a checker on a higher point.
+ */
+export const BLACK_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE: BoardPosition = createPosition({
+  points: {
+    22: { player: "black", checkerCount: 1 },
+    20: { player: "black", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 15,
+    black: 13
+  }
+});
+
+/**
+ * Black first bear-off step can change second-step legality.
+ */
+export const BLACK_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE: BoardPosition = createPosition({
+  points: {
+    22: { player: "black", checkerCount: 1 },
+    24: { player: "black", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 15,
+    black: 13
   }
 });

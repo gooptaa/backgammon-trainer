@@ -10,6 +10,10 @@ import {
   type MoveStep
 } from "../src/index";
 import {
+  BLACK_BEAR_OFF_EXACT_FIXTURE,
+  BLACK_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
+  BLACK_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
+  BLACK_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
   BLACK_FORWARD_FIXTURE,
   WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
   WHITE_BAR_BOTH_DICE_SEQUENCE_FIXTURE,
@@ -37,6 +41,15 @@ import {
   WHITE_MULTIPLE_MOVES_FIXTURE,
   WHITE_ONLY_LARGER_DIE_PLAYABLE_FIXTURE,
   WHITE_ONLY_SMALLER_DIE_PLAYABLE_FIXTURE,
+  WHITE_BEAR_OFF_ALL_HOME_FIXTURE,
+  WHITE_BEAR_OFF_BAR_PRESENT_FIXTURE,
+  WHITE_BEAR_OFF_EXACT_FIXTURE,
+  WHITE_BEAR_OFF_FARTHEST_ONLY_FIXTURE,
+  WHITE_BEAR_OFF_ONLY_ONE_DIE_PLAYABLE_FIXTURE,
+  WHITE_BEAR_OFF_OUTSIDE_HOME_FIXTURE,
+  WHITE_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
+  WHITE_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
+  WHITE_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
   WHITE_OPEN_DESTINATION_FIXTURE,
   WHITE_ONE_ORDER_CONTINUES_OTHER_STOPS_FIXTURE,
   WHITE_ONE_DESTINATION_FIXTURE,
@@ -868,6 +881,273 @@ describe("getLegalMoves basic forward generation", () => {
     expect(oneDieResult.moves.every((move) => move.steps[0]?.dieValue === 1)).toBe(true);
   });
 
+  it("generates exact bearing-off steps when all checkers are in home board", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_EXACT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [6, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.some((move) => move.steps[0]?.kind === "bear-off")).toBe(true);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.kind === "bear-off" &&
+          move.steps[0]?.fromPoint === 6 &&
+          move.steps[0]?.toPoint === "off" &&
+          move.steps[0]?.dieValue === 6
+      )
+    ).toBe(true);
+  });
+
+  it("prohibits bearing off when any checker remains outside the home board", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_OUTSIDE_HOME_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [6, 3]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.some((move) => move.steps[0]?.kind === "bear-off")).toBe(false);
+  });
+
+  it("prohibits bearing off while a checker is on the bar", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_BAR_PRESENT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps[0]?.kind === "enter-from-bar")).toBe(true);
+    expect(result.moves.some((move) => move.steps[0]?.kind === "bear-off")).toBe(false);
+  });
+
+  it("allows oversized bearing off when no checker is on a higher point", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [6, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.kind === "bear-off" &&
+          move.steps[0]?.fromPoint === 5 &&
+          move.steps[0]?.toPoint === "off" &&
+          move.steps[0]?.dieValue === 6
+      )
+    ).toBe(true);
+  });
+
+  it("prohibits oversized bearing off when a checker remains on a higher point", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [4, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.kind === "bear-off" &&
+          move.steps[0]?.fromPoint === 3 &&
+          move.steps[0]?.dieValue === 4
+      )
+    ).toBe(false);
+  });
+
+  it("uses only the farthest eligible point for oversized bearing off", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_FARTHEST_ONLY_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [6, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) => move.steps[0]?.kind === "bear-off" && move.steps[0]?.fromPoint === 5
+      )
+    ).toBe(true);
+    expect(
+      result.moves.some(
+        (move) => move.steps[0]?.kind === "bear-off" && move.steps[0]?.fromPoint === 4
+      )
+    ).toBe(false);
+  });
+
+  it("preserves die value and dieIndex on bearing-off steps", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_ONLY_ONE_DIE_PLAYABLE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [6, 3]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps[0]?.kind === "bear-off")).toBe(true);
+    expect(result.moves.every((move) => move.steps[0]?.dieValue === 6)).toBe(true);
+    expect(result.moves.every((move) => move.steps[0]?.dieIndex === 0)).toBe(true);
+  });
+
+  it("supports bearing-off legality for both player directions", () => {
+    const whiteInput: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_EXACT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [6, 1]
+      }
+    };
+    const blackInput: GetLegalMovesInput = {
+      position: BLACK_BEAR_OFF_EXACT_FIXTURE,
+      player: "black",
+      roll: {
+        dice: [6, 1]
+      }
+    };
+
+    const whiteResult = getLegalMoves(whiteInput);
+    const blackResult = getLegalMoves(blackInput);
+
+    expect(
+      whiteResult.moves.some(
+        (move) =>
+          move.steps[0]?.kind === "bear-off" &&
+          move.steps[0]?.fromPoint === 6 &&
+          move.steps[0]?.dieValue === 6
+      )
+    ).toBe(true);
+    expect(
+      blackResult.moves.some(
+        (move) =>
+          move.steps[0]?.kind === "bear-off" &&
+          move.steps[0]?.fromPoint === 19 &&
+          move.steps[0]?.dieValue === 6
+      )
+    ).toBe(true);
+  });
+
+  it("applies bearing-off steps in temporary state for second-step generation", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [3, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps.length === 2 &&
+          move.steps[0]?.kind === "bear-off" &&
+          move.steps[0]?.fromPoint === 3 &&
+          move.steps[1]?.kind === "bear-off" &&
+          move.steps[1]?.fromPoint === 1
+      )
+    ).toBe(true);
+  });
+
+  it("supports black bearing-off sequence shifts and oversized legality", () => {
+    const sequenceInput: GetLegalMovesInput = {
+      position: BLACK_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
+      player: "black",
+      roll: {
+        dice: [3, 2]
+      }
+    };
+    const oversizedAllowedInput: GetLegalMovesInput = {
+      position: BLACK_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
+      player: "black",
+      roll: {
+        dice: [6, 1]
+      }
+    };
+    const oversizedBlockedInput: GetLegalMovesInput = {
+      position: BLACK_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
+      player: "black",
+      roll: {
+        dice: [4, 1]
+      }
+    };
+
+    const sequenceResult = getLegalMoves(sequenceInput);
+    const oversizedAllowedResult = getLegalMoves(oversizedAllowedInput);
+    const oversizedBlockedResult = getLegalMoves(oversizedBlockedInput);
+
+    expect(sequenceResult.moves.some((move) => move.steps.length === 2)).toBe(true);
+    expect(
+      oversizedAllowedResult.moves.some(
+        (move) => move.steps[0]?.kind === "bear-off" && move.steps[0]?.fromPoint === 20
+      )
+    ).toBe(true);
+    expect(
+      oversizedBlockedResult.moves.some(
+        (move) => move.steps[0]?.kind === "bear-off" && move.steps[0]?.dieValue === 4
+      )
+    ).toBe(false);
+  });
+
+  it("assembles two legal bearing-off steps into one move and suppresses incomplete turns", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BOTH_DICE_ONE_ORDER_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 2)).toBe(true);
+  });
+
+  it("keeps larger-die preference in bearing-off positions when only one die can be used", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_ONLY_ONE_DIE_PLAYABLE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [6, 3]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 1)).toBe(true);
+    expect(result.moves.every((move) => move.steps[0]?.dieValue === 6)).toBe(true);
+  });
+
   it("keeps current doubles behavior unchanged", () => {
     const input: GetLegalMovesInput = {
       position: WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
@@ -942,10 +1222,23 @@ describe("engine fixtures", () => {
       WHITE_ONLY_SMALLER_DIE_PLAYABLE_FIXTURE,
       WHITE_BOTH_DICE_INDIVIDUAL_ONLY_FIXTURE,
       WHITE_BAR_BOTH_DICE_SEQUENCE_FIXTURE,
-      WHITE_BAR_ONLY_ONE_DIE_PLAYABLE_FIXTURE
+      WHITE_BAR_ONLY_ONE_DIE_PLAYABLE_FIXTURE,
+      WHITE_BEAR_OFF_ALL_HOME_FIXTURE,
+      WHITE_BEAR_OFF_OUTSIDE_HOME_FIXTURE,
+      WHITE_BEAR_OFF_BAR_PRESENT_FIXTURE,
+      WHITE_BEAR_OFF_EXACT_FIXTURE,
+      WHITE_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
+      WHITE_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
+      WHITE_BEAR_OFF_FARTHEST_ONLY_FIXTURE,
+      WHITE_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
+      WHITE_BEAR_OFF_ONLY_ONE_DIE_PLAYABLE_FIXTURE,
+      BLACK_BEAR_OFF_EXACT_FIXTURE,
+      BLACK_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
+      BLACK_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
+      BLACK_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE
     ];
 
-    expect(fixtures).toHaveLength(37);
+    expect(fixtures).toHaveLength(50);
   });
 
   it("produces complete point maps from helper", () => {
@@ -993,6 +1286,19 @@ describe("engine fixtures", () => {
       WHITE_BOTH_DICE_INDIVIDUAL_ONLY_FIXTURE,
       WHITE_BAR_BOTH_DICE_SEQUENCE_FIXTURE,
       WHITE_BAR_ONLY_ONE_DIE_PLAYABLE_FIXTURE,
+      WHITE_BEAR_OFF_ALL_HOME_FIXTURE,
+      WHITE_BEAR_OFF_OUTSIDE_HOME_FIXTURE,
+      WHITE_BEAR_OFF_BAR_PRESENT_FIXTURE,
+      WHITE_BEAR_OFF_EXACT_FIXTURE,
+      WHITE_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
+      WHITE_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
+      WHITE_BEAR_OFF_FARTHEST_ONLY_FIXTURE,
+      WHITE_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
+      WHITE_BEAR_OFF_ONLY_ONE_DIE_PLAYABLE_FIXTURE,
+      BLACK_BEAR_OFF_EXACT_FIXTURE,
+      BLACK_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
+      BLACK_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
+      BLACK_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
       createPosition({
         points: {
           6: { player: "white", checkerCount: 1 },

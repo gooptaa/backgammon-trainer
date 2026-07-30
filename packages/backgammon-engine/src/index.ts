@@ -100,6 +100,14 @@ const getEntryDestinationPoint = (dieValue: DieValue, player: Player): PointInde
   return destination;
 };
 
+const isHomeBoardPoint = (point: PointIndex, player: Player): boolean => {
+  return player === "white" ? point >= 1 && point <= 6 : point >= 19 && point <= 24;
+};
+
+const getBearOffDistance = (point: PointIndex, player: Player): DieValue => {
+  return (player === "white" ? point : 25 - point) as DieValue;
+};
+
 const requiresBarEntry = (position: BoardPosition, player: Player): boolean => {
   return position.bar[player] > 0;
 };
@@ -113,6 +121,58 @@ const getPlayerOccupiedPoints = (
   player: Player
 ): readonly PointIndex[] => {
   return POINT_INDEXES.filter((pointIndex) => position.points[pointIndex]?.player === player);
+};
+
+const canBearOff = (position: BoardPosition, player: Player): boolean => {
+  if (position.bar[player] > 0) {
+    return false;
+  }
+
+  const occupiedPoints = getPlayerOccupiedPoints(position, player);
+  return occupiedPoints.every((point) => isHomeBoardPoint(point, player));
+};
+
+const getBearOffOriginPoint = (
+  position: BoardPosition,
+  player: Player,
+  dieValue: DieValue
+): PointIndex | null => {
+  if (!canBearOff(position, player)) {
+    return null;
+  }
+
+  const occupiedPoints = getPlayerOccupiedPoints(position, player);
+  if (occupiedPoints.length === 0) {
+    return null;
+  }
+
+  const pointsWithDistance = occupiedPoints.map((point) => ({
+    point,
+    distance: getBearOffDistance(point, player)
+  }));
+
+  const exactPoint = pointsWithDistance.find(({ distance }) => distance === dieValue);
+  if (exactPoint !== undefined) {
+    return exactPoint.point;
+  }
+
+  const belowDiePoints = pointsWithDistance.filter(({ distance }) => distance < dieValue);
+  if (belowDiePoints.length === 0) {
+    return null;
+  }
+
+  const farthestBelowDie = belowDiePoints.reduce((current, candidate) =>
+    candidate.distance > current.distance ? candidate : current
+  );
+  const farthestOccupied = pointsWithDistance.reduce((current, candidate) =>
+    candidate.distance > current.distance ? candidate : current
+  );
+
+  if (farthestOccupied.distance !== farthestBelowDie.distance) {
+    return null;
+  }
+
+  return farthestBelowDie.point;
 };
 
 const isBlocked = (occupancy: PointOccupancy, player: Player): boolean => {
@@ -211,6 +271,23 @@ const generateSingleDieMoves = (input: SingleDieGenerationInput): readonly Move[
         moves.push(move);
       }
     }
+
+    const bearOffOriginPoint = getBearOffOriginPoint(input.position, input.player, input.dieValue);
+    if (bearOffOriginPoint !== null) {
+      moves.push({
+        player: input.player,
+        steps: [
+          {
+            kind: "bear-off",
+            fromPoint: bearOffOriginPoint,
+            toPoint: "off",
+            dieValue: input.dieValue,
+            dieIndex: input.dieIndex,
+            hitsBlot: false
+          }
+        ]
+      });
+    }
   }
 
   if (mustEnterFromBar) {
@@ -304,6 +381,13 @@ const applyMoveStepTemporarily = (
     }
 
     nextBar[player] -= 1;
+  } else if (step.kind === "bear-off") {
+    if (step.fromPoint === "bar" || step.toPoint !== "off") {
+      throw new Error("Invalid bear-off step shape");
+    }
+
+    removeCheckerFromPoint(nextPoints, step.fromPoint, player);
+    nextBorneOff[player] += 1;
   } else {
     throw new Error("Unsupported step kind for temporary application");
   }
@@ -318,7 +402,9 @@ const applyMoveStepTemporarily = (
     nextBar[step.hit.player] += 1;
   }
 
-  addCheckerToPoint(nextPoints, step.toPoint, player);
+  if (step.toPoint !== "off") {
+    addCheckerToPoint(nextPoints, step.toPoint, player);
+  }
 
   return {
     points: nextPoints,
