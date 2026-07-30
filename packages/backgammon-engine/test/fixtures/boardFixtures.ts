@@ -114,3 +114,48 @@ export const BAR_ENTRY_EXAMPLE_FIXTURE: BoardPosition = createPosition({
     black: 0
   }
 });
+
+/**
+ * White has one checker with exactly one empty forward destination (to point 18).
+ */
+export const WHITE_ONE_DESTINATION_FIXTURE: BoardPosition = createPosition({
+  points: {
+    24: { player: "white", checkerCount: 1 },
+    23: { player: "black", checkerCount: 3 },
+    22: { player: "black", checkerCount: 3 },
+    21: { player: "black", checkerCount: 3 },
+    20: { player: "black", checkerCount: 3 },
+    19: { player: "black", checkerCount: 3 }
+  },
+  borneOff: {
+    white: 14,
+    black: 0
+  }
+});
+
+/**
+ * White has multiple independent starting points with empty forward destinations.
+ */
+export const WHITE_MULTIPLE_MOVES_FIXTURE: BoardPosition = createPosition({
+  points: {
+    24: { player: "white", checkerCount: 1 },
+    13: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
+
+/**
+ * Black has one checker with basic forward destinations into empty points.
+ */
+export const BLACK_FORWARD_FIXTURE: BoardPosition = createPosition({
+  points: {
+    1: { player: "black", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 15,
+    black: 14
+  }
+});

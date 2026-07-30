@@ -9,11 +9,14 @@ import {
   type MoveStep
 } from "../src/index";
 import {
+  BLACK_FORWARD_FIXTURE,
   BAR_ENTRY_EXAMPLE_FIXTURE,
   BEARING_OFF_EXAMPLE_FIXTURE,
   EMPTY_BOARD_FIXTURE,
   INITIAL_POSITION_FIXTURE,
   SINGLE_CHECKER_FIXTURE,
+  WHITE_MULTIPLE_MOVES_FIXTURE,
+  WHITE_ONE_DESTINATION_FIXTURE,
   createEmptyPoints,
   createPosition
 } from "./fixtures/boardFixtures";
@@ -43,17 +46,93 @@ describe("backgammon engine exports", () => {
   });
 });
 
-describe("getLegalMoves stub", () => {
-  it("returns an empty move collection", () => {
+describe("getLegalMoves basic forward generation", () => {
+  it("generates white forward movement", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_ONE_DESTINATION_FIXTURE,
+      player: "white"
+    };
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(1);
+    expect(result.moves[0]?.steps[0]?.fromPoint).toBe(24);
+    expect(result.moves[0]?.steps[0]?.toPoint).toBe(18);
+  });
+
+  it("generates black forward movement", () => {
+    const input: GetLegalMovesInput = {
+      position: BLACK_FORWARD_FIXTURE,
+      player: "black"
+    };
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(6);
+    expect(result.moves[0]?.steps[0]?.fromPoint).toBe(1);
+    expect(result.moves[0]?.steps[0]?.toPoint).toBe(2);
+  });
+
+  it("returns one legal destination when only one empty forward point exists", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_ONE_DESTINATION_FIXTURE,
+      player: "white"
+    };
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toEqual([
+      {
+        player: "white",
+        steps: [
+          {
+            kind: "point-to-point",
+            fromPoint: 24,
+            toPoint: 18,
+            dieValue: 6,
+            hitsBlot: false
+          }
+        ]
+      }
+    ]);
+  });
+
+  it("generates multiple independent legal moves", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_MULTIPLE_MOVES_FIXTURE,
+      player: "white"
+    };
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(12);
+    expect(
+      result.moves.some((move) => move.steps[0]?.fromPoint === 24 && move.steps[0]?.toPoint === 23)
+    ).toBe(true);
+    expect(
+      result.moves.some((move) => move.steps[0]?.fromPoint === 13 && move.steps[0]?.toPoint === 12)
+    ).toBe(true);
+  });
+
+  it("returns empty when no simple move exists", () => {
+    const noCheckerInput: GetLegalMovesInput = {
+      position: EMPTY_BOARD_FIXTURE,
+      player: "white"
+    };
+    const barEntryInput: GetLegalMovesInput = {
+      position: BAR_ENTRY_EXAMPLE_FIXTURE,
+      player: "white"
+    };
+
+    expect(getLegalMoves(noCheckerInput)).toEqual({ moves: [] });
+    expect(getLegalMoves(barEntryInput)).toEqual({ moves: [] });
+  });
+
+  it("keeps API shape compatible with move result container", () => {
     const input: GetLegalMovesInput = {
       position: INITIAL_POSITION_FIXTURE,
       player: "white"
     };
     const result = getLegalMoves(input);
 
-    expect(result).toEqual({ moves: [] });
     expect(Array.isArray(result.moves)).toBe(true);
-    expect(result.moves).toHaveLength(0);
+    expect(result).toHaveProperty("moves");
   });
 });
 
@@ -64,10 +143,13 @@ describe("engine fixtures", () => {
       EMPTY_BOARD_FIXTURE,
       SINGLE_CHECKER_FIXTURE,
       BEARING_OFF_EXAMPLE_FIXTURE,
-      BAR_ENTRY_EXAMPLE_FIXTURE
+      BAR_ENTRY_EXAMPLE_FIXTURE,
+      WHITE_ONE_DESTINATION_FIXTURE,
+      WHITE_MULTIPLE_MOVES_FIXTURE,
+      BLACK_FORWARD_FIXTURE
     ];
 
-    expect(fixtures).toHaveLength(5);
+    expect(fixtures).toHaveLength(8);
   });
 
   it("produces complete point maps from helper", () => {
@@ -83,6 +165,9 @@ describe("engine fixtures", () => {
       SINGLE_CHECKER_FIXTURE,
       BEARING_OFF_EXAMPLE_FIXTURE,
       BAR_ENTRY_EXAMPLE_FIXTURE,
+      WHITE_ONE_DESTINATION_FIXTURE,
+      WHITE_MULTIPLE_MOVES_FIXTURE,
+      BLACK_FORWARD_FIXTURE,
       createPosition({
         points: {
           6: { player: "white", checkerCount: 1 },
