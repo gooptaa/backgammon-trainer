@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { validateBoardPosition } from "@backgammon-trainer/backgammon-domain";
 
 import {
+  type DiceRoll,
   getLegalMoves,
   type GetLegalMovesInput,
   type LegalMoveResult,
@@ -17,6 +18,7 @@ import {
   SINGLE_CHECKER_FIXTURE,
   WHITE_MULTIPLE_MOVES_FIXTURE,
   WHITE_ONE_DESTINATION_FIXTURE,
+  WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
   createEmptyPoints,
   createPosition
 } from "./fixtures/boardFixtures";
@@ -32,6 +34,7 @@ describe("backgammon engine exports", () => {
       fromPoint: 24,
       toPoint: 18,
       dieValue: 6,
+      dieIndex: 0,
       hitsBlot: false
     };
     const move: Move = {
@@ -47,87 +50,155 @@ describe("backgammon engine exports", () => {
 });
 
 describe("getLegalMoves basic forward generation", () => {
-  it("generates white forward movement", () => {
+  it("supports dice-aware input shape", () => {
+    const roll: DiceRoll = {
+      dice: [6, 1]
+    };
+
+    expect(roll.dice[0]).toBe(6);
+    expect(roll.dice[1]).toBe(1);
+  });
+
+  it("generates moves from one die when the other die has no legal destination", () => {
     const input: GetLegalMovesInput = {
       position: WHITE_ONE_DESTINATION_FIXTURE,
-      player: "white"
+      player: "white",
+      roll: {
+        dice: [6, 1]
+      }
     };
     const result = getLegalMoves(input);
 
     expect(result.moves).toHaveLength(1);
     expect(result.moves[0]?.steps[0]?.fromPoint).toBe(24);
     expect(result.moves[0]?.steps[0]?.toPoint).toBe(18);
+    expect(result.moves[0]?.steps[0]?.dieValue).toBe(6);
+    expect(result.moves[0]?.steps[0]?.dieIndex).toBe(0);
   });
 
-  it("generates black forward movement", () => {
+  it("generates both dice as independent moves", () => {
     const input: GetLegalMovesInput = {
-      position: BLACK_FORWARD_FIXTURE,
-      player: "black"
-    };
-    const result = getLegalMoves(input);
-
-    expect(result.moves).toHaveLength(6);
-    expect(result.moves[0]?.steps[0]?.fromPoint).toBe(1);
-    expect(result.moves[0]?.steps[0]?.toPoint).toBe(2);
-  });
-
-  it("returns one legal destination when only one empty forward point exists", () => {
-    const input: GetLegalMovesInput = {
-      position: WHITE_ONE_DESTINATION_FIXTURE,
-      player: "white"
-    };
-    const result = getLegalMoves(input);
-
-    expect(result.moves).toEqual([
-      {
-        player: "white",
-        steps: [
-          {
-            kind: "point-to-point",
-            fromPoint: 24,
-            toPoint: 18,
-            dieValue: 6,
-            hitsBlot: false
-          }
-        ]
+      position: WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
       }
-    ]);
-  });
-
-  it("generates multiple independent legal moves", () => {
-    const input: GetLegalMovesInput = {
-      position: WHITE_MULTIPLE_MOVES_FIXTURE,
-      player: "white"
     };
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(12);
+    expect(result.moves).toHaveLength(2);
     expect(
-      result.moves.some((move) => move.steps[0]?.fromPoint === 24 && move.steps[0]?.toPoint === 23)
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.fromPoint === 24 &&
+          move.steps[0]?.toPoint === 23 &&
+          move.steps[0]?.dieValue === 1 &&
+          move.steps[0]?.dieIndex === 0
+      )
     ).toBe(true);
     expect(
-      result.moves.some((move) => move.steps[0]?.fromPoint === 13 && move.steps[0]?.toPoint === 12)
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.fromPoint === 24 &&
+          move.steps[0]?.toPoint === 22 &&
+          move.steps[0]?.dieValue === 2 &&
+          move.steps[0]?.dieIndex === 1
+      )
     ).toBe(true);
+  });
+
+  it("preserves die association for duplicate die values", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(result.moves[0]?.steps[0]?.dieIndex).toBe(0);
+    expect(result.moves[1]?.steps[0]?.dieIndex).toBe(1);
+    expect(result.moves[0]?.steps[0]?.toPoint).toBe(23);
+    expect(result.moves[1]?.steps[0]?.toPoint).toBe(23);
   });
 
   it("returns empty when no simple move exists", () => {
     const noCheckerInput: GetLegalMovesInput = {
       position: EMPTY_BOARD_FIXTURE,
-      player: "white"
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
     };
     const barEntryInput: GetLegalMovesInput = {
       position: BAR_ENTRY_EXAMPLE_FIXTURE,
-      player: "white"
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
     };
 
     expect(getLegalMoves(noCheckerInput)).toEqual({ moves: [] });
     expect(getLegalMoves(barEntryInput)).toEqual({ moves: [] });
   });
 
+  it("generates black forward movement", () => {
+    const input: GetLegalMovesInput = {
+      position: BLACK_FORWARD_FIXTURE,
+      player: "black",
+      roll: {
+        dice: [1, 6]
+      }
+    };
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.fromPoint === 1 &&
+          move.steps[0]?.toPoint === 2 &&
+          move.steps[0]?.dieValue === 1
+      )
+    ).toBe(true);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.fromPoint === 1 &&
+          move.steps[0]?.toPoint === 7 &&
+          move.steps[0]?.dieValue === 6
+      )
+    ).toBe(true);
+  });
+
+  it("supports multiple independent starting points with dice-aware generation", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_MULTIPLE_MOVES_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(4);
+    expect(
+      result.moves.some((move) => move.steps[0]?.fromPoint === 24 && move.steps[0]?.toPoint === 23)
+    ).toBe(true);
+    expect(
+      result.moves.some((move) => move.steps[0]?.fromPoint === 13 && move.steps[0]?.toPoint === 11)
+    ).toBe(true);
+  });
+
   it("keeps API shape compatible with move result container", () => {
     const input: GetLegalMovesInput = {
       position: INITIAL_POSITION_FIXTURE,
-      player: "white"
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
     };
     const result = getLegalMoves(input);
 
@@ -146,10 +217,11 @@ describe("engine fixtures", () => {
       BAR_ENTRY_EXAMPLE_FIXTURE,
       WHITE_ONE_DESTINATION_FIXTURE,
       WHITE_MULTIPLE_MOVES_FIXTURE,
-      BLACK_FORWARD_FIXTURE
+      BLACK_FORWARD_FIXTURE,
+      WHITE_TWO_DICE_INDEPENDENT_FIXTURE
     ];
 
-    expect(fixtures).toHaveLength(8);
+    expect(fixtures).toHaveLength(9);
   });
 
   it("produces complete point maps from helper", () => {
@@ -168,6 +240,7 @@ describe("engine fixtures", () => {
       WHITE_ONE_DESTINATION_FIXTURE,
       WHITE_MULTIPLE_MOVES_FIXTURE,
       BLACK_FORWARD_FIXTURE,
+      WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
       createPosition({
         points: {
           6: { player: "white", checkerCount: 1 },

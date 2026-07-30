@@ -159,3 +159,16 @@ export const BLACK_FORWARD_FIXTURE: BoardPosition = createPosition({
     black: 14
   }
 });
+
+/**
+ * White has one checker with both 1-pip and 2-pip forward destinations open.
+ */
+export const WHITE_TWO_DICE_INDEPENDENT_FIXTURE: BoardPosition = createPosition({
+  points: {
+    24: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
