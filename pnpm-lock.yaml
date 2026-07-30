@@ -111,6 +111,15 @@ importers:
 
   packages/ai-contracts: {}
 
+  packages/backgammon-analysis:
+    dependencies:
+      "@backgammon-trainer/backgammon-domain":
+        specifier: workspace:*
+        version: link:../backgammon-domain
+      "@backgammon-trainer/backgammon-engine":
+        specifier: workspace:*
+        version: link:../backgammon-engine
+
   packages/backgammon-domain: {}
 
   packages/backgammon-engine:

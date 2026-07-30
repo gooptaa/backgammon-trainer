@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createGameState,
   createTurnRecord,
+  decodeGameSnapshot,
   encodeGameSnapshot,
   GAME_SNAPSHOT_FORMAT,
   GAME_SNAPSHOT_VERSION,
@@ -1069,6 +1070,31 @@ describe("App game snapshot persistence", () => {
     const savesAfterMove = inspectable.saveCalls();
     fireEvent.click(screen.getByRole("button", { name: "New Game" }));
     expect(inspectable.saveCalls()).toBeGreaterThan(savesAfterMove);
+  });
+
+  it("replaces previously saved progress with a fresh snapshot on New Game", () => {
+    const inspectable = createInspectableMemoryGameStorage(createSavedSnapshotText());
+
+    renderApp({ gameStorage: inspectable.storage });
+
+    fireEvent.click(screen.getByRole("button", { name: "New Game" }));
+
+    const persistedValue = inspectable.getValue();
+    expect(persistedValue).not.toBeNull();
+
+    const decoded = decodeGameSnapshot(persistedValue ?? "");
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) {
+      return;
+    }
+
+    expect(decoded.snapshot.turnHistory).toHaveLength(0);
+    expect(decoded.snapshot.gameState.dice).toBeNull();
+    expect(decoded.snapshot.gameState.activePlayer).toBe("white");
+    expect(decoded.snapshot.openingState).toEqual({
+      phase: "waiting",
+      openingTurnPending: false
+    });
   });
 
   it("exports snapshot text with format/version and excludes transient selection state", () => {

@@ -9,6 +9,10 @@ Backgammon Trainer starts as a pnpm workspace with four major boundaries:
 3. **Application/server orchestration layer** (`apps/server`, future app-layer modules)
 4. **AI gateway contracts** (`packages/ai-contracts`, with server adapters)
 
+Structured deterministic analysis is now a dedicated package boundary:
+
+5. **Position analysis layer** (`packages/backgammon-analysis`)
+
 A narrow `packages/shared` package holds only small cross-cutting transport types.
 
 ## Dependency direction
@@ -17,11 +21,18 @@ Intended dependency direction:
 
 - `apps/web` -> `packages/backgammon-domain`, `packages/ai-contracts`, `packages/shared`
 - `apps/server` -> `packages/ai-contracts`, `packages/shared`, optionally `packages/backgammon-domain`
+- `packages/backgammon-analysis` -> `packages/backgammon-engine`
 - `packages/ai-contracts` -> `packages/backgammon-domain` (for typed board/move context)
 - `packages/backgammon-domain` -> no app, UI, or provider code
 - `packages/shared` -> no app, UI, or provider code
 
+Core deterministic pipeline direction is now:
+
+- `packages/backgammon-engine` -> `packages/backgammon-analysis` -> host layers (`apps/web`, future backend/coach adapters)
+
 No package under `packages/` depends on React, Fastify, browser APIs, or vendor SDKs.
+
+The analysis layer intentionally stays factual and machine-readable. It does not rank moves, compute equities, or generate coaching prose.
 
 ## Deterministic legal move requirement
 

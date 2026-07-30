@@ -329,6 +329,20 @@ const resolveInitialDurableAppState = (
   };
 };
 
+const buildGameSnapshot = (
+  gameState: GameState,
+  turnHistory: readonly TurnRecord[],
+  openingRollState: OpeningRollState,
+  openingTurnPending: boolean
+): GameSnapshot => {
+  return {
+    savedAt: new Date().toISOString(),
+    gameState,
+    turnHistory,
+    openingState: toSnapshotOpeningState(openingRollState, openingTurnPending)
+  };
+};
+
 interface AppProps {
   initialGameState?: GameState;
   randomSource?: RandomSource;
@@ -483,12 +497,7 @@ function App({
   ]);
 
   const durableSnapshot = useMemo<GameSnapshot>(() => {
-    return {
-      savedAt: new Date().toISOString(),
-      gameState,
-      turnHistory,
-      openingState: toSnapshotOpeningState(openingRollState, openingTurnPending)
-    };
+    return buildGameSnapshot(gameState, turnHistory, openingRollState, openingTurnPending);
   }, [gameState, openingRollState, openingTurnPending, turnHistory]);
 
   const exportSnapshotText = useMemo(() => {
@@ -715,14 +724,41 @@ function App({
   };
 
   const onNewGame = (): void => {
-    setGameState(createInitialGameState());
-    setOpeningRollState({ phase: "waiting" });
-    setOpeningTurnPending(false);
+    const nextGameState = createInitialGameState();
+    const nextOpeningRollState: OpeningRollState = {
+      phase: "waiting"
+    };
+    const nextOpeningTurnPending = false;
+    const nextTurnHistory: readonly TurnRecord[] = [];
+    let saveFailed = false;
+
+    try {
+      snapshotStorage.save(
+        encodeGameSnapshot(
+          buildGameSnapshot(
+            nextGameState,
+            nextTurnHistory,
+            nextOpeningRollState,
+            nextOpeningTurnPending
+          )
+        )
+      );
+    } catch {
+      saveFailed = true;
+    }
+
+    setGameState(nextGameState);
+    setOpeningRollState(nextOpeningRollState);
+    setOpeningTurnPending(nextOpeningTurnPending);
     setDieOne(DEFAULT_MANUAL_DIE_ONE);
     setDieTwo(DEFAULT_MANUAL_DIE_TWO);
-    setTurnHistory([]);
+    setTurnHistory(nextTurnHistory);
     setHistoryInspection(null);
     resetTransientState();
+
+    if (saveFailed) {
+      setMessage("Local save failed. Game continues in memory only.");
+    }
   };
 
   const copyExportSnapshot = async (): Promise<void> => {
