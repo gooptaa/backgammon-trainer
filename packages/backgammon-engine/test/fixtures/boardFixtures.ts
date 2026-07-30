@@ -408,3 +408,91 @@ export const WHITE_BLOCKED_BAR_WITH_ORDINARY_OPPORTUNITY_FIXTURE: BoardPosition 
     black: 11
   }
 });
+
+/**
+ * White can move the same checker with both dice in sequence.
+ */
+export const WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * White can move different checkers across two ordered steps.
+ */
+export const WHITE_TWO_DICE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    13: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
+
+/**
+ * White can hit first and then continue with the second die.
+ */
+export const WHITE_HIT_THEN_SECOND_MOVE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    7: { player: "black", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 14
+  }
+});
+
+/**
+ * White can enter from bar first and then make an ordinary second move.
+ */
+export const WHITE_BAR_ENTRY_THEN_ORDINARY_MOVE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
+
+/**
+ * One die order has a legal continuation while the opposite order does not.
+ */
+export const WHITE_ONE_ORDER_CONTINUES_OTHER_STOPS_FIXTURE: BoardPosition = createPosition({
+  points: {
+    13: { player: "white", checkerCount: 1 },
+    12: { player: "black", checkerCount: 2 },
+    22: { player: "black", checkerCount: 2 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 13,
+    black: 11
+  }
+});
+
+/**
+ * White has a valid first step but no legal second step.
+ */
+export const WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE: BoardPosition = createPosition({
+  points: {
+    2: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});

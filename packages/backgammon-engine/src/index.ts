@@ -234,15 +234,161 @@ const generateSingleDieMoves = (input: SingleDieGenerationInput): readonly Move[
   return moves;
 };
 
-const generateTurnCandidates = (input: GetLegalMovesInput): readonly Move[] => {
-  return input.roll.dice.flatMap((dieValue, dieIndex) =>
-    generateSingleDieMoves({
+const removeCheckerFromPoint = (
+  points: Record<PointIndex, PointOccupancy | null>,
+  point: PointIndex,
+  player: Player
+): void => {
+  const occupancy = points[point];
+  if (occupancy === null || occupancy.player !== player) {
+    throw new Error("Invalid move origin point occupancy");
+  }
+
+  if (occupancy.checkerCount === 1) {
+    points[point] = null;
+    return;
+  }
+
+  points[point] = {
+    player,
+    checkerCount: occupancy.checkerCount - 1
+  };
+};
+
+const addCheckerToPoint = (
+  points: Record<PointIndex, PointOccupancy | null>,
+  point: PointIndex,
+  player: Player
+): void => {
+  const occupancy = points[point];
+  if (occupancy === null) {
+    points[point] = {
+      player,
+      checkerCount: 1
+    };
+    return;
+  }
+
+  if (occupancy.player !== player) {
+    throw new Error("Invalid move destination occupancy");
+  }
+
+  points[point] = {
+    player,
+    checkerCount: occupancy.checkerCount + 1
+  };
+};
+
+const applyMoveStepTemporarily = (
+  position: BoardPosition,
+  player: Player,
+  step: MoveStep
+): BoardPosition => {
+  const nextPoints: Record<PointIndex, PointOccupancy | null> = { ...position.points };
+  const nextBar = { ...position.bar };
+  const nextBorneOff = { ...position.borneOff };
+
+  if (step.kind === "point-to-point") {
+    if (step.fromPoint === "bar" || step.toPoint === "off") {
+      throw new Error("Invalid point-to-point step shape");
+    }
+
+    removeCheckerFromPoint(nextPoints, step.fromPoint, player);
+  } else if (step.kind === "enter-from-bar") {
+    if (step.fromPoint !== "bar" || step.toPoint === "off") {
+      throw new Error("Invalid enter-from-bar step shape");
+    }
+
+    if (nextBar[player] <= 0) {
+      throw new Error("No checker available on bar");
+    }
+
+    nextBar[player] -= 1;
+  } else {
+    throw new Error("Unsupported step kind for temporary application");
+  }
+
+  if (step.hitsBlot && step.hit !== undefined) {
+    const target = nextPoints[step.hit.point];
+    if (target === null || target.player !== step.hit.player || target.checkerCount !== 1) {
+      throw new Error("Invalid hit target occupancy");
+    }
+
+    nextPoints[step.hit.point] = null;
+    nextBar[step.hit.player] += 1;
+  }
+
+  addCheckerToPoint(nextPoints, step.toPoint, player);
+
+  return {
+    points: nextPoints,
+    bar: nextBar,
+    borneOff: nextBorneOff
+  };
+};
+
+const assembleTurnCandidates = (input: GetLegalMovesInput): readonly Move[] => {
+  const [firstDie, secondDie] = input.roll.dice;
+
+  if (firstDie === secondDie) {
+    return input.roll.dice.flatMap((dieValue, dieIndex) =>
+      generateSingleDieMoves({
+        position: input.position,
+        player: input.player,
+        dieValue,
+        dieIndex: dieIndex as 0 | 1
+      })
+    );
+  }
+
+  const orders: readonly [readonly [0 | 1, 0 | 1], readonly [0 | 1, 0 | 1]] = [
+    [0, 1],
+    [1, 0]
+  ];
+  const moves: Move[] = [];
+
+  for (const [firstDieIndex, secondDieIndex] of orders) {
+    const firstSteps = generateSingleDieMoves({
       position: input.position,
       player: input.player,
-      dieValue,
-      dieIndex: dieIndex as 0 | 1
-    })
-  );
+      dieValue: input.roll.dice[firstDieIndex],
+      dieIndex: firstDieIndex
+    });
+
+    for (const firstMove of firstSteps) {
+      const firstStep = firstMove.steps[0];
+      if (firstStep === undefined) {
+        continue;
+      }
+
+      const temporaryPosition = applyMoveStepTemporarily(input.position, input.player, firstStep);
+      const secondSteps = generateSingleDieMoves({
+        position: temporaryPosition,
+        player: input.player,
+        dieValue: input.roll.dice[secondDieIndex],
+        dieIndex: secondDieIndex
+      });
+
+      if (secondSteps.length === 0) {
+        moves.push(firstMove);
+        continue;
+      }
+
+      for (const secondMove of secondSteps) {
+        const secondStep = secondMove.steps[0];
+        if (secondStep === undefined) {
+          continue;
+        }
+
+        moves.push({
+          player: input.player,
+          steps: [firstStep, secondStep]
+        });
+      }
+    }
+  }
+
+  return moves;
 };
 
 /**
@@ -257,6 +403,6 @@ const generateTurnCandidates = (input: GetLegalMovesInput): readonly Move[] => {
  */
 export const getLegalMoves = (input: GetLegalMovesInput): LegalMoveResult => {
   return {
-    moves: generateTurnCandidates(input)
+    moves: assembleTurnCandidates(input)
   };
 };

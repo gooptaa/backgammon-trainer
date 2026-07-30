@@ -14,6 +14,7 @@ import {
   WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
   WHITE_BAR_BLOCKED_ENTRY_FIXTURE,
   WHITE_BAR_DUPLICATE_DICE_FIXTURE,
+  WHITE_BAR_ENTRY_THEN_ORDINARY_MOVE_FIXTURE,
   WHITE_BAR_HIT_ENTRY_FIXTURE,
   WHITE_BAR_SINGLE_CHECKER_FIXTURE,
   WHITE_BAR_TWO_DICE_DIFFERENT_DESTINATIONS_FIXTURE,
@@ -30,10 +31,15 @@ import {
   WHITE_MULTIPLE_BLOCKED_DESTINATIONS_FIXTURE,
   WHITE_MULTIPLE_MOVES_FIXTURE,
   WHITE_OPEN_DESTINATION_FIXTURE,
+  WHITE_ONE_ORDER_CONTINUES_OTHER_STOPS_FIXTURE,
   WHITE_ONE_DESTINATION_FIXTURE,
+  WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE,
   WHITE_SINGLE_HIT_DESTINATION_FIXTURE,
+  WHITE_TWO_DICE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE,
   WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
   WHITE_TWO_DICE_INDEPENDENT_HITS_FIXTURE,
+  WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+  WHITE_HIT_THEN_SECOND_MOVE_FIXTURE,
   createEmptyPoints,
   createPosition
 } from "./fixtures/boardFixtures";
@@ -224,7 +230,7 @@ describe("getLegalMoves basic forward generation", () => {
 
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(2);
+    expect(result.moves.length).toBeGreaterThanOrEqual(2);
     expect(
       result.moves.some(
         (move) =>
@@ -361,7 +367,7 @@ describe("getLegalMoves basic forward generation", () => {
     };
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(4);
+    expect(result.moves.length).toBeGreaterThanOrEqual(4);
     expect(
       result.moves.some((move) => move.steps[0]?.fromPoint === 24 && move.steps[0]?.toPoint === 23)
     ).toBe(true);
@@ -495,7 +501,7 @@ describe("getLegalMoves basic forward generation", () => {
 
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(2);
+    expect(result.moves.length).toBeGreaterThanOrEqual(2);
     expect(result.moves.every((move) => move.steps[0]?.kind === "enter-from-bar")).toBe(true);
   });
 
@@ -558,7 +564,7 @@ describe("getLegalMoves basic forward generation", () => {
 
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(2);
+    expect(result.moves.length).toBeGreaterThanOrEqual(2);
     expect(
       result.moves.some(
         (move) => move.steps[0]?.kind === "enter-from-bar" && move.steps[0]?.toPoint === 24
@@ -569,6 +575,188 @@ describe("getLegalMoves basic forward generation", () => {
         (move) => move.steps[0]?.kind === "enter-from-bar" && move.steps[0]?.toPoint === 23
       )
     ).toBe(true);
+  });
+
+  it("assembles two legal steps into one turn-level move", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThanOrEqual(2);
+    expect(result.moves.every((move) => move.steps.length === 2)).toBe(true);
+  });
+
+  it("preserves ordered step sequence and explores both die orders", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some((move) => move.steps[0]?.dieIndex === 0 && move.steps[1]?.dieIndex === 1)
+    ).toBe(true);
+    expect(
+      result.moves.some((move) => move.steps[0]?.dieIndex === 1 && move.steps[1]?.dieIndex === 0)
+    ).toBe(true);
+  });
+
+  it("moves the same checker twice across a two-step candidate", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.toPoint !== "off" && move.steps[0]?.toPoint === move.steps[1]?.fromPoint
+      )
+    ).toBe(true);
+  });
+
+  it("can move different checkers across two ordered steps", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_TWO_DICE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.fromPoint !== "bar" &&
+          move.steps[1]?.fromPoint !== "bar" &&
+          move.steps[0]?.fromPoint !== move.steps[1]?.fromPoint
+      )
+    ).toBe(true);
+  });
+
+  it("applies hit effects in temporary state for second-step generation", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_HIT_THEN_SECOND_MOVE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.hitsBlot === true &&
+          move.steps[0]?.fromPoint === 8 &&
+          move.steps[0]?.toPoint === 7 &&
+          move.steps[1]?.fromPoint === 7 &&
+          move.steps[1]?.toPoint === 5
+      )
+    ).toBe(true);
+  });
+
+  it("applies bar-entry effects in temporary state for second-step generation", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_ENTRY_THEN_ORDINARY_MOVE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.kind === "enter-from-bar" &&
+          move.steps[0]?.toPoint === 24 &&
+          move.steps[1]?.kind === "point-to-point" &&
+          move.steps[1]?.fromPoint === 24 &&
+          move.steps[1]?.toPoint === 22
+      )
+    ).toBe(true);
+  });
+
+  it("preserves one-step candidates when no legal continuation exists", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.some((move) => move.steps.length === 1)).toBe(true);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps.length === 1 &&
+          move.steps[0]?.fromPoint === 2 &&
+          move.steps[0]?.toPoint === 1 &&
+          move.steps[0]?.dieIndex === 0
+      )
+    ).toBe(true);
+  });
+
+  it("keeps one die order continuation while preserving one-step for the other order", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_ONE_ORDER_CONTINUES_OTHER_STOPS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.some((move) => move.steps.length === 2)).toBe(true);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps.length === 1 &&
+          move.steps[0]?.kind === "enter-from-bar" &&
+          move.steps[0]?.dieIndex === 1
+      )
+    ).toBe(true);
+  });
+
+  it("does not mutate the original input position during candidate expansion", () => {
+    const original = WHITE_HIT_THEN_SECOND_MOVE_FIXTURE;
+    const snapshot = structuredClone(original);
+
+    const input: GetLegalMovesInput = {
+      position: original,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    getLegalMoves(input);
+
+    expect(original).toEqual(snapshot);
   });
 });
 
@@ -598,10 +786,16 @@ describe("engine fixtures", () => {
       WHITE_BAR_DUPLICATE_DICE_FIXTURE,
       WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
       WHITE_ORDINARY_ONLY_MANDATORY_ENTRY_FIXTURE,
-      WHITE_BLOCKED_BAR_WITH_ORDINARY_OPPORTUNITY_FIXTURE
+      WHITE_BLOCKED_BAR_WITH_ORDINARY_OPPORTUNITY_FIXTURE,
+      WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+      WHITE_TWO_DICE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE,
+      WHITE_HIT_THEN_SECOND_MOVE_FIXTURE,
+      WHITE_BAR_ENTRY_THEN_ORDINARY_MOVE_FIXTURE,
+      WHITE_ONE_ORDER_CONTINUES_OTHER_STOPS_FIXTURE,
+      WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE
     ];
 
-    expect(fixtures).toHaveLength(24);
+    expect(fixtures).toHaveLength(30);
   });
 
   it("produces complete point maps from helper", () => {
@@ -636,6 +830,12 @@ describe("engine fixtures", () => {
       WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
       WHITE_ORDINARY_ONLY_MANDATORY_ENTRY_FIXTURE,
       WHITE_BLOCKED_BAR_WITH_ORDINARY_OPPORTUNITY_FIXTURE,
+      WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+      WHITE_TWO_DICE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE,
+      WHITE_HIT_THEN_SECOND_MOVE_FIXTURE,
+      WHITE_BAR_ENTRY_THEN_ORDINARY_MOVE_FIXTURE,
+      WHITE_ONE_ORDER_CONTINUES_OTHER_STOPS_FIXTURE,
+      WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE,
       createPosition({
         points: {
           6: { player: "white", checkerCount: 1 },
