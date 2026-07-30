@@ -77,8 +77,47 @@ A backgammon board needs precise, individually addressable elements: points, che
 
 ## Future local-first considerations
 
-This milestone does not implement storage. A likely path is IndexedDB for local training history and position replay, with optional server sync later. Offline support will be incremental:
+Current implementation uses versioned local snapshot persistence for committed game session restore. A likely future path is IndexedDB for richer local training history and replay beyond the current single-session snapshot model, with optional server sync later. Offline support remains incremental:
 
 - Installable shell + static asset caching now
 - Local training state persistence later
 - Online coaching remains network-dependent unless explicit offline models are added
+
+## Versioned game snapshots and local restore
+
+The app now persists a durable game-session snapshot with explicit format/version metadata:
+
+- format identifier: `backgammon-trainer-game`
+- schema version: `1`
+
+Durable snapshot boundary includes only committed session state:
+
+- committed engine `GameState`
+- canonical completed `TurnRecord[]`
+- opening-roll lifecycle state needed to resume play coherently
+
+Durable snapshot explicitly excludes transient React interaction state:
+
+- selected source, selected staged steps, staged projection, hover destination
+- breadcrumbs and candidate summaries
+- history inspection selection
+- manual dice form selection UI
+- temporary status/error display strings
+
+Ownership boundaries:
+
+- Engine package owns canonical snapshot contracts, version-aware encode/decode APIs, runtime validation, and trusted immutable reconstruction.
+- Web app owns browser storage integration (`localStorage`) behind a narrow adapter interface.
+- UI never duplicates move legality or checker transition rules for persistence.
+
+Restore and import behavior:
+
+- Startup restore is atomic: either the full durable snapshot is accepted and restored, or the app stays on a safe fresh state.
+- Import uses explicit user confirmation when replacing active progress.
+- Invalid or unsupported snapshots are rejected with concise user-facing messages.
+
+Immutability precision:
+
+- Snapshot and turn-record reconstruction deep-clones nested values.
+- Runtime `Object.freeze(...)` deep freezing is not applied.
+- Immutability is structural copy plus non-mutating API conventions.

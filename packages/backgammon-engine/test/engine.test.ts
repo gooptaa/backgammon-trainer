@@ -4,13 +4,20 @@ import { validateBoardPosition } from "@backgammon-trainer/backgammon-domain";
 import {
   applyMove,
   applyGameMove,
+  decodeGameSnapshot,
+  encodeGameSnapshot,
+  GAME_SNAPSHOT_FORMAT,
+  GAME_SNAPSHOT_VERSION,
   createTurnRecord,
   type ApplyMoveFailureReason,
+  type GameSnapshot,
   createGameState,
   type DiceRoll,
   getLegalMovesForState,
   getGameStatus,
   getLegalMoves,
+  parseGameSnapshot,
+  serializeGameSnapshot,
   type GetLegalMovesInput,
   passTurn,
   previewMovePrefix,
@@ -137,6 +144,99 @@ const expectApplyFailureReason = (
   if (!result.ok) {
     expect(result.reason).toBe(reason);
   }
+};
+
+const createValidSerializedSnapshot = () => {
+  const move = requireLegalMove(
+    {
+      position: WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    },
+    (candidate) =>
+      candidate.steps.length === 2 &&
+      candidate.steps[0]?.dieIndex === 0 &&
+      candidate.steps[1]?.dieIndex === 1,
+    "valid serialized snapshot"
+  );
+
+  const applied = applyMove(
+    WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+    "white",
+    { dice: [1, 2] },
+    move
+  );
+
+  if (!applied.ok) {
+    throw new Error("Expected valid move for serialized snapshot fixture");
+  }
+
+  const turnRecord = createTurnRecord({
+    turnNumber: 1,
+    player: "white",
+    dice: {
+      dice: [1, 2]
+    },
+    outcome: {
+      kind: "move",
+      move
+    },
+    positionBefore: WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+    positionAfter: applied.position,
+    gameStatusAfter: getGameStatus(applied.position),
+    phase: "opening"
+  });
+
+  const snapshot: GameSnapshot = {
+    savedAt: "2026-07-30T18:30:00.000Z",
+    gameState: createGameState(applied.position, "black"),
+    turnHistory: [turnRecord],
+    openingState: {
+      phase: "resolved",
+      whiteDie: 2,
+      blackDie: 1,
+      startingPlayer: "white",
+      openingTurnPending: false
+    }
+  };
+
+  return serializeGameSnapshot(snapshot);
+};
+
+const createPassSerializedSnapshot = () => {
+  const turnRecord = createTurnRecord({
+    turnNumber: 1,
+    player: "white",
+    dice: {
+      dice: [3, 1]
+    },
+    outcome: {
+      kind: "pass"
+    },
+    positionBefore: WHITE_BAR_BLOCKED_ENTRY_FIXTURE,
+    positionAfter: WHITE_BAR_BLOCKED_ENTRY_FIXTURE,
+    gameStatusAfter: {
+      state: "in-progress"
+    },
+    phase: "opening"
+  });
+
+  const snapshot: GameSnapshot = {
+    savedAt: "2026-07-30T18:31:00.000Z",
+    gameState: createGameState(WHITE_BAR_BLOCKED_ENTRY_FIXTURE, "black"),
+    turnHistory: [turnRecord],
+    openingState: {
+      phase: "resolved",
+      whiteDie: 3,
+      blackDie: 1,
+      startingPlayer: "white",
+      openingTurnPending: false
+    }
+  };
+
+  return serializeGameSnapshot(snapshot);
 };
 
 describe("backgammon engine exports", () => {
@@ -272,6 +372,293 @@ describe("createTurnRecord", () => {
     expect(record.positionAfter).toEqual(passPosition);
     expect(record.positionBefore).not.toBe(withDice.state.position);
     expect(record.positionAfter).not.toBe(passResult.state.position);
+  });
+});
+
+describe("game snapshot serialization", () => {
+  it("serializes a fresh waiting game with format and version metadata", () => {
+    const freshSnapshot: GameSnapshot = {
+      savedAt: "2026-07-30T18:40:00.000Z",
+      gameState: createGameState(INITIAL_POSITION_FIXTURE, "white"),
+      turnHistory: [],
+      openingState: {
+        phase: "waiting",
+        openingTurnPending: false
+      }
+    };
+
+    const serialized = serializeGameSnapshot(freshSnapshot);
+
+    expect(serialized.format).toBe(GAME_SNAPSHOT_FORMAT);
+    expect(serialized.version).toBe(GAME_SNAPSHOT_VERSION);
+    expect(serialized.turnHistory).toEqual([]);
+    expect(typeof serialized.savedAt).toBe("string");
+  });
+
+  it("round-trips a valid snapshot without losing committed state or history metadata", () => {
+    const serialized = createValidSerializedSnapshot();
+    const encoded = JSON.stringify(serialized);
+    const decoded = decodeGameSnapshot(encoded);
+
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) {
+      return;
+    }
+
+    expect(decoded.snapshot.gameState.activePlayer).toBe("black");
+    expect(decoded.snapshot.turnHistory.length).toBe(1);
+    expect(decoded.snapshot.turnHistory[0]?.phase).toBe("opening");
+    expect(decoded.snapshot.turnHistory[0]?.outcome.kind).toBe("move");
+    if (decoded.snapshot.turnHistory[0]?.outcome.kind === "move") {
+      expect(decoded.snapshot.turnHistory[0].outcome.move.steps[0]?.dieIndex).toBe(0);
+      expect(decoded.snapshot.turnHistory[0].outcome.move.steps[1]?.dieIndex).toBe(1);
+    }
+  });
+
+  it("preserves pass outcomes through round-trip", () => {
+    const serialized = createPassSerializedSnapshot();
+    const result = parseGameSnapshot(serialized);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.snapshot.turnHistory[0]?.outcome).toEqual({ kind: "pass" });
+    expect(result.snapshot.turnHistory[0]?.phase).toBe("opening");
+  });
+
+  it("does not reuse nested references from parsed input", () => {
+    const serialized = createValidSerializedSnapshot();
+    const parsed = parseGameSnapshot(serialized);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      return;
+    }
+
+    (serialized.gameState.position.bar as { white: number }).white = 7;
+    (serialized.turnHistory[0]?.positionAfter.bar as { white: number }).white = 6;
+
+    expect(parsed.snapshot.gameState.position.bar.white).not.toBe(7);
+    expect(parsed.snapshot.turnHistory[0]?.positionAfter.bar.white).not.toBe(6);
+  });
+
+  it("rejects unknown snapshot format", () => {
+    const serialized = {
+      ...createValidSerializedSnapshot(),
+      format: "other-format"
+    };
+
+    const result = parseGameSnapshot(serialized);
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        reason: "wrong-format"
+      })
+    );
+  });
+
+  it("rejects missing schema version", () => {
+    const serialized = createValidSerializedSnapshot() as unknown as Record<string, unknown>;
+    delete serialized.version;
+
+    const result = parseGameSnapshot(serialized);
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        reason: "invalid-structure"
+      })
+    );
+  });
+
+  it("rejects unsupported schema versions", () => {
+    const serialized = {
+      ...createValidSerializedSnapshot(),
+      version: 2
+    };
+
+    const result = parseGameSnapshot(serialized);
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        reason: "unsupported-version"
+      })
+    );
+  });
+
+  it("rejects invalid JSON text", () => {
+    const result = decodeGameSnapshot("not-json");
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        reason: "invalid-json"
+      })
+    );
+  });
+
+  it("rejects invalid player and dice values", () => {
+    const serialized = createValidSerializedSnapshot();
+    const broken = {
+      ...serialized,
+      gameState: {
+        ...serialized.gameState,
+        activePlayer: "green",
+        dice: {
+          dice: [0, 7]
+        }
+      }
+    };
+
+    const result = parseGameSnapshot(broken);
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects invalid position totals and negative counts", () => {
+    const serialized = createValidSerializedSnapshot();
+    const broken = {
+      ...serialized,
+      gameState: {
+        ...serialized.gameState,
+        position: {
+          ...serialized.gameState.position,
+          bar: {
+            white: -1,
+            black: 0
+          },
+          borneOff: {
+            white: 0,
+            black: 0
+          }
+        }
+      }
+    };
+
+    const result = parseGameSnapshot(broken);
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        reason: "invalid-domain-state"
+      })
+    );
+  });
+
+  it("rejects invalid move step kinds and die indices", () => {
+    const serialized = createValidSerializedSnapshot();
+    const record = serialized.turnHistory[0];
+    expect(record?.outcome.kind).toBe("move");
+    if (record?.outcome.kind !== "move") {
+      return;
+    }
+
+    const broken = {
+      ...serialized,
+      turnHistory: [
+        {
+          ...record,
+          outcome: {
+            kind: "move",
+            move: {
+              ...record.outcome.move,
+              steps: [
+                {
+                  ...record.outcome.move.steps[0],
+                  kind: "invalid-step-kind",
+                  dieIndex: 9
+                },
+                ...(record.outcome.move.steps.slice(1) ?? [])
+              ]
+            }
+          }
+        }
+      ]
+    };
+
+    const result = parseGameSnapshot(broken);
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        reason: "invalid-domain-state"
+      })
+    );
+  });
+
+  it("rejects non-contiguous turn numbering and history/current position mismatches", () => {
+    const serialized = createValidSerializedSnapshot();
+    const record = serialized.turnHistory[0];
+
+    const broken = {
+      ...serialized,
+      gameState: {
+        ...serialized.gameState,
+        position: INITIAL_POSITION_FIXTURE
+      },
+      turnHistory: record === undefined ? [] : [{ ...record, turnNumber: 2 }]
+    };
+
+    const result = parseGameSnapshot(broken);
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects invalid opening tie and inconsistent resolved starter", () => {
+    const serialized = createValidSerializedSnapshot();
+
+    const badTie = {
+      ...serialized,
+      openingState: {
+        phase: "tied",
+        whiteDie: 2,
+        blackDie: 3,
+        openingTurnPending: false
+      }
+    };
+    const tieResult = parseGameSnapshot(badTie);
+    expect(tieResult.ok).toBe(false);
+
+    const badResolved = {
+      ...serialized,
+      openingState: {
+        phase: "resolved",
+        whiteDie: 6,
+        blackDie: 2,
+        startingPlayer: "black",
+        openingTurnPending: false
+      }
+    };
+    const resolvedResult = parseGameSnapshot(badResolved);
+    expect(resolvedResult.ok).toBe(false);
+  });
+
+  it("returns fully detached trusted snapshots from decode", () => {
+    const serialized = createValidSerializedSnapshot();
+    const encoded = encodeGameSnapshot({
+      savedAt: serialized.savedAt,
+      gameState: serialized.gameState,
+      turnHistory: serialized.turnHistory,
+      openingState: serialized.openingState
+    });
+    const result = decodeGameSnapshot(encoded);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const trustedSnapshot = result.snapshot;
+    const parsedObject = JSON.parse(encoded) as {
+      gameState: {
+        position: {
+          bar: {
+            white: number;
+          };
+        };
+      };
+    };
+
+    parsedObject.gameState.position.bar.white = 11;
+
+    expect(trustedSnapshot.gameState.position.bar.white).not.toBe(11);
   });
 });
 

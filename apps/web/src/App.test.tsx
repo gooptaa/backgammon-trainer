@@ -1,7 +1,20 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createGameState, type GameState } from "@backgammon-trainer/backgammon-engine";
-import { type BoardPosition, type DieValue } from "@backgammon-trainer/backgammon-domain";
+import {
+  createGameState,
+  createTurnRecord,
+  encodeGameSnapshot,
+  GAME_SNAPSHOT_FORMAT,
+  GAME_SNAPSHOT_VERSION,
+  type GameSnapshot,
+  type GameState
+} from "@backgammon-trainer/backgammon-engine";
+import {
+  STANDARD_STARTING_POSITION,
+  type BoardPosition,
+  type DieValue
+} from "@backgammon-trainer/backgammon-domain";
+import { type GameStorage } from "./features/sandbox/gameStorage";
 
 import App from "./App";
 
@@ -172,6 +185,80 @@ const resolvedOpeningState = (
   startingPlayer
 });
 
+const createSavedSnapshotText = (): string => {
+  const positionBefore = createPosition({
+    points: {
+      8: { player: "white", checkerCount: 1 },
+      1: { player: "black", checkerCount: 1 }
+    },
+    borneOff: {
+      white: 14,
+      black: 14
+    }
+  });
+  const positionAfter = createPosition({
+    points: {
+      7: { player: "white", checkerCount: 1 },
+      1: { player: "black", checkerCount: 1 }
+    },
+    borneOff: {
+      white: 14,
+      black: 14
+    }
+  });
+
+  const openingMoveRecord = createTurnRecord({
+    turnNumber: 1,
+    player: "white",
+    dice: {
+      dice: [1, 2]
+    },
+    outcome: {
+      kind: "move",
+      move: {
+        player: "white",
+        steps: [
+          {
+            kind: "point-to-point",
+            fromPoint: 8,
+            toPoint: 7,
+            dieValue: 1,
+            dieIndex: 0,
+            hitsBlot: false
+          }
+        ]
+      }
+    },
+    positionBefore,
+    positionAfter,
+    gameStatusAfter: {
+      state: "in-progress"
+    },
+    phase: "opening"
+  });
+
+  const snapshot: GameSnapshot = {
+    savedAt: "2026-07-30T18:45:00.000Z",
+    gameState: {
+      position: positionAfter,
+      activePlayer: "black",
+      dice: {
+        dice: [3, 4]
+      }
+    },
+    turnHistory: [openingMoveRecord],
+    openingState: {
+      phase: "resolved",
+      whiteDie: 2,
+      blackDie: 1,
+      startingPlayer: "white",
+      openingTurnPending: false
+    }
+  };
+
+  return encodeGameSnapshot(snapshot);
+};
+
 const createRandomSource = (values: readonly number[]): (() => number) => {
   let index = 0;
   return vi.fn(() => {
@@ -181,12 +268,54 @@ const createRandomSource = (values: readonly number[]): (() => number) => {
   });
 };
 
+const createMemoryGameStorage = (initialValue: string | null = null): GameStorage => {
+  let value = initialValue;
+
+  return {
+    load: () => value,
+    save: (nextValue) => {
+      value = nextValue;
+    },
+    clear: () => {
+      value = null;
+    }
+  };
+};
+
+const createInspectableMemoryGameStorage = (
+  initialValue: string | null = null
+): {
+  storage: GameStorage;
+  getValue: () => string | null;
+  saveCalls: () => number;
+} => {
+  let value = initialValue;
+  const save = vi.fn((nextValue: string) => {
+    value = nextValue;
+  });
+
+  return {
+    storage: {
+      load: () => value,
+      save,
+      clear: () => {
+        value = null;
+      }
+    },
+    getValue: () => value,
+    saveCalls: () => save.mock.calls.length
+  };
+};
+
 const renderApp = (options?: {
   initialGameState?: GameState;
   randomSource?: () => number;
   initialOpeningRollState?: OpeningRollState;
   initialOpeningTurnPending?: boolean;
+  gameStorage?: GameStorage;
 }): void => {
+  const storage = options?.gameStorage ?? createMemoryGameStorage();
+
   render(
     <App
       {...(options?.initialGameState === undefined
@@ -199,6 +328,7 @@ const renderApp = (options?: {
       {...(options?.initialOpeningTurnPending === undefined
         ? {}
         : { initialOpeningTurnPending: options.initialOpeningTurnPending })}
+      gameStorage={storage}
     />
   );
 };
@@ -216,6 +346,14 @@ const setDiceManually = (dieOne: string, dieTwo: string): void => {
 
 const clickOpeningRoll = (): void => {
   fireEvent.click(screen.getByRole("button", { name: /Roll for Opening|Roll Again/i }));
+};
+
+const openExportSection = (): void => {
+  fireEvent.click(screen.getByText("Export Game"));
+};
+
+const openImportSection = (): void => {
+  fireEvent.click(screen.getByText("Import Game"));
 };
 
 const selectSourcePoint = (point: number): void => {
@@ -246,6 +384,7 @@ const expectPointCheckerCount = (point: number, player: "white" | "black", count
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
 });
 
 describe("App opening roll lifecycle", () => {
@@ -862,5 +1001,139 @@ describe("App turn transitions and reset behavior", () => {
     expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
     expect(screen.getByRole("button", { name: "Roll for Opening" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Undo Last Step" })).not.toBeInTheDocument();
+  });
+});
+
+describe("App game snapshot persistence", () => {
+  it("starts fresh when no saved snapshot exists", () => {
+    renderApp({ gameStorage: createMemoryGameStorage(null) });
+
+    expect(screen.getByTestId("opening-phase")).toHaveTextContent("Opening phase: waiting");
+    expect(screen.getByTestId("turn-history-count")).toHaveTextContent("Recorded turns: 0");
+  });
+
+  it("restores a valid saved snapshot on initialization", () => {
+    const saved = createSavedSnapshotText();
+    renderApp({ gameStorage: createMemoryGameStorage(saved) });
+
+    expect(screen.getByTestId("turn-history-count")).toHaveTextContent("Recorded turns: 1");
+    expect(screen.getByTestId("opening-phase")).toHaveTextContent("Opening phase: resolved");
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: 3, 4");
+    expectPointCheckerCount(7, "white", 1);
+  });
+
+  it("restores tied opening state with Roll Again available", () => {
+    const tiedSnapshot: GameSnapshot = {
+      savedAt: "2026-07-30T18:50:00.000Z",
+      gameState: createGameState(STANDARD_STARTING_POSITION, "white"),
+      turnHistory: [],
+      openingState: {
+        phase: "tied",
+        whiteDie: 4,
+        blackDie: 4,
+        openingTurnPending: false
+      }
+    };
+
+    renderApp({ gameStorage: createMemoryGameStorage(encodeGameSnapshot(tiedSnapshot)) });
+
+    expect(screen.getByRole("button", { name: "Roll Again" })).toBeEnabled();
+    expect(screen.getByTestId("opening-phase")).toHaveTextContent("Opening phase: tied");
+  });
+
+  it("shows concise feedback and stays safe on invalid stored JSON", () => {
+    renderApp({ gameStorage: createMemoryGameStorage("not-json") });
+
+    expect(screen.getByText(/Saved game restore failed/i)).toBeInTheDocument();
+    expect(screen.getByTestId("opening-phase")).toHaveTextContent("Opening phase: waiting");
+  });
+
+  it("updates durable save after opening roll, move, and new game but not staged-only selection", () => {
+    const inspectable = createInspectableMemoryGameStorage();
+
+    renderApp({ randomSource: createRandomSource([0.8, 0.2]), gameStorage: inspectable.storage });
+
+    const baselineSaves = inspectable.saveCalls();
+    clickOpeningRoll();
+    expect(inspectable.saveCalls()).toBeGreaterThan(baselineSaves);
+
+    const savesAfterOpening = inspectable.saveCalls();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+    expect(inspectable.saveCalls()).toBe(savesAfterOpening);
+
+    selectSourcePoint(8);
+    selectDestinationPoint(6);
+    expect(inspectable.saveCalls()).toBeGreaterThan(savesAfterOpening);
+
+    const savesAfterMove = inspectable.saveCalls();
+    fireEvent.click(screen.getByRole("button", { name: "New Game" }));
+    expect(inspectable.saveCalls()).toBeGreaterThan(savesAfterMove);
+  });
+
+  it("exports snapshot text with format/version and excludes transient selection state", () => {
+    renderApp({ randomSource: createRandomSource([0.8, 0.2]) });
+
+    clickOpeningRoll();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+
+    openExportSection();
+
+    expect(screen.getByTestId("snapshot-version-label")).toHaveTextContent(
+      `${GAME_SNAPSHOT_FORMAT} v${GAME_SNAPSHOT_VERSION}`
+    );
+
+    const exportedTextElement = screen.getByTestId("export-snapshot-text");
+    if (!(exportedTextElement instanceof HTMLTextAreaElement)) {
+      throw new Error("Expected export snapshot control to be a textarea");
+    }
+    const exportedText = exportedTextElement.value;
+    const exportedObject = JSON.parse(exportedText) as Record<string, unknown>;
+
+    expect(exportedObject.format).toBe(GAME_SNAPSHOT_FORMAT);
+    expect(exportedObject.version).toBe(GAME_SNAPSHOT_VERSION);
+    expect(exportedText).not.toContain("selectedSteps");
+    expect(exportedText).not.toContain("hoveredDestination");
+  });
+
+  it("imports valid snapshots atomically and preserves current state on invalid import", () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderApp({ randomSource: createRandomSource([0.8, 0.2]) });
+
+    clickOpeningRoll();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+
+    openImportSection();
+    fireEvent.change(screen.getByTestId("import-snapshot-text"), {
+      target: { value: createSavedSnapshotText() }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Validate and Import" }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.getByTestId("turn-history-count")).toHaveTextContent("Recorded turns: 1");
+    expect(screen.queryByTestId("history-inspection-banner")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("import-snapshot-text"), {
+      target: { value: "{bad" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Validate and Import" }));
+
+    expect(screen.getByText(/Import failed/i)).toBeInTheDocument();
+    expect(screen.getByTestId("turn-history-count")).toHaveTextContent("Recorded turns: 1");
+
+    confirmSpy.mockRestore();
+  });
+
+  it("clears saved snapshot without mutating the in-memory game", () => {
+    const inspectable = createInspectableMemoryGameStorage(createSavedSnapshotText());
+    renderApp({ gameStorage: inspectable.storage });
+
+    openImportSection();
+    fireEvent.click(screen.getByRole("button", { name: "Clear Saved Game" }));
+
+    expect(inspectable.getValue()).toBeNull();
+    expect(screen.getByTestId("turn-history-count")).toHaveTextContent("Recorded turns: 1");
   });
 });

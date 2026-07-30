@@ -1,10 +1,12 @@
 import {
   POINT_INDEXES,
+  STANDARD_STARTING_POSITION,
   type BoardPosition,
   type DieValue,
   type Player,
   type PointIndex,
-  type PointOccupancy
+  type PointOccupancy,
+  validateBoardPosition
 } from "@backgammon-trainer/backgammon-domain";
 
 /**
@@ -95,6 +97,71 @@ export interface CreateTurnRecordInput {
   readonly gameStatusAfter: GameStatus;
   readonly phase: TurnPhase;
 }
+
+export const GAME_SNAPSHOT_FORMAT = "backgammon-trainer-game";
+export const GAME_SNAPSHOT_VERSION = 1;
+
+export type SnapshotOpeningState =
+  | {
+      readonly phase: "waiting";
+      readonly openingTurnPending: false;
+    }
+  | {
+      readonly phase: "tied";
+      readonly whiteDie: DieValue;
+      readonly blackDie: DieValue;
+      readonly openingTurnPending: false;
+    }
+  | {
+      readonly phase: "resolved";
+      readonly whiteDie: DieValue;
+      readonly blackDie: DieValue;
+      readonly startingPlayer: Player;
+      readonly openingTurnPending: boolean;
+    };
+
+export interface GameSnapshot {
+  readonly savedAt: string;
+  readonly gameState: GameState;
+  readonly turnHistory: readonly TurnRecord[];
+  readonly openingState: SnapshotOpeningState;
+}
+
+export interface SerializedGameStateV1 {
+  readonly position: BoardPosition;
+  readonly activePlayer: Player;
+  readonly dice: DiceRoll | null;
+}
+
+export type SerializedTurnRecordV1 = TurnRecord;
+export type SerializedOpeningStateV1 = SnapshotOpeningState;
+
+export interface SerializedGameSnapshotV1 {
+  readonly format: typeof GAME_SNAPSHOT_FORMAT;
+  readonly version: typeof GAME_SNAPSHOT_VERSION;
+  readonly savedAt: string;
+  readonly gameState: SerializedGameStateV1;
+  readonly turnHistory: readonly SerializedTurnRecordV1[];
+  readonly openingState: SerializedOpeningStateV1;
+}
+
+export type ParseGameSnapshotFailureReason =
+  | "invalid-json"
+  | "wrong-format"
+  | "unsupported-version"
+  | "invalid-structure"
+  | "invalid-domain-state";
+
+export type ParseGameSnapshotResult =
+  | {
+      readonly ok: true;
+      readonly snapshot: GameSnapshot;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: ParseGameSnapshotFailureReason;
+      readonly message: string;
+    };
 
 export interface GameState {
   readonly position: BoardPosition;
@@ -1065,6 +1132,897 @@ const cloneTurnOutcome = (outcome: TurnOutcome): TurnOutcome => {
     kind: "move",
     move: cloneMove(outcome.move)
   };
+};
+
+const cloneGameState = (state: GameState): GameState => {
+  return {
+    position: cloneBoardPosition(state.position),
+    activePlayer: state.activePlayer,
+    dice: state.dice === null ? null : cloneDiceRoll(state.dice)
+  };
+};
+
+const cloneSnapshotOpeningState = (openingState: SnapshotOpeningState): SnapshotOpeningState => {
+  if (openingState.phase === "waiting") {
+    return {
+      phase: "waiting",
+      openingTurnPending: false
+    };
+  }
+
+  if (openingState.phase === "tied") {
+    return {
+      phase: "tied",
+      whiteDie: openingState.whiteDie,
+      blackDie: openingState.blackDie,
+      openingTurnPending: false
+    };
+  }
+
+  return {
+    phase: "resolved",
+    whiteDie: openingState.whiteDie,
+    blackDie: openingState.blackDie,
+    startingPlayer: openingState.startingPlayer,
+    openingTurnPending: openingState.openingTurnPending
+  };
+};
+
+const failSnapshotParse = (
+  reason: ParseGameSnapshotFailureReason,
+  message: string
+): ParseGameSnapshotResult => {
+  return {
+    ok: false,
+    reason,
+    message
+  };
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === "object" && value !== null;
+};
+
+const isPlayerValue = (value: unknown): value is Player => {
+  return value === "white" || value === "black";
+};
+
+const isDieValue = (value: unknown): value is DieValue => {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 6;
+};
+
+const parseDiceRoll = (
+  value: unknown,
+  path: string
+): { ok: true; dice: DiceRoll } | { ok: false; result: ParseGameSnapshotResult } => {
+  if (!isRecord(value) || !Array.isArray(value.dice) || value.dice.length !== 2) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-structure", `${path}.dice must contain exactly two dice.`)
+    };
+  }
+
+  const diceValues = value.dice as readonly unknown[];
+  const dieOne = diceValues[0];
+  const dieTwo = diceValues[1];
+
+  if (!isDieValue(dieOne) || !isDieValue(dieTwo)) {
+    return {
+      ok: false,
+      result: failSnapshotParse(
+        "invalid-domain-state",
+        `${path}.dice must contain values 1 through 6.`
+      )
+    };
+  }
+
+  return {
+    ok: true,
+    dice: {
+      dice: [dieOne, dieTwo]
+    }
+  };
+};
+
+const parseBoardPosition = (
+  value: unknown,
+  path: string
+): { ok: true; position: BoardPosition } | { ok: false; result: ParseGameSnapshotResult } => {
+  if (!isRecord(value)) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-structure", `${path} must be an object.`)
+    };
+  }
+
+  const validated = validateBoardPosition(value);
+
+  if (!validated.valid) {
+    return {
+      ok: false,
+      result: failSnapshotParse(
+        "invalid-domain-state",
+        `${path} is invalid: ${validated.errors[0]?.message ?? "position validation failed"}`
+      )
+    };
+  }
+
+  const points = value.points as Record<string, unknown>;
+  const bar = value.bar as Record<string, unknown>;
+  const borneOff = value.borneOff as Record<string, unknown>;
+
+  const nextPoints = {} as Record<PointIndex, PointOccupancy | null>;
+
+  for (const point of POINT_INDEXES) {
+    const occupancy = points[String(point)];
+
+    if (occupancy === null) {
+      nextPoints[point] = null;
+      continue;
+    }
+
+    const occupancyRecord = occupancy as Record<string, unknown>;
+    nextPoints[point] = {
+      player: occupancyRecord.player as Player,
+      checkerCount: occupancyRecord.checkerCount as number
+    };
+  }
+
+  return {
+    ok: true,
+    position: {
+      points: nextPoints,
+      bar: {
+        white: bar.white as number,
+        black: bar.black as number
+      },
+      borneOff: {
+        white: borneOff.white as number,
+        black: borneOff.black as number
+      }
+    }
+  };
+};
+
+const areBoardPositionsEqual = (left: BoardPosition, right: BoardPosition): boolean => {
+  for (const point of POINT_INDEXES) {
+    const leftOccupancy = left.points[point];
+    const rightOccupancy = right.points[point];
+
+    if (leftOccupancy === null && rightOccupancy === null) {
+      continue;
+    }
+
+    if (leftOccupancy === null || rightOccupancy === null) {
+      return false;
+    }
+
+    if (
+      leftOccupancy.player !== rightOccupancy.player ||
+      leftOccupancy.checkerCount !== rightOccupancy.checkerCount
+    ) {
+      return false;
+    }
+  }
+
+  return (
+    left.bar.white === right.bar.white &&
+    left.bar.black === right.bar.black &&
+    left.borneOff.white === right.borneOff.white &&
+    left.borneOff.black === right.borneOff.black
+  );
+};
+
+const parseMoveStep = (
+  value: unknown,
+  path: string
+): { ok: true; step: MoveStep } | { ok: false; result: ParseGameSnapshotResult } => {
+  if (!isRecord(value)) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-structure", `${path} must be an object.`)
+    };
+  }
+
+  const kind = value.kind;
+  const fromPoint = value.fromPoint;
+  const toPoint = value.toPoint;
+  const dieValue = value.dieValue;
+  const dieIndex = value.dieIndex;
+  const hitsBlot = value.hitsBlot;
+
+  if (kind !== "point-to-point" && kind !== "enter-from-bar" && kind !== "bear-off") {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-domain-state", `${path}.kind is invalid.`)
+    };
+  }
+
+  if (fromPoint !== "bar" && !isPointIndex(fromPoint as number)) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-domain-state", `${path}.fromPoint is invalid.`)
+    };
+  }
+
+  if (toPoint !== "off" && !isPointIndex(toPoint as number)) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-domain-state", `${path}.toPoint is invalid.`)
+    };
+  }
+
+  if (!isDieValue(dieValue)) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-domain-state", `${path}.dieValue must be between 1 and 6.`)
+    };
+  }
+
+  if (typeof dieIndex !== "number" || !Number.isInteger(dieIndex) || dieIndex < 0 || dieIndex > 3) {
+    return {
+      ok: false,
+      result: failSnapshotParse(
+        "invalid-domain-state",
+        `${path}.dieIndex must be an integer from 0 through 3.`
+      )
+    };
+  }
+
+  if (typeof hitsBlot !== "boolean") {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-structure", `${path}.hitsBlot must be a boolean.`)
+    };
+  }
+
+  if (kind === "point-to-point" && (fromPoint === "bar" || toPoint === "off")) {
+    return {
+      ok: false,
+      result: failSnapshotParse(
+        "invalid-domain-state",
+        `${path} has incompatible coordinates for point-to-point.`
+      )
+    };
+  }
+
+  if (kind === "enter-from-bar" && (fromPoint !== "bar" || toPoint === "off")) {
+    return {
+      ok: false,
+      result: failSnapshotParse(
+        "invalid-domain-state",
+        `${path} has incompatible coordinates for enter-from-bar.`
+      )
+    };
+  }
+
+  if (kind === "bear-off" && (fromPoint === "bar" || toPoint !== "off")) {
+    return {
+      ok: false,
+      result: failSnapshotParse(
+        "invalid-domain-state",
+        `${path} has incompatible coordinates for bear-off.`
+      )
+    };
+  }
+
+  const hitValue = value.hit;
+
+  if (!hitsBlot && hitValue !== undefined) {
+    return {
+      ok: false,
+      result: failSnapshotParse(
+        "invalid-domain-state",
+        `${path}.hit must be omitted when hitsBlot is false.`
+      )
+    };
+  }
+
+  if (hitsBlot) {
+    if (
+      !isRecord(hitValue) ||
+      !isPlayerValue(hitValue.player) ||
+      !isPointIndex(hitValue.point as number)
+    ) {
+      return {
+        ok: false,
+        result: failSnapshotParse("invalid-domain-state", `${path}.hit metadata is invalid.`)
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    step: {
+      kind,
+      fromPoint: fromPoint as PointIndex | "bar",
+      toPoint: toPoint as PointIndex | "off",
+      dieValue,
+      dieIndex: dieIndex as 0 | 1 | 2 | 3,
+      hitsBlot,
+      ...(hitsBlot
+        ? {
+            hit: {
+              player: (hitValue as Record<string, unknown>).player as Player,
+              point: (hitValue as Record<string, unknown>).point as PointIndex
+            }
+          }
+        : {})
+    }
+  };
+};
+
+const parseMove = (
+  value: unknown,
+  path: string
+): { ok: true; move: Move } | { ok: false; result: ParseGameSnapshotResult } => {
+  if (!isRecord(value)) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-structure", `${path} must be an object.`)
+    };
+  }
+
+  if (!isPlayerValue(value.player)) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-domain-state", `${path}.player is invalid.`)
+    };
+  }
+
+  if (!Array.isArray(value.steps) || value.steps.length === 0) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-domain-state", `${path}.steps must be a non-empty array.`)
+    };
+  }
+
+  const parsedSteps: MoveStep[] = [];
+
+  for (let index = 0; index < value.steps.length; index += 1) {
+    const parsedStep = parseMoveStep(value.steps[index], `${path}.steps[${index}]`);
+
+    if (!parsedStep.ok) {
+      return parsedStep;
+    }
+
+    parsedSteps.push(parsedStep.step);
+  }
+
+  return {
+    ok: true,
+    move: {
+      player: value.player,
+      steps: parsedSteps
+    }
+  };
+};
+
+const parseGameStatusValue = (
+  value: unknown,
+  path: string
+): { ok: true; status: GameStatus } | { ok: false; result: ParseGameSnapshotResult } => {
+  if (!isRecord(value)) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-structure", `${path} must be an object.`)
+    };
+  }
+
+  if (value.state === "in-progress") {
+    return {
+      ok: true,
+      status: {
+        state: "in-progress"
+      }
+    };
+  }
+
+  if (value.state === "complete" && isPlayerValue(value.winner)) {
+    return {
+      ok: true,
+      status: {
+        state: "complete",
+        winner: value.winner
+      }
+    };
+  }
+
+  return {
+    ok: false,
+    result: failSnapshotParse("invalid-domain-state", `${path} is invalid.`)
+  };
+};
+
+const parseTurnRecordValue = (
+  value: unknown,
+  expectedTurnNumber: number,
+  path: string
+): { ok: true; record: TurnRecord } | { ok: false; result: ParseGameSnapshotResult } => {
+  if (!isRecord(value)) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-structure", `${path} must be an object.`)
+    };
+  }
+
+  if (value.turnNumber !== expectedTurnNumber) {
+    return {
+      ok: false,
+      result: failSnapshotParse(
+        "invalid-domain-state",
+        `${path}.turnNumber must be contiguous and start at 1.`
+      )
+    };
+  }
+
+  if (!isPlayerValue(value.player)) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-domain-state", `${path}.player is invalid.`)
+    };
+  }
+
+  if (value.phase !== "opening" && value.phase !== "normal") {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-domain-state", `${path}.phase is invalid.`)
+    };
+  }
+
+  const parsedDice = parseDiceRoll(value.dice, `${path}.dice`);
+  if (!parsedDice.ok) {
+    return parsedDice;
+  }
+
+  const parsedBefore = parseBoardPosition(value.positionBefore, `${path}.positionBefore`);
+  if (!parsedBefore.ok) {
+    return parsedBefore;
+  }
+
+  const parsedAfter = parseBoardPosition(value.positionAfter, `${path}.positionAfter`);
+  if (!parsedAfter.ok) {
+    return parsedAfter;
+  }
+
+  const parsedGameStatus = parseGameStatusValue(value.gameStatusAfter, `${path}.gameStatusAfter`);
+  if (!parsedGameStatus.ok) {
+    return parsedGameStatus;
+  }
+
+  const expectedGameStatus = getGameStatus(parsedAfter.position);
+
+  if (
+    parsedGameStatus.status.state !== expectedGameStatus.state ||
+    (parsedGameStatus.status.state === "complete" &&
+      expectedGameStatus.state === "complete" &&
+      parsedGameStatus.status.winner !== expectedGameStatus.winner)
+  ) {
+    return {
+      ok: false,
+      result: failSnapshotParse(
+        "invalid-domain-state",
+        `${path}.gameStatusAfter does not match positionAfter.`
+      )
+    };
+  }
+
+  if (
+    !isRecord(value.outcome) ||
+    (value.outcome.kind !== "move" && value.outcome.kind !== "pass")
+  ) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-domain-state", `${path}.outcome is invalid.`)
+    };
+  }
+
+  let outcome: TurnOutcome;
+
+  if (value.outcome.kind === "pass") {
+    outcome = {
+      kind: "pass"
+    };
+  } else {
+    const parsedMove = parseMove(value.outcome.move, `${path}.outcome.move`);
+    if (!parsedMove.ok) {
+      return parsedMove;
+    }
+
+    if (parsedMove.move.player !== value.player) {
+      return {
+        ok: false,
+        result: failSnapshotParse(
+          "invalid-domain-state",
+          `${path}.outcome.move.player must match record player.`
+        )
+      };
+    }
+
+    outcome = {
+      kind: "move",
+      move: parsedMove.move
+    };
+  }
+
+  return {
+    ok: true,
+    record: createTurnRecord({
+      turnNumber: expectedTurnNumber,
+      player: value.player,
+      dice: parsedDice.dice,
+      outcome,
+      positionBefore: parsedBefore.position,
+      positionAfter: parsedAfter.position,
+      gameStatusAfter: parsedGameStatus.status,
+      phase: value.phase
+    })
+  };
+};
+
+const parseOpeningStateValue = (
+  value: unknown,
+  path: string
+):
+  | { ok: true; openingState: SnapshotOpeningState }
+  | { ok: false; result: ParseGameSnapshotResult } => {
+  if (!isRecord(value)) {
+    return {
+      ok: false,
+      result: failSnapshotParse("invalid-structure", `${path} must be an object.`)
+    };
+  }
+
+  if (typeof value.openingTurnPending !== "boolean") {
+    return {
+      ok: false,
+      result: failSnapshotParse(
+        "invalid-structure",
+        `${path}.openingTurnPending must be a boolean.`
+      )
+    };
+  }
+
+  if (value.phase === "waiting") {
+    if (value.openingTurnPending) {
+      return {
+        ok: false,
+        result: failSnapshotParse(
+          "invalid-domain-state",
+          `${path}.openingTurnPending cannot be true when phase is waiting.`
+        )
+      };
+    }
+
+    return {
+      ok: true,
+      openingState: {
+        phase: "waiting",
+        openingTurnPending: false
+      }
+    };
+  }
+
+  if (value.phase === "tied") {
+    if (!isDieValue(value.whiteDie) || !isDieValue(value.blackDie)) {
+      return {
+        ok: false,
+        result: failSnapshotParse(
+          "invalid-domain-state",
+          `${path} tied dice must be between 1 and 6.`
+        )
+      };
+    }
+
+    if (value.whiteDie !== value.blackDie) {
+      return {
+        ok: false,
+        result: failSnapshotParse("invalid-domain-state", `${path} tied phase requires equal dice.`)
+      };
+    }
+
+    if (value.openingTurnPending) {
+      return {
+        ok: false,
+        result: failSnapshotParse(
+          "invalid-domain-state",
+          `${path}.openingTurnPending cannot be true when phase is tied.`
+        )
+      };
+    }
+
+    return {
+      ok: true,
+      openingState: {
+        phase: "tied",
+        whiteDie: value.whiteDie,
+        blackDie: value.blackDie,
+        openingTurnPending: false
+      }
+    };
+  }
+
+  if (value.phase === "resolved") {
+    if (
+      !isDieValue(value.whiteDie) ||
+      !isDieValue(value.blackDie) ||
+      !isPlayerValue(value.startingPlayer)
+    ) {
+      return {
+        ok: false,
+        result: failSnapshotParse("invalid-domain-state", `${path} resolved fields are invalid.`)
+      };
+    }
+
+    if (value.whiteDie === value.blackDie) {
+      return {
+        ok: false,
+        result: failSnapshotParse(
+          "invalid-domain-state",
+          `${path} resolved phase requires unequal dice.`
+        )
+      };
+    }
+
+    const expectedStarter = value.whiteDie > value.blackDie ? "white" : "black";
+
+    if (value.startingPlayer !== expectedStarter) {
+      return {
+        ok: false,
+        result: failSnapshotParse(
+          "invalid-domain-state",
+          `${path}.startingPlayer must match the higher opening die.`
+        )
+      };
+    }
+
+    return {
+      ok: true,
+      openingState: {
+        phase: "resolved",
+        whiteDie: value.whiteDie,
+        blackDie: value.blackDie,
+        startingPlayer: value.startingPlayer,
+        openingTurnPending: value.openingTurnPending
+      }
+    };
+  }
+
+  return {
+    ok: false,
+    result: failSnapshotParse("invalid-domain-state", `${path}.phase is invalid.`)
+  };
+};
+
+const serializeTurnRecord = (record: TurnRecord): SerializedTurnRecordV1 => {
+  return createTurnRecord(record);
+};
+
+const parseSerializedGameSnapshotV1 = (input: Record<string, unknown>): ParseGameSnapshotResult => {
+  if (typeof input.savedAt !== "string" || Number.isNaN(Date.parse(input.savedAt))) {
+    return failSnapshotParse("invalid-structure", "savedAt must be an ISO-8601 timestamp string.");
+  }
+
+  if (!isRecord(input.gameState)) {
+    return failSnapshotParse("invalid-structure", "gameState must be an object.");
+  }
+
+  const gameStateValue = input.gameState;
+
+  if (!Array.isArray(input.turnHistory)) {
+    return failSnapshotParse("invalid-structure", "turnHistory must be an array.");
+  }
+
+  const parsedOpeningState = parseOpeningStateValue(input.openingState, "openingState");
+  if (!parsedOpeningState.ok) {
+    return parsedOpeningState.result;
+  }
+
+  const gameStatePlayer = gameStateValue.activePlayer;
+  if (!isPlayerValue(gameStatePlayer)) {
+    return failSnapshotParse("invalid-domain-state", "gameState.activePlayer is invalid.");
+  }
+
+  const parsedPosition = parseBoardPosition(gameStateValue.position, "gameState.position");
+  if (!parsedPosition.ok) {
+    return parsedPosition.result;
+  }
+
+  let parsedDice: DiceRoll | null = null;
+  const diceValue = gameStateValue.dice;
+  if (diceValue !== null) {
+    const diceParseResult = parseDiceRoll(diceValue, "gameState");
+    if (!diceParseResult.ok) {
+      return diceParseResult.result;
+    }
+    parsedDice = diceParseResult.dice;
+  }
+
+  const reconstructedBaseState = createGameState(parsedPosition.position, gameStatePlayer);
+  const reconstructedState =
+    parsedDice === null
+      ? reconstructedBaseState
+      : (() => {
+          const assigned = setDice(reconstructedBaseState, parsedDice);
+          if (!assigned.ok) {
+            return null;
+          }
+          return assigned.state;
+        })();
+
+  if (reconstructedState === null) {
+    return failSnapshotParse(
+      "invalid-domain-state",
+      "gameState.dice is not valid for the reconstructed game state."
+    );
+  }
+
+  const parsedHistory: TurnRecord[] = [];
+  for (let index = 0; index < input.turnHistory.length; index += 1) {
+    const parsedRecord = parseTurnRecordValue(
+      input.turnHistory[index],
+      index + 1,
+      `turnHistory[${index}]`
+    );
+    if (!parsedRecord.ok) {
+      return parsedRecord.result;
+    }
+    parsedHistory.push(parsedRecord.record);
+  }
+
+  const openingTurnRecords = parsedHistory.filter((record) => record.phase === "opening");
+  if (openingTurnRecords.length > 1) {
+    return failSnapshotParse(
+      "invalid-domain-state",
+      "turnHistory may include at most one opening-phase record."
+    );
+  }
+
+  if (openingTurnRecords.length === 1 && parsedHistory[0]?.phase !== "opening") {
+    return failSnapshotParse(
+      "invalid-domain-state",
+      "Opening-phase record must be the first completed turn when present."
+    );
+  }
+
+  if (parsedHistory.length > 0) {
+    const finalHistoryPosition = parsedHistory[parsedHistory.length - 1]?.positionAfter;
+    if (
+      finalHistoryPosition === undefined ||
+      !areBoardPositionsEqual(finalHistoryPosition, reconstructedState.position)
+    ) {
+      return failSnapshotParse(
+        "invalid-domain-state",
+        "Current game position must match the final positionAfter in turnHistory."
+      );
+    }
+  }
+
+  if (parsedOpeningState.openingState.phase === "waiting") {
+    if (
+      parsedHistory.length > 0 ||
+      reconstructedState.dice !== null ||
+      parsedOpeningState.openingState.openingTurnPending ||
+      reconstructedState.activePlayer !== "white" ||
+      !areBoardPositionsEqual(reconstructedState.position, STANDARD_STARTING_POSITION)
+    ) {
+      return failSnapshotParse(
+        "invalid-domain-state",
+        "Opening waiting state must represent a fresh game with no history or active dice."
+      );
+    }
+  }
+
+  if (parsedOpeningState.openingState.phase === "tied") {
+    if (
+      parsedHistory.length > 0 ||
+      reconstructedState.dice !== null ||
+      parsedOpeningState.openingState.openingTurnPending ||
+      reconstructedState.activePlayer !== "white" ||
+      !areBoardPositionsEqual(reconstructedState.position, STANDARD_STARTING_POSITION)
+    ) {
+      return failSnapshotParse(
+        "invalid-domain-state",
+        "Opening tied state must keep a fresh board, no history, and no active turn dice."
+      );
+    }
+  }
+
+  if (parsedOpeningState.openingState.phase === "resolved") {
+    if (parsedOpeningState.openingState.openingTurnPending) {
+      if (parsedHistory.length !== 0) {
+        return failSnapshotParse(
+          "invalid-domain-state",
+          "Opening turn cannot be pending when turn history already contains completed turns."
+        );
+      }
+
+      if (
+        reconstructedState.dice === null ||
+        reconstructedState.activePlayer !== parsedOpeningState.openingState.startingPlayer ||
+        reconstructedState.dice.dice[0] !== parsedOpeningState.openingState.whiteDie ||
+        reconstructedState.dice.dice[1] !== parsedOpeningState.openingState.blackDie
+      ) {
+        return failSnapshotParse(
+          "invalid-domain-state",
+          "Resolved opening-pending state must match current starter and opening dice."
+        );
+      }
+    }
+
+    if (!parsedOpeningState.openingState.openingTurnPending && parsedHistory.length === 0) {
+      return failSnapshotParse(
+        "invalid-domain-state",
+        "Resolved opening state with no pending opening turn must include completed opening turn history."
+      );
+    }
+  }
+
+  if (getGameStatus(reconstructedState.position).state === "complete") {
+    if (reconstructedState.dice !== null || parsedOpeningState.openingState.openingTurnPending) {
+      return failSnapshotParse(
+        "invalid-domain-state",
+        "Completed game snapshots cannot restore with active dice or pending opening turn."
+      );
+    }
+  }
+
+  return {
+    ok: true,
+    snapshot: {
+      savedAt: input.savedAt,
+      gameState: cloneGameState(reconstructedState),
+      turnHistory: parsedHistory.map((record) => createTurnRecord(record)),
+      openingState: cloneSnapshotOpeningState(parsedOpeningState.openingState)
+    }
+  };
+};
+
+export const serializeGameSnapshot = (snapshot: GameSnapshot): SerializedGameSnapshotV1 => {
+  return {
+    format: GAME_SNAPSHOT_FORMAT,
+    version: GAME_SNAPSHOT_VERSION,
+    savedAt: snapshot.savedAt,
+    gameState: cloneGameState(snapshot.gameState),
+    turnHistory: snapshot.turnHistory.map(serializeTurnRecord),
+    openingState: cloneSnapshotOpeningState(snapshot.openingState)
+  };
+};
+
+export const encodeGameSnapshot = (snapshot: GameSnapshot): string => {
+  return JSON.stringify(serializeGameSnapshot(snapshot));
+};
+
+export const parseGameSnapshot = (input: unknown): ParseGameSnapshotResult => {
+  if (!isRecord(input)) {
+    return failSnapshotParse("invalid-structure", "Snapshot must be an object.");
+  }
+
+  if (input.format !== GAME_SNAPSHOT_FORMAT) {
+    return failSnapshotParse("wrong-format", "Snapshot format identifier is not recognized.");
+  }
+
+  if (!Number.isInteger(input.version)) {
+    return failSnapshotParse("invalid-structure", "Snapshot version must be an integer.");
+  }
+
+  if (input.version !== GAME_SNAPSHOT_VERSION) {
+    return failSnapshotParse("unsupported-version", "Snapshot version is not supported.");
+  }
+
+  return parseSerializedGameSnapshotV1(input);
+};
+
+export const decodeGameSnapshot = (text: string): ParseGameSnapshotResult => {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return failSnapshotParse("invalid-json", "Snapshot text is not valid JSON.");
+  }
+
+  return parseGameSnapshot(parsed);
 };
 
 export const createTurnRecord = (input: CreateTurnRecordInput): TurnRecord => {

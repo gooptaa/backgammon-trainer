@@ -1,6 +1,10 @@
 import styles from "./App.module.css";
 import {
   applyGameMove,
+  decodeGameSnapshot,
+  encodeGameSnapshot,
+  GAME_SNAPSHOT_FORMAT,
+  GAME_SNAPSHOT_VERSION,
   createTurnRecord,
   createGameState,
   getGameStatus,
@@ -9,10 +13,13 @@ import {
   previewMovePrefix,
   setDice,
   type ApplyGameMoveFailureReason,
+  type GameSnapshot,
   type GameState,
   type CreateTurnRecordInput,
   type MoveStep,
+  type ParseGameSnapshotFailureReason,
   type PassTurnFailureReason,
+  type SnapshotOpeningState,
   type SetDiceFailureReason,
   type Move,
   type TurnRecord
@@ -22,7 +29,7 @@ import {
   type DieValue,
   type Player
 } from "@backgammon-trainer/backgammon-domain";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BackgammonBoard } from "./features/board/BackgammonBoard";
 import { EngineSandboxPanel } from "./features/sandbox/EngineSandboxPanel";
@@ -38,6 +45,11 @@ import {
   type SelectableSource,
   type SelectedStep
 } from "./features/sandbox/moveSelection";
+import {
+  DEFAULT_GAME_STORAGE_KEY,
+  createLocalGameStorage,
+  type GameStorage
+} from "./features/sandbox/gameStorage";
 import { rollDice, type RandomSource } from "./features/sandbox/rollDice";
 import { rollOpeningDice } from "./features/sandbox/rollOpeningDice";
 
@@ -131,11 +143,198 @@ const getPassFailureMessage = (reason: PassTurnFailureReason): string => {
   return "Cannot pass while legal moves are available.";
 };
 
+const getSnapshotFailureMessage = (reason: ParseGameSnapshotFailureReason): string => {
+  if (reason === "invalid-json") {
+    return "Snapshot text is not valid JSON.";
+  }
+
+  if (reason === "wrong-format") {
+    return "Snapshot format is not recognized.";
+  }
+
+  if (reason === "unsupported-version") {
+    return "Snapshot version is not supported.";
+  }
+
+  if (reason === "invalid-structure") {
+    return "Snapshot structure is malformed.";
+  }
+
+  return "Snapshot game state is inconsistent.";
+};
+
+const toSnapshotOpeningState = (
+  openingRollState: OpeningRollState,
+  openingTurnPending: boolean
+): SnapshotOpeningState => {
+  if (openingRollState.phase === "waiting") {
+    return {
+      phase: "waiting",
+      openingTurnPending: false
+    };
+  }
+
+  if (openingRollState.phase === "tied") {
+    return {
+      phase: "tied",
+      whiteDie: openingRollState.whiteDie,
+      blackDie: openingRollState.blackDie,
+      openingTurnPending: false
+    };
+  }
+
+  return {
+    phase: "resolved",
+    whiteDie: openingRollState.whiteDie,
+    blackDie: openingRollState.blackDie,
+    startingPlayer: openingRollState.startingPlayer,
+    openingTurnPending
+  };
+};
+
+const fromSnapshotOpeningState = (
+  openingState: SnapshotOpeningState
+): {
+  openingRollState: OpeningRollState;
+  openingTurnPending: boolean;
+} => {
+  if (openingState.phase === "waiting") {
+    return {
+      openingRollState: {
+        phase: "waiting"
+      },
+      openingTurnPending: false
+    };
+  }
+
+  if (openingState.phase === "tied") {
+    return {
+      openingRollState: {
+        phase: "tied",
+        whiteDie: openingState.whiteDie,
+        blackDie: openingState.blackDie
+      },
+      openingTurnPending: false
+    };
+  }
+
+  return {
+    openingRollState: {
+      phase: "resolved",
+      whiteDie: openingState.whiteDie,
+      blackDie: openingState.blackDie,
+      startingPlayer: openingState.startingPlayer
+    },
+    openingTurnPending: openingState.openingTurnPending
+  };
+};
+
+const isStartingPosition = (gameState: GameState): boolean => {
+  return (
+    gameState.activePlayer === "white" &&
+    gameState.dice === null &&
+    JSON.stringify(gameState.position) === JSON.stringify(STANDARD_STARTING_POSITION)
+  );
+};
+
+const hasAnyProgress = (
+  gameState: GameState,
+  openingRollState: OpeningRollState,
+  openingTurnPending: boolean,
+  turnHistory: readonly TurnRecord[]
+): boolean => {
+  if (turnHistory.length > 0) {
+    return true;
+  }
+
+  if (openingRollState.phase !== "waiting" || openingTurnPending) {
+    return true;
+  }
+
+  return !isStartingPosition(gameState);
+};
+
+interface DurableAppState {
+  readonly gameState: GameState;
+  readonly openingRollState: OpeningRollState;
+  readonly openingTurnPending: boolean;
+  readonly turnHistory: readonly TurnRecord[];
+  readonly message: string | null;
+}
+
+const createFreshDurableAppState = (
+  initialGameState?: GameState,
+  initialOpeningRollState?: OpeningRollState,
+  initialOpeningTurnPending?: boolean
+): DurableAppState => {
+  return {
+    gameState: initialGameState ?? createInitialGameState(),
+    openingRollState: initialOpeningRollState ?? getInitialOpeningRollState(initialGameState),
+    openingTurnPending: initialOpeningTurnPending ?? false,
+    turnHistory: [],
+    message: null
+  };
+};
+
+const resolveInitialDurableAppState = (
+  storage: GameStorage,
+  initialGameState?: GameState,
+  initialOpeningRollState?: OpeningRollState,
+  initialOpeningTurnPending?: boolean
+): DurableAppState => {
+  if (
+    initialGameState !== undefined ||
+    initialOpeningRollState !== undefined ||
+    initialOpeningTurnPending !== undefined
+  ) {
+    return createFreshDurableAppState(
+      initialGameState,
+      initialOpeningRollState,
+      initialOpeningTurnPending
+    );
+  }
+
+  let savedText: string | null = null;
+
+  try {
+    savedText = storage.load();
+  } catch {
+    return {
+      ...createFreshDurableAppState(),
+      message: "Saved game could not be loaded. Starting a fresh game."
+    };
+  }
+
+  if (savedText === null) {
+    return createFreshDurableAppState();
+  }
+
+  const decoded = decodeGameSnapshot(savedText);
+
+  if (!decoded.ok) {
+    return {
+      ...createFreshDurableAppState(),
+      message: `Saved game restore failed: ${getSnapshotFailureMessage(decoded.reason)}`
+    };
+  }
+
+  const restoredOpening = fromSnapshotOpeningState(decoded.snapshot.openingState);
+
+  return {
+    gameState: decoded.snapshot.gameState,
+    openingRollState: restoredOpening.openingRollState,
+    openingTurnPending: restoredOpening.openingTurnPending,
+    turnHistory: decoded.snapshot.turnHistory,
+    message: "Saved game restored."
+  };
+};
+
 interface AppProps {
   initialGameState?: GameState;
   randomSource?: RandomSource;
   initialOpeningRollState?: OpeningRollState;
   initialOpeningTurnPending?: boolean;
+  gameStorage?: GameStorage;
 }
 
 type InspectionView = "before" | "after";
@@ -149,25 +348,43 @@ function App({
   initialGameState,
   randomSource,
   initialOpeningRollState,
-  initialOpeningTurnPending
+  initialOpeningTurnPending,
+  gameStorage
 }: AppProps): JSX.Element {
-  const [gameState, setGameState] = useState<GameState>(
-    () => initialGameState ?? createInitialGameState()
+  const snapshotStorage = useMemo(
+    () => gameStorage ?? createLocalGameStorage(DEFAULT_GAME_STORAGE_KEY),
+    [gameStorage]
   );
+  const initialDurableState = useMemo(
+    () =>
+      resolveInitialDurableAppState(
+        snapshotStorage,
+        initialGameState,
+        initialOpeningRollState,
+        initialOpeningTurnPending
+      ),
+    [initialGameState, initialOpeningRollState, initialOpeningTurnPending, snapshotStorage]
+  );
+
+  const [gameState, setGameState] = useState<GameState>(() => initialDurableState.gameState);
   const [openingRollState, setOpeningRollState] = useState<OpeningRollState>(
-    () => initialOpeningRollState ?? getInitialOpeningRollState(initialGameState)
+    () => initialDurableState.openingRollState
   );
   const [openingTurnPending, setOpeningTurnPending] = useState<boolean>(
-    initialOpeningTurnPending ?? false
+    initialDurableState.openingTurnPending
   );
   const [dieOne, setDieOne] = useState<DieValue>(DEFAULT_MANUAL_DIE_ONE);
   const [dieTwo, setDieTwo] = useState<DieValue>(DEFAULT_MANUAL_DIE_TWO);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(initialDurableState.message);
   const [selectedSteps, setSelectedSteps] = useState<readonly SelectedStep[]>([]);
   const [selectedSource, setSelectedSource] = useState<SelectableSource | null>(null);
   const [hoveredDestination, setHoveredDestination] = useState<SelectableDestination | null>(null);
-  const [turnHistory, setTurnHistory] = useState<readonly TurnRecord[]>([]);
+  const [turnHistory, setTurnHistory] = useState<readonly TurnRecord[]>(
+    () => initialDurableState.turnHistory
+  );
   const [historyInspection, setHistoryInspection] = useState<HistoryInspectionState | null>(null);
+  const [importText, setImportText] = useState<string>("");
+  const skipInitialPersistRef = useRef(true);
   const gameStatus = useMemo(() => getGameStatus(gameState.position), [gameState]);
   const legalMovesResult = useMemo(() => getLegalMovesForState(gameState), [gameState]);
   const openingResolved = openingRollState.phase === "resolved";
@@ -264,6 +481,32 @@ function App({
     selectedSteps,
     stagedPrefixResult
   ]);
+
+  const durableSnapshot = useMemo<GameSnapshot>(() => {
+    return {
+      savedAt: new Date().toISOString(),
+      gameState,
+      turnHistory,
+      openingState: toSnapshotOpeningState(openingRollState, openingTurnPending)
+    };
+  }, [gameState, openingRollState, openingTurnPending, turnHistory]);
+
+  const exportSnapshotText = useMemo(() => {
+    return encodeGameSnapshot(durableSnapshot);
+  }, [durableSnapshot]);
+
+  useEffect(() => {
+    if (skipInitialPersistRef.current) {
+      skipInitialPersistRef.current = false;
+      return;
+    }
+
+    try {
+      snapshotStorage.save(exportSnapshotText);
+    } catch {
+      setMessage("Local save failed. Game continues in memory only.");
+    }
+  }, [exportSnapshotText, snapshotStorage]);
 
   const resetTransientState = (): void => {
     setSelectedSteps([]);
@@ -480,6 +723,65 @@ function App({
     setTurnHistory([]);
     setHistoryInspection(null);
     resetTransientState();
+  };
+
+  const copyExportSnapshot = async (): Promise<void> => {
+    if (typeof navigator === "undefined" || navigator.clipboard === undefined) {
+      setMessage("Clipboard copy is not available in this browser.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(exportSnapshotText);
+      setMessage("Snapshot copied to clipboard.");
+    } catch {
+      setMessage("Unable to copy snapshot to clipboard.");
+    }
+  };
+
+  const onCopyExportSnapshot = (): void => {
+    void copyExportSnapshot();
+  };
+
+  const onValidateAndImportSnapshot = (): void => {
+    const parsed = decodeGameSnapshot(importText);
+
+    if (!parsed.ok) {
+      setMessage(`Import failed: ${getSnapshotFailureMessage(parsed.reason)}`);
+      return;
+    }
+
+    if (hasAnyProgress(gameState, openingRollState, openingTurnPending, turnHistory)) {
+      const confirmed = window.confirm(
+        "Importing will replace the current game and history. Continue?"
+      );
+
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const restoredOpening = fromSnapshotOpeningState(parsed.snapshot.openingState);
+
+    setGameState(parsed.snapshot.gameState);
+    setTurnHistory(parsed.snapshot.turnHistory);
+    setOpeningRollState(restoredOpening.openingRollState);
+    setOpeningTurnPending(restoredOpening.openingTurnPending);
+    setHistoryInspection(null);
+    setImportText("");
+    resetTransientState();
+    setMessage("Snapshot imported.");
+  };
+
+  const onClearSavedGame = (): void => {
+    try {
+      snapshotStorage.clear();
+      setMessage(
+        "Saved game cleared. Reloading now will start fresh unless this game is saved again."
+      );
+    } catch {
+      setMessage("Unable to clear saved game.");
+    }
   };
 
   const onSelectHistoryTurn = (turnNumber: number): void => {
@@ -772,6 +1074,10 @@ function App({
     gameState.dice === null &&
     !isInspectingHistory;
   const canSetDiceManually = canRollDice;
+  const canCopySnapshot =
+    typeof navigator !== "undefined" &&
+    navigator.clipboard !== undefined &&
+    typeof navigator.clipboard.writeText === "function";
   const boardActivePlayer = isInspectingHistory ? inspectedTurn.player : gameState.activePlayer;
   const boardPosition = isInspectingHistory
     ? historyInspection?.view === "before"
@@ -985,11 +1291,20 @@ function App({
           interactionLocked={isInspectingHistory}
           canRollDice={canRollDice}
           canSetDiceManually={canSetDiceManually}
+          exportSnapshotText={exportSnapshotText}
+          importText={importText}
+          canCopySnapshot={canCopySnapshot}
+          snapshotFormat={GAME_SNAPSHOT_FORMAT}
+          snapshotVersion={GAME_SNAPSHOT_VERSION}
           onRollForOpening={onRollForOpening}
           onRollDice={onRollDice}
           onSetDice={onSetDice}
           onPassTurn={onPassTurn}
           onNewGame={onNewGame}
+          onCopyExportSnapshot={onCopyExportSnapshot}
+          onImportTextChange={setImportText}
+          onValidateAndImportSnapshot={onValidateAndImportSnapshot}
+          onClearSavedGame={onClearSavedGame}
         />
       </main>
     </div>

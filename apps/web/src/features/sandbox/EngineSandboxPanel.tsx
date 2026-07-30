@@ -20,6 +20,11 @@ interface EngineSandboxPanelProps {
   interactionLocked: boolean;
   canRollDice: boolean;
   canSetDiceManually: boolean;
+  exportSnapshotText: string;
+  importText: string;
+  canCopySnapshot: boolean;
+  snapshotFormat: string;
+  snapshotVersion: number;
   onDieOneChange: (value: DieValue) => void;
   onDieTwoChange: (value: DieValue) => void;
   onRollForOpening: () => void;
@@ -27,6 +32,10 @@ interface EngineSandboxPanelProps {
   onSetDice: () => void;
   onPassTurn: () => void;
   onNewGame: () => void;
+  onCopyExportSnapshot: () => void;
+  onImportTextChange: (value: string) => void;
+  onValidateAndImportSnapshot: () => void;
+  onClearSavedGame: () => void;
 }
 
 type OpeningRollState =
@@ -75,13 +84,22 @@ export function EngineSandboxPanel({
   interactionLocked,
   canRollDice,
   canSetDiceManually,
+  exportSnapshotText,
+  importText,
+  canCopySnapshot,
+  snapshotFormat,
+  snapshotVersion,
   onDieOneChange,
   onDieTwoChange,
   onRollForOpening,
   onRollDice,
   onSetDice,
   onPassTurn,
-  onNewGame
+  onNewGame,
+  onCopyExportSnapshot,
+  onImportTextChange,
+  onValidateAndImportSnapshot,
+  onClearSavedGame
 }: EngineSandboxPanelProps): JSX.Element {
   const isComplete = gameStatus.state === "complete";
   const legalMoves = legalMovesResult.ok ? legalMovesResult.moves : [];
@@ -195,6 +213,43 @@ export function EngineSandboxPanel({
             disabled={!canSetDiceManually || interactionLocked}
           >
             Set Dice Manually
+          </button>
+        </details>
+
+        <details className={styles.devControls}>
+          <summary>Export Game</summary>
+          <p className={styles.meta} data-testid="snapshot-version-label">
+            Format: {snapshotFormat} v{snapshotVersion}
+          </p>
+          <textarea
+            aria-label="Exported game snapshot"
+            className={styles.snapshotTextArea}
+            data-testid="export-snapshot-text"
+            readOnly
+            value={exportSnapshotText}
+          />
+          <button type="button" onClick={onCopyExportSnapshot} disabled={!canCopySnapshot}>
+            Copy Snapshot
+          </button>
+        </details>
+
+        <details className={styles.devControls}>
+          <summary>Import Game</summary>
+          <p className={styles.meta}>
+            Paste a previously exported snapshot and validate before import.
+          </p>
+          <textarea
+            aria-label="Import game snapshot"
+            className={styles.snapshotTextArea}
+            data-testid="import-snapshot-text"
+            value={importText}
+            onChange={(event) => onImportTextChange(event.currentTarget.value)}
+          />
+          <button type="button" onClick={onValidateAndImportSnapshot}>
+            Validate and Import
+          </button>
+          <button type="button" onClick={onClearSavedGame}>
+            Clear Saved Game
           </button>
         </details>
 

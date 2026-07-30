@@ -62,6 +62,65 @@ Scope notes:
 - This helper does not apply moves, evaluate legality, or transition turns.
 - Callers append records only after a successful committed transition (`applyGameMove(...)` or `passTurn(...)`).
 
+Immutability precision:
+
+- Records are deep-cloned snapshots.
+- Runtime deep freezing is not applied.
+- Immutability is guaranteed by structural copy plus non-mutating API usage conventions.
+
+## Versioned Game Snapshot API
+
+The engine now exports portable, JSON-safe snapshot contracts for committed game-session persistence.
+
+Versioned envelope fields:
+
+- `format: "backgammon-trainer-game"`
+- `version: 1`
+
+Primary types:
+
+- `GameSnapshot`
+- `SnapshotOpeningState`
+- `SerializedGameSnapshotV1`
+- `ParseGameSnapshotResult`
+
+Primary functions:
+
+- `serializeGameSnapshot(snapshot)` -> JSON-safe versioned object
+- `encodeGameSnapshot(snapshot)` -> serialized JSON string
+- `parseGameSnapshot(input)` -> validated trusted domain reconstruction result
+- `decodeGameSnapshot(text)` -> JSON parse + validation result
+
+Failure result reasons:
+
+- `invalid-json`
+- `wrong-format`
+- `unsupported-version`
+- `invalid-structure`
+- `invalid-domain-state`
+
+Validation boundary includes:
+
+- snapshot envelope shape and version metadata
+- player and dice domains
+- board-position structure and checker-total invariants
+- move and move-step metadata shape (including `dieIndex`)
+- turn-record sequence coherence and before/after validity
+- opening-state coherence (waiting/tied/resolved + pending semantics)
+- game/history coherence (`positionAfter` alignment and completion constraints)
+
+Reconstruction behavior:
+
+- parsed values are reconstructed into fresh trusted domain values
+- nested arrays/objects are cloned and never reference parsed input
+- canonical turn-history values are rebuilt via `createTurnRecord(...)`
+
+Scope boundaries:
+
+- parsing and serialization are engine-domain and host-agnostic
+- browser storage APIs are intentionally out of scope for engine package
+- no move-legality rule changes were introduced by snapshot APIs
+
 ## createGameState
 
 `createGameState(position, activePlayer)` returns a new game state with:
