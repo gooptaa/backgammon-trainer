@@ -1,0 +1,150 @@
+:root {
+  color-scheme: light;
+  font-family: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+  line-height: 1.4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 10%, #fff3d6 0%, transparent 45%),
+    linear-gradient(180deg, #f7f2e8 0%, #ebe2d5 100%);
+  color: #1d232b;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.appFrame {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.header {
+  background: #113f5a;
+  color: #f5efe4;
+  border-radius: 14px;
+  padding: 1rem;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.header p {
+  margin: 0.35rem 0 0;
+  max-width: 60ch;
+}
+
+.status {
+  margin: 0;
+  font-size: 0.92rem;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 0.45rem 0.6rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status span {
+  font-weight: 700;
+  color: #ffdd9d;
+}
+
+.mainLayout {
+  display: grid;
+  gap: 1rem;
+}
+
+.boardSection,
+.coachingPanel {
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(17, 63, 90, 0.15);
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.boardSection h2,
+.coachingPanel h2 {
+  margin-top: 0;
+}
+
+.boardPlaceholder {
+  margin-top: 0.6rem;
+  aspect-ratio: 2.3 / 1;
+  width: 100%;
+  border-radius: 10px;
+  border: 2px solid #6c4526;
+  background: #a25f35;
+  display: grid;
+  grid-template-columns: 1fr 0.12fr 1fr;
+  gap: 0.4rem;
+  padding: 0.5rem;
+}
+
+.boardHalf {
+  border-radius: 6px;
+  background: repeating-linear-gradient(90deg, #f6d7a8 0, #f6d7a8 8%, #b96a3d 8%, #b96a3d 16%);
+}
+
+.barStripe {
+  border-radius: 6px;
+  background: #4b2e1c;
+}
+
+.controlsRow {
+  margin-top: 0.9rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
+}
+
+button {
+  border: 1px solid #113f5a;
+  color: #113f5a;
+  background: #fff;
+  border-radius: 10px;
+  min-height: 44px;
+  padding: 0.6rem 0.85rem;
+  font-weight: 600;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #e88f2a;
+  outline-offset: 2px;
+}
+
+.coachingPanel ul {
+  margin: 0.7rem 0 0;
+  padding-left: 1.2rem;
+}
+
+@media (min-width: 900px) {
+  .mainLayout {
+    grid-template-columns: 1.5fr 1fr;
+    align-items: start;
+  }
+
+  .coachingPanel {
+    min-height: 100%;
+  }
+
+  .controlsRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

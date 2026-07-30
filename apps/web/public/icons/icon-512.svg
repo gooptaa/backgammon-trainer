@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Backgammon Trainer">
+  <rect width="512" height="512" rx="96" fill="#113f5a"/>
+  <rect x="54" y="54" width="404" height="404" rx="58" fill="#f7f2e8"/>
+  <polygon points="96,390 166,140 236,390" fill="#b96a3d"/>
+  <polygon points="276,390 346,140 416,390" fill="#e0b36e"/>
+</svg>
