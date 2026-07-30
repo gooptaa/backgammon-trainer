@@ -391,6 +391,37 @@ const assembleTurnCandidates = (input: GetLegalMovesInput): readonly Move[] => {
   return moves;
 };
 
+const filterTurnCandidatesByDiceUsage = (
+  roll: DiceRoll,
+  candidates: readonly Move[]
+): readonly Move[] => {
+  const [firstDie, secondDie] = roll.dice;
+
+  if (firstDie === secondDie) {
+    return candidates;
+  }
+
+  const completedTurns = candidates.filter((move) => move.steps.length === 2);
+  if (completedTurns.length > 0) {
+    return completedTurns;
+  }
+
+  const oneStepTurns = candidates.filter((move) => move.steps.length === 1);
+  if (oneStepTurns.length === 0) {
+    return [];
+  }
+
+  const largerDie = firstDie > secondDie ? firstDie : secondDie;
+  const smallerDie = firstDie > secondDie ? secondDie : firstDie;
+  const largerDieTurns = oneStepTurns.filter((move) => move.steps[0]?.dieValue === largerDie);
+
+  if (largerDieTurns.length > 0) {
+    return largerDieTurns;
+  }
+
+  return oneStepTurns.filter((move) => move.steps[0]?.dieValue === smallerDie);
+};
+
 /**
  * Returns legal checker moves for a player from a board position.
  *
@@ -402,7 +433,9 @@ const assembleTurnCandidates = (input: GetLegalMovesInput): readonly Move[] => {
  * Unsupported rule situations are intentionally omitted for now.
  */
 export const getLegalMoves = (input: GetLegalMovesInput): LegalMoveResult => {
+  const assembledTurns = assembleTurnCandidates(input);
+
   return {
-    moves: assembleTurnCandidates(input)
+    moves: filterTurnCandidatesByDiceUsage(input.roll, assembledTurns)
   };
 };

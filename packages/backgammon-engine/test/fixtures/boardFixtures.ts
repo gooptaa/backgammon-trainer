@@ -496,3 +496,105 @@ export const WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE: BoardPosition = cre
     black: 15
   }
 });
+
+/**
+ * Both dice can be used, but only one die order yields a complete two-step turn.
+ */
+export const WHITE_BOTH_DICE_ONE_ORDER_SEQUENCE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    23: { player: "black", checkerCount: 2 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 14,
+    black: 13
+  }
+});
+
+/**
+ * Both die orders can produce complete two-step turns.
+ */
+export const WHITE_BOTH_DICE_BOTH_ORDERS_SEQUENCE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * Only the larger die is playable for a one-step turn.
+ */
+export const WHITE_ONLY_LARGER_DIE_PLAYABLE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    5: { player: "black", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 14,
+    black: 13
+  }
+});
+
+/**
+ * Only the smaller die is playable for a one-step turn.
+ */
+export const WHITE_ONLY_SMALLER_DIE_PLAYABLE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    4: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * Both dice are individually playable, but no complete two-step turn is possible.
+ */
+export const WHITE_BOTH_DICE_INDIVIDUAL_ONLY_FIXTURE: BoardPosition = createPosition({
+  points: {
+    7: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * Bar-entry sequence where both dice can be used in a completed turn.
+ */
+export const WHITE_BAR_BOTH_DICE_SEQUENCE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
+
+/**
+ * Bar-entry position where only one die is playable.
+ */
+export const WHITE_BAR_ONLY_ONE_DIE_PLAYABLE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    23: { player: "black", checkerCount: 2 },
+    22: { player: "black", checkerCount: 2 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 14,
+    black: 11
+  }
+});

@@ -12,12 +12,17 @@ import {
 import {
   BLACK_FORWARD_FIXTURE,
   WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
+  WHITE_BAR_BOTH_DICE_SEQUENCE_FIXTURE,
   WHITE_BAR_BLOCKED_ENTRY_FIXTURE,
   WHITE_BAR_DUPLICATE_DICE_FIXTURE,
   WHITE_BAR_ENTRY_THEN_ORDINARY_MOVE_FIXTURE,
   WHITE_BAR_HIT_ENTRY_FIXTURE,
+  WHITE_BAR_ONLY_ONE_DIE_PLAYABLE_FIXTURE,
   WHITE_BAR_SINGLE_CHECKER_FIXTURE,
   WHITE_BAR_TWO_DICE_DIFFERENT_DESTINATIONS_FIXTURE,
+  WHITE_BOTH_DICE_BOTH_ORDERS_SEQUENCE_FIXTURE,
+  WHITE_BOTH_DICE_INDIVIDUAL_ONLY_FIXTURE,
+  WHITE_BOTH_DICE_ONE_ORDER_SEQUENCE_FIXTURE,
   WHITE_BLOCKED_BAR_WITH_ORDINARY_OPPORTUNITY_FIXTURE,
   BAR_ENTRY_EXAMPLE_FIXTURE,
   BEARING_OFF_EXAMPLE_FIXTURE,
@@ -30,6 +35,8 @@ import {
   WHITE_MULTIPLE_HIT_OPPORTUNITIES_FIXTURE,
   WHITE_MULTIPLE_BLOCKED_DESTINATIONS_FIXTURE,
   WHITE_MULTIPLE_MOVES_FIXTURE,
+  WHITE_ONLY_LARGER_DIE_PLAYABLE_FIXTURE,
+  WHITE_ONLY_SMALLER_DIE_PLAYABLE_FIXTURE,
   WHITE_OPEN_DESTINATION_FIXTURE,
   WHITE_ONE_ORDER_CONTINUES_OTHER_STOPS_FIXTURE,
   WHITE_ONE_DESTINATION_FIXTURE,
@@ -253,18 +260,18 @@ describe("getLegalMoves basic forward generation", () => {
 
   it("generates moves from one die when the other die has no legal destination", () => {
     const input: GetLegalMovesInput = {
-      position: WHITE_ONE_DESTINATION_FIXTURE,
+      position: WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE,
       player: "white",
       roll: {
-        dice: [6, 1]
+        dice: [1, 2]
       }
     };
     const result = getLegalMoves(input);
 
     expect(result.moves).toHaveLength(1);
-    expect(result.moves[0]?.steps[0]?.fromPoint).toBe(24);
-    expect(result.moves[0]?.steps[0]?.toPoint).toBe(18);
-    expect(result.moves[0]?.steps[0]?.dieValue).toBe(6);
+    expect(result.moves[0]?.steps[0]?.fromPoint).toBe(2);
+    expect(result.moves[0]?.steps[0]?.toPoint).toBe(1);
+    expect(result.moves[0]?.steps[0]?.dieValue).toBe(1);
     expect(result.moves[0]?.steps[0]?.dieIndex).toBe(0);
   });
 
@@ -731,15 +738,151 @@ describe("getLegalMoves basic forward generation", () => {
 
     const result = getLegalMoves(input);
 
-    expect(result.moves.some((move) => move.steps.length === 2)).toBe(true);
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 2)).toBe(true);
+  });
+
+  it("suppresses one-step turns when at least one two-step turn exists", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BOTH_DICE_ONE_ORDER_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 2)).toBe(true);
+  });
+
+  it("keeps both die orders when each order yields a complete turn", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BOTH_DICE_BOTH_ORDERS_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.every((move) => move.steps.length === 2)).toBe(true);
     expect(
-      result.moves.some(
-        (move) =>
-          move.steps.length === 1 &&
-          move.steps[0]?.kind === "enter-from-bar" &&
-          move.steps[0]?.dieIndex === 1
-      )
+      result.moves.some((move) => move.steps[0]?.dieIndex === 0 && move.steps[1]?.dieIndex === 1)
     ).toBe(true);
+    expect(
+      result.moves.some((move) => move.steps[0]?.dieIndex === 1 && move.steps[1]?.dieIndex === 0)
+    ).toBe(true);
+  });
+
+  it("selects larger-die candidates when no two-step turn exists and larger die is playable", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_ONLY_LARGER_DIE_PLAYABLE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [6, 3]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 1)).toBe(true);
+    expect(result.moves.every((move) => move.steps[0]?.dieValue === 6)).toBe(true);
+  });
+
+  it("returns smaller-die candidates when larger die cannot be played", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_ONLY_SMALLER_DIE_PLAYABLE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [6, 3]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 1)).toBe(true);
+    expect(result.moves.every((move) => move.steps[0]?.dieValue === 3)).toBe(true);
+  });
+
+  it("keeps only larger-die moves when both dice are individually playable but no two-step exists", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BOTH_DICE_INDIVIDUAL_ONLY_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [6, 3]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 1)).toBe(true);
+    expect(result.moves.every((move) => move.steps[0]?.dieValue === 6)).toBe(true);
+  });
+
+  it("preserves hit metadata after dice-usage filtering", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_HIT_THEN_SECOND_MOVE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some((move) => move.steps[0]?.hitsBlot && move.steps[0]?.hit?.point === 7)
+    ).toBe(true);
+  });
+
+  it("preserves mandatory bar-entry and entry metadata through filtering", () => {
+    const completeTurnInput: GetLegalMovesInput = {
+      position: WHITE_BAR_BOTH_DICE_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+    const oneDieInput: GetLegalMovesInput = {
+      position: WHITE_BAR_ONLY_ONE_DIE_PLAYABLE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const completeTurnResult = getLegalMoves(completeTurnInput);
+    const oneDieResult = getLegalMoves(oneDieInput);
+
+    expect(completeTurnResult.moves.every((move) => move.steps[0]?.kind === "enter-from-bar")).toBe(
+      true
+    );
+    expect(completeTurnResult.moves.every((move) => move.steps.length === 2)).toBe(true);
+    expect(oneDieResult.moves.every((move) => move.steps[0]?.kind === "enter-from-bar")).toBe(true);
+    expect(oneDieResult.moves.every((move) => move.steps[0]?.dieValue === 1)).toBe(true);
+  });
+
+  it("keeps current doubles behavior unchanged", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(result.moves.every((move) => move.steps.length === 1)).toBe(true);
+    expect(result.moves[0]?.steps[0]?.dieIndex).toBe(0);
+    expect(result.moves[1]?.steps[0]?.dieIndex).toBe(1);
   });
 
   it("does not mutate the original input position during candidate expansion", () => {
@@ -792,10 +935,17 @@ describe("engine fixtures", () => {
       WHITE_HIT_THEN_SECOND_MOVE_FIXTURE,
       WHITE_BAR_ENTRY_THEN_ORDINARY_MOVE_FIXTURE,
       WHITE_ONE_ORDER_CONTINUES_OTHER_STOPS_FIXTURE,
-      WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE
+      WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE,
+      WHITE_BOTH_DICE_ONE_ORDER_SEQUENCE_FIXTURE,
+      WHITE_BOTH_DICE_BOTH_ORDERS_SEQUENCE_FIXTURE,
+      WHITE_ONLY_LARGER_DIE_PLAYABLE_FIXTURE,
+      WHITE_ONLY_SMALLER_DIE_PLAYABLE_FIXTURE,
+      WHITE_BOTH_DICE_INDIVIDUAL_ONLY_FIXTURE,
+      WHITE_BAR_BOTH_DICE_SEQUENCE_FIXTURE,
+      WHITE_BAR_ONLY_ONE_DIE_PLAYABLE_FIXTURE
     ];
 
-    expect(fixtures).toHaveLength(30);
+    expect(fixtures).toHaveLength(37);
   });
 
   it("produces complete point maps from helper", () => {
@@ -836,6 +986,13 @@ describe("engine fixtures", () => {
       WHITE_BAR_ENTRY_THEN_ORDINARY_MOVE_FIXTURE,
       WHITE_ONE_ORDER_CONTINUES_OTHER_STOPS_FIXTURE,
       WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE,
+      WHITE_BOTH_DICE_ONE_ORDER_SEQUENCE_FIXTURE,
+      WHITE_BOTH_DICE_BOTH_ORDERS_SEQUENCE_FIXTURE,
+      WHITE_ONLY_LARGER_DIE_PLAYABLE_FIXTURE,
+      WHITE_ONLY_SMALLER_DIE_PLAYABLE_FIXTURE,
+      WHITE_BOTH_DICE_INDIVIDUAL_ONLY_FIXTURE,
+      WHITE_BAR_BOTH_DICE_SEQUENCE_FIXTURE,
+      WHITE_BAR_ONLY_ONE_DIE_PLAYABLE_FIXTURE,
       createPosition({
         points: {
           6: { player: "white", checkerCount: 1 },
