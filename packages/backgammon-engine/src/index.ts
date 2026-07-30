@@ -177,6 +177,74 @@ const createCandidateMove = (input: CandidateMoveInput): Move | null => {
   return null;
 };
 
+interface SingleDieGenerationInput {
+  readonly position: BoardPosition;
+  readonly player: Player;
+  readonly dieValue: DieValue;
+  readonly dieIndex: 0 | 1;
+}
+
+const generateSingleDieMoves = (input: SingleDieGenerationInput): readonly Move[] => {
+  const moves: Move[] = [];
+  const mustEnterFromBar = requiresBarEntry(input.position, input.player);
+
+  if (!mustEnterFromBar && canGenerateSimpleMoves(input.position, input.player)) {
+    const fromPoints = getPlayerOccupiedPoints(input.position, input.player);
+
+    for (const fromPoint of fromPoints) {
+      const destinationPoint = getSimpleDestinationPoint(fromPoint, input.dieValue, input.player);
+      if (destinationPoint === null) {
+        continue;
+      }
+
+      const move = createCandidateMove({
+        player: input.player,
+        kind: "point-to-point",
+        fromPoint,
+        toPoint: destinationPoint,
+        dieValue: input.dieValue,
+        dieIndex: input.dieIndex,
+        destinationOccupancy: input.position.points[destinationPoint]
+      });
+
+      if (move !== null) {
+        moves.push(move);
+      }
+    }
+  }
+
+  if (mustEnterFromBar) {
+    const destinationPoint = getEntryDestinationPoint(input.dieValue, input.player);
+
+    const move = createCandidateMove({
+      player: input.player,
+      kind: "enter-from-bar",
+      fromPoint: "bar",
+      toPoint: destinationPoint,
+      dieValue: input.dieValue,
+      dieIndex: input.dieIndex,
+      destinationOccupancy: input.position.points[destinationPoint]
+    });
+
+    if (move !== null) {
+      moves.push(move);
+    }
+  }
+
+  return moves;
+};
+
+const generateTurnCandidates = (input: GetLegalMovesInput): readonly Move[] => {
+  return input.roll.dice.flatMap((dieValue, dieIndex) =>
+    generateSingleDieMoves({
+      position: input.position,
+      player: input.player,
+      dieValue,
+      dieIndex: dieIndex as 0 | 1
+    })
+  );
+};
+
 /**
  * Returns legal checker moves for a player from a board position.
  *
@@ -188,61 +256,7 @@ const createCandidateMove = (input: CandidateMoveInput): Move | null => {
  * Unsupported rule situations are intentionally omitted for now.
  */
 export const getLegalMoves = (input: GetLegalMovesInput): LegalMoveResult => {
-  const moves: Move[] = [];
-  const mustEnterFromBar = requiresBarEntry(input.position, input.player);
-  const diceWithIndexes = input.roll.dice.map((dieValue, dieIndex) => ({
-    dieValue,
-    dieIndex: dieIndex as 0 | 1
-  }));
-
-  if (canGenerateSimpleMoves(input.position, input.player)) {
-    const fromPoints = getPlayerOccupiedPoints(input.position, input.player);
-
-    for (const fromPoint of fromPoints) {
-      for (const { dieValue, dieIndex } of diceWithIndexes) {
-        const destinationPoint = getSimpleDestinationPoint(fromPoint, dieValue, input.player);
-        if (destinationPoint === null) {
-          continue;
-        }
-
-        const move = createCandidateMove({
-          player: input.player,
-          kind: "point-to-point",
-          fromPoint,
-          toPoint: destinationPoint,
-          dieValue,
-          dieIndex,
-          destinationOccupancy: input.position.points[destinationPoint]
-        });
-
-        if (move !== null) {
-          moves.push(move);
-        }
-      }
-    }
-  }
-
-  if (mustEnterFromBar) {
-    for (const { dieValue, dieIndex } of diceWithIndexes) {
-      const destinationPoint = getEntryDestinationPoint(dieValue, input.player);
-
-      const move = createCandidateMove({
-        player: input.player,
-        kind: "enter-from-bar",
-        fromPoint: "bar",
-        toPoint: destinationPoint,
-        dieValue,
-        dieIndex,
-        destinationOccupancy: input.position.points[destinationPoint]
-      });
-
-      if (move !== null) {
-        moves.push(move);
-      }
-    }
-  }
-
   return {
-    moves
+    moves: generateTurnCandidates(input)
   };
 };
