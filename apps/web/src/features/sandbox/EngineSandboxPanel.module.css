@@ -1,0 +1,97 @@
+.panel {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(17, 63, 90, 0.14);
+  border-radius: 12px;
+  padding: 0.95rem;
+  box-shadow: 0 2px 10px rgba(17, 63, 90, 0.08);
+}
+
+.panel h2 {
+  margin: 0 0 0.55rem;
+  font-size: 1.2rem;
+  color: #173346;
+}
+
+.meta {
+  margin: 0;
+  color: #2f3e4a;
+}
+
+.meta + .meta {
+  margin-top: 0.25rem;
+}
+
+.controls {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.diceRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.field label {
+  font-weight: 700;
+  color: #173346;
+}
+
+.field select {
+  min-height: 40px;
+  border: 1px solid rgba(17, 63, 90, 0.35);
+  border-radius: 8px;
+  background: #fffefb;
+  padding: 0 0.5rem;
+}
+
+.message {
+  min-height: 1.2rem;
+  margin: 0.2rem 0 0;
+  color: #7a2b12;
+  font-size: 0.92rem;
+}
+
+.moveList {
+  margin: 0.55rem 0 0;
+  padding-left: 1.1rem;
+  color: #243340;
+}
+
+.moveList li + li {
+  margin-top: 0.45rem;
+}
+
+.moveText {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-family: "IBM Plex Mono", "Menlo", monospace;
+  font-size: 0.9rem;
+}
+
+.positionBox {
+  margin-top: 0.85rem;
+  border-top: 1px solid rgba(17, 63, 90, 0.14);
+  padding-top: 0.7rem;
+}
+
+.positionBox h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  color: #173346;
+}
+
+.positionList {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.positionList li + li {
+  margin-top: 0.22rem;
+}

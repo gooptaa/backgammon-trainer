@@ -71,6 +71,9 @@ importers:
       "@backgammon-trainer/backgammon-domain":
         specifier: workspace:*
         version: link:../../packages/backgammon-domain
+      "@backgammon-trainer/backgammon-engine":
+        specifier: workspace:*
+        version: link:../../packages/backgammon-engine
       "@backgammon-trainer/shared":
         specifier: workspace:*
         version: link:../../packages/shared

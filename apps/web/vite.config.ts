@@ -8,6 +8,9 @@ export default defineConfig({
     alias: {
       "@backgammon-trainer/backgammon-domain": fileURLToPath(
         new URL("../../packages/backgammon-domain/src/index.ts", import.meta.url)
+      ),
+      "@backgammon-trainer/backgammon-engine": fileURLToPath(
+        new URL("../../packages/backgammon-engine/src/index.ts", import.meta.url)
       )
     }
   },
