@@ -3,10 +3,16 @@ import {
   type BoardPosition,
   type Player
 } from "@backgammon-trainer/backgammon-domain";
+import { useCallback, useEffect, useState } from "react";
 
 import styles from "./BackgammonBoard.module.css";
 import { CheckerStack } from "./CheckerStack";
 import { Point } from "./Point";
+import {
+  areSelectionsEqual,
+  getCheckerSelectionLabel,
+  type CheckerSelection
+} from "./checkerSelection";
 import {
   BAR_X0,
   BAR_X1,
@@ -31,6 +37,7 @@ export interface BackgammonBoardProps {
   orientation?: BoardOrientation;
   accessibleLabel?: string;
   showCoordinates?: boolean;
+  onSelectionChange?: (selection: CheckerSelection | null) => void;
 }
 
 const players: readonly Player[] = ["white", "black"];
@@ -92,10 +99,48 @@ export function BackgammonBoard({
   position,
   orientation = "white-home-right",
   accessibleLabel = "Backgammon board",
-  showCoordinates = false
+  showCoordinates = false,
+  onSelectionChange
 }: BackgammonBoardProps): JSX.Element {
+  const [selectedChecker, setSelectedChecker] = useState<CheckerSelection | null>(null);
   const orientationTransform = getOrientationTransform(orientation);
   const shouldShowCoordinates = showCoordinates && orientation === "white-home-right";
+
+  const applySelection = useCallback(
+    (nextSelection: CheckerSelection | null): void => {
+      setSelectedChecker(nextSelection);
+      onSelectionChange?.(nextSelection);
+    },
+    [onSelectionChange]
+  );
+
+  useEffect(() => {
+    if (selectedChecker === null) {
+      return;
+    }
+
+    const occupancy = position.points[selectedChecker.pointIndex];
+    if (!occupancy || occupancy.player !== selectedChecker.player || occupancy.checkerCount <= 0) {
+      applySelection(null);
+    }
+  }, [applySelection, position, selectedChecker]);
+
+  useEffect(() => {
+    if (selectedChecker === null) {
+      return;
+    }
+
+    const onWindowKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        applySelection(null);
+      }
+    };
+
+    window.addEventListener("keydown", onWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onWindowKeyDown);
+    };
+  }, [applySelection, selectedChecker]);
 
   return (
     <div className={styles.boardRoot}>
@@ -183,12 +228,19 @@ export function BackgammonBoard({
             <StaticDie value={3} x={690} y={400} />
           </g>
 
-          <g aria-hidden="true">
+          <g>
             {POINT_INDEXES.map((pointIndex) => {
               const occupancy = position.points[pointIndex];
               if (!occupancy) {
                 return null;
               }
+
+              const pointSelection: CheckerSelection = {
+                pointIndex,
+                player: occupancy.player
+              };
+              const exposedStackIndex = occupancy.checkerCount - 1;
+              const isSelected = areSelectionsEqual(selectedChecker, pointSelection);
 
               return (
                 <CheckerStack
@@ -197,6 +249,13 @@ export function BackgammonBoard({
                   kind="point"
                   player={occupancy.player}
                   stackPrefix={`point-${pointIndex}`}
+                  pointIndex={pointIndex}
+                  selectableStackIndex={exposedStackIndex}
+                  isSelected={isSelected}
+                  selectionLabel={getCheckerSelectionLabel(pointSelection, isSelected)}
+                  onSelectExposedChecker={() => {
+                    applySelection(isSelected ? null : pointSelection);
+                  }}
                 />
               );
             })}
@@ -248,6 +307,17 @@ export function BackgammonBoard({
           ) : null}
         </g>
       </svg>
+      {selectedChecker ? (
+        <div className={styles.selectionControls}>
+          <button
+            className={styles.cancelSelectionButton}
+            type="button"
+            onClick={() => applySelection(null)}
+          >
+            Cancel Selection
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

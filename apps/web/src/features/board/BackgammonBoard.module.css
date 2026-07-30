@@ -83,6 +83,20 @@
   stroke: var(--checker-black-outline);
 }
 
+.selectedCheckerRing {
+  fill: none;
+  stroke: #0b9ac7;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 7 4;
+}
+
+.selectedCheckerMarker {
+  fill: #ffe89a;
+  stroke: #2f2618;
+  stroke-width: 2;
+}
+
 .dieBody {
   fill: var(--dice-surface);
   stroke: var(--dice-outline);
@@ -98,4 +112,26 @@
   font-size: 16px;
   font-weight: 650;
   letter-spacing: 0.01em;
+}
+
+.selectionControls {
+  margin-top: 0.55rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cancelSelectionButton {
+  min-height: 36px;
+  border: 1px solid #215b79;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  background: #f4fbff;
+  color: #113f5a;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.cancelSelectionButton:focus-visible {
+  outline: 3px solid #e88f2a;
+  outline-offset: 2px;
 }
