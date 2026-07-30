@@ -172,3 +172,59 @@ export const WHITE_TWO_DICE_INDEPENDENT_FIXTURE: BoardPosition = createPosition(
     black: 15
   }
 });
+
+/**
+ * White can move 1 pip to an open point (23).
+ */
+export const WHITE_OPEN_DESTINATION_FIXTURE: BoardPosition = createPosition({
+  points: {
+    24: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * White 1-pip destination (23) is blocked by two black checkers.
+ */
+export const WHITE_BLOCKED_DESTINATION_FIXTURE: BoardPosition = createPosition({
+  points: {
+    24: { player: "white", checkerCount: 1 },
+    23: { player: "black", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 14,
+    black: 13
+  }
+});
+
+/**
+ * White 1-pip destination (23) has one black checker (future hit scenario).
+ */
+export const WHITE_SINGLE_OPPONENT_DESTINATION_FIXTURE: BoardPosition = createPosition({
+  points: {
+    24: { player: "white", checkerCount: 1 },
+    23: { player: "black", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 14
+  }
+});
+
+/**
+ * White has both 1-pip and 2-pip destinations blocked.
+ */
+export const WHITE_MULTIPLE_BLOCKED_DESTINATIONS_FIXTURE: BoardPosition = createPosition({
+  points: {
+    24: { player: "white", checkerCount: 1 },
+    23: { player: "black", checkerCount: 2 },
+    22: { player: "black", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 14,
+    black: 11
+  }
+});

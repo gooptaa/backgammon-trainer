@@ -16,8 +16,12 @@ import {
   EMPTY_BOARD_FIXTURE,
   INITIAL_POSITION_FIXTURE,
   SINGLE_CHECKER_FIXTURE,
+  WHITE_BLOCKED_DESTINATION_FIXTURE,
+  WHITE_MULTIPLE_BLOCKED_DESTINATIONS_FIXTURE,
   WHITE_MULTIPLE_MOVES_FIXTURE,
+  WHITE_OPEN_DESTINATION_FIXTURE,
   WHITE_ONE_DESTINATION_FIXTURE,
+  WHITE_SINGLE_OPPONENT_DESTINATION_FIXTURE,
   WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
   createEmptyPoints,
   createPosition
@@ -57,6 +61,69 @@ describe("getLegalMoves basic forward generation", () => {
 
     expect(roll.dice[0]).toBe(6);
     expect(roll.dice[1]).toBe(1);
+  });
+
+  it("generates a legal move to an empty destination", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_OPEN_DESTINATION_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.fromPoint === 24 &&
+          move.steps[0]?.toPoint === 23 &&
+          move.steps[0]?.dieValue === 1
+      )
+    ).toBe(true);
+  });
+
+  it("excludes moves that land on blocked destinations", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BLOCKED_DESTINATION_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toEqual([]);
+  });
+
+  it("excludes moves when multiple destinations are blocked", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_MULTIPLE_BLOCKED_DESTINATIONS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toEqual([]);
+  });
+
+  it("treats single opposing checker destinations as unsupported for now", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_SINGLE_OPPONENT_DESTINATION_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toEqual([]);
   });
 
   it("generates moves from one die when the other die has no legal destination", () => {
@@ -218,10 +285,14 @@ describe("engine fixtures", () => {
       WHITE_ONE_DESTINATION_FIXTURE,
       WHITE_MULTIPLE_MOVES_FIXTURE,
       BLACK_FORWARD_FIXTURE,
-      WHITE_TWO_DICE_INDEPENDENT_FIXTURE
+      WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
+      WHITE_OPEN_DESTINATION_FIXTURE,
+      WHITE_BLOCKED_DESTINATION_FIXTURE,
+      WHITE_SINGLE_OPPONENT_DESTINATION_FIXTURE,
+      WHITE_MULTIPLE_BLOCKED_DESTINATIONS_FIXTURE
     ];
 
-    expect(fixtures).toHaveLength(9);
+    expect(fixtures).toHaveLength(13);
   });
 
   it("produces complete point maps from helper", () => {
@@ -241,6 +312,10 @@ describe("engine fixtures", () => {
       WHITE_MULTIPLE_MOVES_FIXTURE,
       BLACK_FORWARD_FIXTURE,
       WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
+      WHITE_OPEN_DESTINATION_FIXTURE,
+      WHITE_BLOCKED_DESTINATION_FIXTURE,
+      WHITE_SINGLE_OPPONENT_DESTINATION_FIXTURE,
+      WHITE_MULTIPLE_BLOCKED_DESTINATIONS_FIXTURE,
       createPosition({
         points: {
           6: { player: "white", checkerCount: 1 },

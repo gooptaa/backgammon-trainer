@@ -3,7 +3,8 @@ import {
   type BoardPosition,
   type DieValue,
   type Player,
-  type PointIndex
+  type PointIndex,
+  type PointOccupancy
 } from "@backgammon-trainer/backgammon-domain";
 
 /**
@@ -66,6 +67,10 @@ const getForwardDirection = (player: Player): 1 | -1 => {
   return player === "white" ? -1 : 1;
 };
 
+const getOpponent = (player: Player): Player => {
+  return player === "white" ? "black" : "white";
+};
+
 const getSimpleDestinationPoint = (
   fromPoint: PointIndex,
   dieValue: DieValue,
@@ -90,6 +95,14 @@ const getPlayerOccupiedPoints = (
   player: Player
 ): readonly PointIndex[] => {
   return POINT_INDEXES.filter((pointIndex) => position.points[pointIndex]?.player === player);
+};
+
+const isBlocked = (occupancy: PointOccupancy, player: Player): boolean => {
+  return occupancy.player === getOpponent(player) && occupancy.checkerCount >= 2;
+};
+
+const isSingleOpponentChecker = (occupancy: PointOccupancy, player: Player): boolean => {
+  return occupancy.player === getOpponent(player) && occupancy.checkerCount === 1;
 };
 
 /**
@@ -121,23 +134,32 @@ export const getLegalMoves = (input: GetLegalMovesInput): LegalMoveResult => {
         continue;
       }
 
-      if (input.position.points[destinationPoint] !== null) {
+      const destinationOccupancy = input.position.points[destinationPoint];
+
+      if (destinationOccupancy === null) {
+        moves.push({
+          player: input.player,
+          steps: [
+            {
+              kind: "point-to-point",
+              fromPoint,
+              toPoint: destinationPoint,
+              dieValue,
+              dieIndex,
+              hitsBlot: false
+            }
+          ]
+        });
         continue;
       }
 
-      moves.push({
-        player: input.player,
-        steps: [
-          {
-            kind: "point-to-point",
-            fromPoint,
-            toPoint: destinationPoint,
-            dieValue,
-            dieIndex,
-            hitsBlot: false
-          }
-        ]
-      });
+      if (isBlocked(destinationOccupancy, input.player)) {
+        continue;
+      }
+
+      if (isSingleOpponentChecker(destinationOccupancy, input.player)) {
+        continue;
+      }
     }
   }
 
