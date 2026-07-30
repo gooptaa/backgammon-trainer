@@ -290,3 +290,90 @@ export const WHITE_TWO_DICE_INDEPENDENT_HITS_FIXTURE: BoardPosition = createPosi
     black: 9
   }
 });
+
+/**
+ * White has one checker on the bar and can enter to an empty point.
+ */
+export const WHITE_BAR_SINGLE_CHECKER_FIXTURE: BoardPosition = createPosition({
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * White bar entry to point 24 (die 1) is blocked by two black checkers.
+ */
+export const WHITE_BAR_BLOCKED_ENTRY_FIXTURE: BoardPosition = createPosition({
+  points: {
+    24: { player: "black", checkerCount: 2 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 14,
+    black: 13
+  }
+});
+
+/**
+ * White bar entry to point 24 (die 1) hits a single black checker.
+ */
+export const WHITE_BAR_HIT_ENTRY_FIXTURE: BoardPosition = createPosition({
+  points: {
+    24: { player: "black", checkerCount: 1 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 14,
+    black: 14
+  }
+});
+
+/**
+ * White bar entry has two different legal destinations from dice 1 and 2.
+ */
+export const WHITE_BAR_TWO_DICE_DIFFERENT_DESTINATIONS_FIXTURE: BoardPosition = createPosition({
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * White duplicate dice should generate separate entry moves with die association.
+ */
+export const WHITE_BAR_DUPLICATE_DICE_FIXTURE: BoardPosition = createPosition({
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * White has both bar-entry opportunities and ordinary point-to-point opportunities.
+ */
+export const WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE: BoardPosition = createPosition({
+  points: {
+    13: { player: "white", checkerCount: 1 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});

@@ -11,6 +11,12 @@ import {
 } from "../src/index";
 import {
   BLACK_FORWARD_FIXTURE,
+  WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
+  WHITE_BAR_BLOCKED_ENTRY_FIXTURE,
+  WHITE_BAR_DUPLICATE_DICE_FIXTURE,
+  WHITE_BAR_HIT_ENTRY_FIXTURE,
+  WHITE_BAR_SINGLE_CHECKER_FIXTURE,
+  WHITE_BAR_TWO_DICE_DIFFERENT_DESTINATIONS_FIXTURE,
   BAR_ENTRY_EXAMPLE_FIXTURE,
   BEARING_OFF_EXAMPLE_FIXTURE,
   EMPTY_BOARD_FIXTURE,
@@ -310,16 +316,8 @@ describe("getLegalMoves basic forward generation", () => {
         dice: [1, 2]
       }
     };
-    const barEntryInput: GetLegalMovesInput = {
-      position: BAR_ENTRY_EXAMPLE_FIXTURE,
-      player: "white",
-      roll: {
-        dice: [1, 2]
-      }
-    };
 
     expect(getLegalMoves(noCheckerInput)).toEqual({ moves: [] });
-    expect(getLegalMoves(barEntryInput)).toEqual({ moves: [] });
   });
 
   it("generates black forward movement", () => {
@@ -383,6 +381,154 @@ describe("getLegalMoves basic forward generation", () => {
     expect(Array.isArray(result.moves)).toBe(true);
     expect(result).toHaveProperty("moves");
   });
+
+  it("generates legal entry moves onto empty points", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_SINGLE_CHECKER_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.kind === "enter-from-bar" &&
+          move.steps[0]?.fromPoint === "bar" &&
+          move.steps[0]?.toPoint === 24 &&
+          move.steps[0]?.dieValue === 1
+      )
+    ).toBe(true);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.kind === "enter-from-bar" &&
+          move.steps[0]?.fromPoint === "bar" &&
+          move.steps[0]?.toPoint === 23 &&
+          move.steps[0]?.dieValue === 2
+      )
+    ).toBe(true);
+  });
+
+  it("excludes blocked bar entry destinations", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_BLOCKED_ENTRY_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toEqual([]);
+  });
+
+  it("generates hit moves on bar entry against a single opposing checker", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_HIT_ENTRY_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(result.moves[0]?.steps[0]?.kind).toBe("enter-from-bar");
+    expect(result.moves[0]?.steps[0]?.hitsBlot).toBe(true);
+    expect(result.moves[0]?.steps[0]?.hit).toEqual({
+      player: "black",
+      point: 24
+    });
+  });
+
+  it("preserves die association for duplicate dice on bar entry", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_DUPLICATE_DICE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(result.moves[0]?.steps[0]?.kind).toBe("enter-from-bar");
+    expect(result.moves[0]?.steps[0]?.dieIndex).toBe(0);
+    expect(result.moves[1]?.steps[0]?.dieIndex).toBe(1);
+    expect(result.moves[0]?.steps[0]?.toPoint).toBe(24);
+    expect(result.moves[1]?.steps[0]?.toPoint).toBe(24);
+  });
+
+  it("keeps ordinary move generation unchanged when no bar checker exists", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(result.moves.every((move) => move.steps[0]?.kind === "point-to-point")).toBe(true);
+  });
+
+  it("supports mixed ordinary and bar-entry opportunities", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(4);
+    expect(
+      result.moves.some(
+        (move) => move.steps[0]?.kind === "enter-from-bar" && move.steps[0]?.toPoint === 24
+      )
+    ).toBe(true);
+    expect(
+      result.moves.some(
+        (move) => move.steps[0]?.kind === "point-to-point" && move.steps[0]?.fromPoint === 13
+      )
+    ).toBe(true);
+  });
+
+  it("supports both dice producing different bar-entry destinations", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_TWO_DICE_DIFFERENT_DESTINATIONS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(
+      result.moves.some(
+        (move) => move.steps[0]?.kind === "enter-from-bar" && move.steps[0]?.toPoint === 24
+      )
+    ).toBe(true);
+    expect(
+      result.moves.some(
+        (move) => move.steps[0]?.kind === "enter-from-bar" && move.steps[0]?.toPoint === 23
+      )
+    ).toBe(true);
+  });
 });
 
 describe("engine fixtures", () => {
@@ -403,10 +549,16 @@ describe("engine fixtures", () => {
       WHITE_SINGLE_HIT_DESTINATION_FIXTURE,
       WHITE_MULTIPLE_HIT_OPPORTUNITIES_FIXTURE,
       WHITE_HIT_AND_BLOCKED_DESTINATIONS_FIXTURE,
-      WHITE_TWO_DICE_INDEPENDENT_HITS_FIXTURE
+      WHITE_TWO_DICE_INDEPENDENT_HITS_FIXTURE,
+      WHITE_BAR_SINGLE_CHECKER_FIXTURE,
+      WHITE_BAR_BLOCKED_ENTRY_FIXTURE,
+      WHITE_BAR_HIT_ENTRY_FIXTURE,
+      WHITE_BAR_TWO_DICE_DIFFERENT_DESTINATIONS_FIXTURE,
+      WHITE_BAR_DUPLICATE_DICE_FIXTURE,
+      WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE
     ];
 
-    expect(fixtures).toHaveLength(16);
+    expect(fixtures).toHaveLength(22);
   });
 
   it("produces complete point maps from helper", () => {
@@ -433,6 +585,12 @@ describe("engine fixtures", () => {
       WHITE_MULTIPLE_HIT_OPPORTUNITIES_FIXTURE,
       WHITE_HIT_AND_BLOCKED_DESTINATIONS_FIXTURE,
       WHITE_TWO_DICE_INDEPENDENT_HITS_FIXTURE,
+      WHITE_BAR_SINGLE_CHECKER_FIXTURE,
+      WHITE_BAR_BLOCKED_ENTRY_FIXTURE,
+      WHITE_BAR_HIT_ENTRY_FIXTURE,
+      WHITE_BAR_TWO_DICE_DIFFERENT_DESTINATIONS_FIXTURE,
+      WHITE_BAR_DUPLICATE_DICE_FIXTURE,
+      WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
       createPosition({
         points: {
           6: { player: "white", checkerCount: 1 },

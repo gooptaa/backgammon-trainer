@@ -90,8 +90,18 @@ const getSimpleDestinationPoint = (
   return destination;
 };
 
-const canGenerateSimpleMoves = (position: BoardPosition, player: Player): boolean => {
-  return position.bar[player] === 0;
+const getEntryDestinationPoint = (dieValue: DieValue, player: Player): PointIndex => {
+  const destination = player === "white" ? 25 - dieValue : dieValue;
+
+  if (!isPointIndex(destination)) {
+    throw new Error("Invalid bar entry destination");
+  }
+
+  return destination;
+};
+
+const canGenerateSimpleMoves = (): boolean => {
+  return true;
 };
 
 const getPlayerOccupiedPoints = (
@@ -109,6 +119,60 @@ const isSingleOpponentChecker = (occupancy: PointOccupancy, player: Player): boo
   return occupancy.player === getOpponent(player) && occupancy.checkerCount === 1;
 };
 
+interface CandidateMoveInput {
+  readonly player: Player;
+  readonly kind: MoveStepKind;
+  readonly fromPoint: PointIndex | "bar";
+  readonly toPoint: PointIndex;
+  readonly dieValue: DieValue;
+  readonly dieIndex: 0 | 1;
+  readonly destinationOccupancy: PointOccupancy | null;
+}
+
+const createCandidateMove = (input: CandidateMoveInput): Move | null => {
+  if (input.destinationOccupancy === null) {
+    return {
+      player: input.player,
+      steps: [
+        {
+          kind: input.kind,
+          fromPoint: input.fromPoint,
+          toPoint: input.toPoint,
+          dieValue: input.dieValue,
+          dieIndex: input.dieIndex,
+          hitsBlot: false
+        }
+      ]
+    };
+  }
+
+  if (isBlocked(input.destinationOccupancy, input.player)) {
+    return null;
+  }
+
+  if (isSingleOpponentChecker(input.destinationOccupancy, input.player)) {
+    return {
+      player: input.player,
+      steps: [
+        {
+          kind: input.kind,
+          fromPoint: input.fromPoint,
+          toPoint: input.toPoint,
+          dieValue: input.dieValue,
+          dieIndex: input.dieIndex,
+          hitsBlot: true,
+          hit: {
+            player: input.destinationOccupancy.player,
+            point: input.toPoint
+          }
+        }
+      ]
+    };
+  }
+
+  return null;
+};
+
 /**
  * Returns legal checker moves for a player from a board position.
  *
@@ -120,66 +184,55 @@ const isSingleOpponentChecker = (occupancy: PointOccupancy, player: Player): boo
  * Unsupported rule situations are intentionally omitted for now.
  */
 export const getLegalMoves = (input: GetLegalMovesInput): LegalMoveResult => {
-  if (!canGenerateSimpleMoves(input.position, input.player)) {
-    return { moves: [] };
-  }
-
   const moves: Move[] = [];
-  const fromPoints = getPlayerOccupiedPoints(input.position, input.player);
   const diceWithIndexes = input.roll.dice.map((dieValue, dieIndex) => ({
     dieValue,
     dieIndex: dieIndex as 0 | 1
   }));
 
-  for (const fromPoint of fromPoints) {
+  if (canGenerateSimpleMoves()) {
+    const fromPoints = getPlayerOccupiedPoints(input.position, input.player);
+
+    for (const fromPoint of fromPoints) {
+      for (const { dieValue, dieIndex } of diceWithIndexes) {
+        const destinationPoint = getSimpleDestinationPoint(fromPoint, dieValue, input.player);
+        if (destinationPoint === null) {
+          continue;
+        }
+
+        const move = createCandidateMove({
+          player: input.player,
+          kind: "point-to-point",
+          fromPoint,
+          toPoint: destinationPoint,
+          dieValue,
+          dieIndex,
+          destinationOccupancy: input.position.points[destinationPoint]
+        });
+
+        if (move !== null) {
+          moves.push(move);
+        }
+      }
+    }
+  }
+
+  if (input.position.bar[input.player] > 0) {
     for (const { dieValue, dieIndex } of diceWithIndexes) {
-      const destinationPoint = getSimpleDestinationPoint(fromPoint, dieValue, input.player);
-      if (destinationPoint === null) {
-        continue;
-      }
+      const destinationPoint = getEntryDestinationPoint(dieValue, input.player);
 
-      const destinationOccupancy = input.position.points[destinationPoint];
+      const move = createCandidateMove({
+        player: input.player,
+        kind: "enter-from-bar",
+        fromPoint: "bar",
+        toPoint: destinationPoint,
+        dieValue,
+        dieIndex,
+        destinationOccupancy: input.position.points[destinationPoint]
+      });
 
-      if (destinationOccupancy === null) {
-        moves.push({
-          player: input.player,
-          steps: [
-            {
-              kind: "point-to-point",
-              fromPoint,
-              toPoint: destinationPoint,
-              dieValue,
-              dieIndex,
-              hitsBlot: false
-            }
-          ]
-        });
-        continue;
-      }
-
-      if (isBlocked(destinationOccupancy, input.player)) {
-        continue;
-      }
-
-      if (isSingleOpponentChecker(destinationOccupancy, input.player)) {
-        moves.push({
-          player: input.player,
-          steps: [
-            {
-              kind: "point-to-point",
-              fromPoint,
-              toPoint: destinationPoint,
-              dieValue,
-              dieIndex,
-              hitsBlot: true,
-              hit: {
-                player: destinationOccupancy.player,
-                point: destinationPoint
-              }
-            }
-          ]
-        });
-        continue;
+      if (move !== null) {
+        moves.push(move);
       }
     }
   }
