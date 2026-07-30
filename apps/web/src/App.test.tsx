@@ -143,6 +143,24 @@ const createUndoPreviewPosition = (): BoardPosition =>
     }
   });
 
+const createTwoPassHistoryPosition = (): BoardPosition =>
+  createPosition({
+    points: {
+      24: { player: "black", checkerCount: 2 },
+      23: { player: "black", checkerCount: 2 },
+      1: { player: "white", checkerCount: 2 },
+      2: { player: "white", checkerCount: 2 }
+    },
+    bar: {
+      white: 1,
+      black: 1
+    },
+    borneOff: {
+      white: 10,
+      black: 10
+    }
+  });
+
 const resolvedOpeningState = (
   startingPlayer: "white" | "black",
   whiteDie: DieValue = 5,
@@ -208,6 +226,14 @@ const selectDestinationPoint = (point: number): void => {
   fireEvent.click(
     screen.getByRole("button", { name: new RegExp(`Select destination point ${point}`) })
   );
+};
+
+const getHistoryCount = (): string => {
+  return screen.getByTestId("turn-history-count").textContent ?? "";
+};
+
+const selectHistoryTurn = (turnNumber: number): void => {
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${turnNumber}\\.`) }));
 };
 
 const expectPointCheckerCount = (point: number, player: "white" | "black", count: number): void => {
@@ -286,6 +312,246 @@ describe("App opening roll lifecycle", () => {
     expect(
       screen.getAllByRole("button", { name: /Select source (point|bar)/i }).length
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("App turn history and inspection", () => {
+  it("starts with no turn history and does not record opening ties", () => {
+    renderApp({ randomSource: createRandomSource([0.3, 0.3]) });
+
+    expect(getHistoryCount()).toContain("Recorded turns: 0");
+
+    clickOpeningRoll();
+
+    expect(screen.getByTestId("opening-phase")).toHaveTextContent("Opening phase: tied");
+    expect(getHistoryCount()).toContain("Recorded turns: 0");
+  });
+
+  it("creates opening turn record one after successful opening move", () => {
+    renderApp({ randomSource: createRandomSource([0.7, 0.4]) });
+
+    clickOpeningRoll();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+    selectSourcePoint(8);
+    selectDestinationPoint(5);
+
+    expect(getHistoryCount()).toContain("Recorded turns: 1");
+    expect(
+      screen.getByRole("button", { name: /^1\. White - Opening - 5-3 -/ })
+    ).toBeInTheDocument();
+  });
+
+  it("creates opening pass record with resolved opening dice", () => {
+    const initialGameState: GameState = {
+      position: createNoLegalMovePosition(),
+      activePlayer: "white",
+      dice: {
+        dice: [1, 1]
+      }
+    };
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white", 1, 1),
+      initialOpeningTurnPending: true
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
+
+    expect(getHistoryCount()).toContain("Recorded turns: 1");
+    expect(
+      screen.getByRole("button", { name: /^1\. White - Opening - 1-1 - Pass$/ })
+    ).toBeInTheDocument();
+  });
+
+  it("appends ordinary move records exactly once", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "2");
+    selectSourcePoint(8);
+    selectDestinationPoint(7);
+    selectSourcePoint(7);
+    selectDestinationPoint(5);
+
+    expect(getHistoryCount()).toContain("Recorded turns: 1");
+    expect(screen.getByRole("button", { name: /^1\. White - Normal - 1-2 -/ })).toBeInTheDocument();
+  });
+
+  it("does not append history for staged steps, undo, or blocked pass", () => {
+    renderApp({ randomSource: createRandomSource([0.7, 0.4]) });
+
+    clickOpeningRoll();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+
+    expect(getHistoryCount()).toContain("Recorded turns: 0");
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo Last Step" }));
+
+    expect(getHistoryCount()).toContain("Recorded turns: 0");
+
+    const passButton = screen.getByRole("button", { name: "Pass Turn" });
+    expect(passButton).toBeDisabled();
+    fireEvent.click(passButton);
+    expect(getHistoryCount()).toContain("Recorded turns: 0");
+  });
+
+  it("preserves canonical move step metadata including die indices", () => {
+    renderApp({ randomSource: createRandomSource([0.7, 0.4]) });
+
+    clickOpeningRoll();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+    selectSourcePoint(8);
+    selectDestinationPoint(5);
+
+    selectHistoryTurn(1);
+
+    expect(screen.getByTestId("history-selected-step-metadata")).toHaveTextContent(
+      "step 1: point-to-point, die 5, die index 0"
+    );
+    expect(screen.getByTestId("history-selected-step-metadata")).toHaveTextContent(
+      "step 2: point-to-point, die 3, die index 1"
+    );
+  });
+
+  it("shows recorded before and after positions and supports view toggling", () => {
+    renderApp({ randomSource: createRandomSource([0.7, 0.4]) });
+
+    clickOpeningRoll();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+    selectSourcePoint(8);
+    selectDestinationPoint(5);
+
+    selectHistoryTurn(1);
+    fireEvent.click(screen.getByRole("button", { name: "View Before" }));
+
+    expectPointCheckerCount(13, "white", 5);
+    expect(screen.getByTestId("history-position-before-summary")).toBeInTheDocument();
+    expect(screen.getByTestId("history-position-after-summary")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "View After" }));
+    expectPointCheckerCount(13, "white", 4);
+  });
+
+  it("enters explicit inspection mode and disables live controls", () => {
+    renderApp({ randomSource: createRandomSource([0.7, 0.4]) });
+
+    clickOpeningRoll();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+    selectSourcePoint(8);
+    selectDestinationPoint(5);
+
+    selectHistoryTurn(1);
+
+    expect(screen.getByTestId("history-inspection-banner")).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: /Select source (point|bar)/i })).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pass Turn" })).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: /Roll for Opening|Roll Again/i })
+    ).not.toBeInTheDocument();
+
+    openDevelopmentControls();
+    expect(screen.getByRole("button", { name: "Set Dice Manually" })).toBeDisabled();
+  });
+
+  it("supports previous/next navigation with boundary disabling", () => {
+    const initialGameState: GameState = {
+      position: createTwoPassHistoryPosition(),
+      activePlayer: "white",
+      dice: {
+        dice: [1, 1]
+      }
+    };
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white"),
+      initialOpeningTurnPending: false
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
+    const firstRecordSnapshot = screen.getByRole("button", {
+      name: /^1\. White - Normal - 1-1 - Pass$/
+    }).textContent;
+    setDiceManually("1", "1");
+    fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
+
+    expect(getHistoryCount()).toContain("Recorded turns: 2");
+    expect(
+      screen.getByRole("button", { name: /^1\. White - Normal - 1-1 - Pass$/ }).textContent
+    ).toBe(firstRecordSnapshot);
+
+    selectHistoryTurn(1);
+    expect(screen.getByRole("button", { name: "Previous Turn" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next Turn" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next Turn" }));
+    expect(screen.getByTestId("history-inspection-mode")).toHaveTextContent("Inspecting turn 2");
+    expect(screen.getByRole("button", { name: "Next Turn" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Previous Turn" })).toBeEnabled();
+  });
+
+  it("returns to current game without mutating live committed state", () => {
+    renderApp({ randomSource: createRandomSource([0.7, 0.4]) });
+
+    clickOpeningRoll();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+    selectSourcePoint(8);
+    selectDestinationPoint(5);
+
+    selectHistoryTurn(1);
+    fireEvent.click(screen.getByRole("button", { name: "View Before" }));
+    expectPointCheckerCount(13, "white", 5);
+
+    fireEvent.click(screen.getByRole("button", { name: "Return to Current Game" }));
+
+    expect(screen.queryByTestId("history-inspection-banner")).not.toBeInTheDocument();
+    expectPointCheckerCount(13, "white", 4);
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
+  });
+
+  it("clears history on new game and restarts numbering at one", () => {
+    const initialGameState: GameState = {
+      position: createNoLegalMovePosition(),
+      activePlayer: "white",
+      dice: {
+        dice: [1, 1]
+      }
+    };
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white", 1, 1),
+      initialOpeningTurnPending: true,
+      randomSource: createRandomSource([0.7, 0.4])
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
+    expect(
+      screen.getByRole("button", { name: /^1\. White - Opening - 1-1 - Pass$/ })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "New Game" }));
+    expect(getHistoryCount()).toContain("Recorded turns: 0");
+
+    clickOpeningRoll();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+    selectSourcePoint(8);
+    selectDestinationPoint(5);
+
+    expect(screen.getByRole("button", { name: /^1\. White - Opening -/ })).toBeInTheDocument();
   });
 });
 

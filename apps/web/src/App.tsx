@@ -1,6 +1,7 @@
 import styles from "./App.module.css";
 import {
   applyGameMove,
+  createTurnRecord,
   createGameState,
   getGameStatus,
   getLegalMovesForState,
@@ -9,10 +10,12 @@ import {
   setDice,
   type ApplyGameMoveFailureReason,
   type GameState,
+  type CreateTurnRecordInput,
   type MoveStep,
   type PassTurnFailureReason,
   type SetDiceFailureReason,
-  type Move
+  type Move,
+  type TurnRecord
 } from "@backgammon-trainer/backgammon-engine";
 import {
   STANDARD_STARTING_POSITION,
@@ -23,6 +26,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { BackgammonBoard } from "./features/board/BackgammonBoard";
 import { EngineSandboxPanel } from "./features/sandbox/EngineSandboxPanel";
+import { TurnHistoryPanel } from "./features/sandbox/TurnHistoryPanel";
 import {
   formatSelectablePoint,
   formatSelectedStep,
@@ -134,6 +138,13 @@ interface AppProps {
   initialOpeningTurnPending?: boolean;
 }
 
+type InspectionView = "before" | "after";
+
+interface HistoryInspectionState {
+  readonly turnNumber: number;
+  readonly view: InspectionView;
+}
+
 function App({
   initialGameState,
   randomSource,
@@ -155,9 +166,20 @@ function App({
   const [selectedSteps, setSelectedSteps] = useState<readonly SelectedStep[]>([]);
   const [selectedSource, setSelectedSource] = useState<SelectableSource | null>(null);
   const [hoveredDestination, setHoveredDestination] = useState<SelectableDestination | null>(null);
+  const [turnHistory, setTurnHistory] = useState<readonly TurnRecord[]>([]);
+  const [historyInspection, setHistoryInspection] = useState<HistoryInspectionState | null>(null);
   const gameStatus = useMemo(() => getGameStatus(gameState.position), [gameState]);
   const legalMovesResult = useMemo(() => getLegalMovesForState(gameState), [gameState]);
   const openingResolved = openingRollState.phase === "resolved";
+  const inspectedTurn = useMemo(
+    () =>
+      historyInspection === null
+        ? null
+        : (turnHistory.find((record) => record.turnNumber === historyInspection.turnNumber) ??
+          null),
+    [historyInspection, turnHistory]
+  );
+  const isInspectingHistory = historyInspection !== null && inspectedTurn !== null;
 
   const stagedPrefixResult = useMemo(() => {
     if (
@@ -256,6 +278,26 @@ function App({
     setHoveredDestination(null);
   };
 
+  const clearStagedSelection = (): void => {
+    setSelectedSteps([]);
+    setSelectedSource(null);
+    setHoveredDestination(null);
+  };
+
+  const appendTurnRecord = (input: Omit<CreateTurnRecordInput, "turnNumber">): void => {
+    setTurnHistory((previousHistory) => {
+      const nextTurnNumber = previousHistory.length + 1;
+
+      return [
+        ...previousHistory,
+        createTurnRecord({
+          ...input,
+          turnNumber: nextTurnNumber
+        })
+      ];
+    });
+  };
+
   const onUndoLastStep = (): void => {
     setMessage(null);
     setHoveredDestination(null);
@@ -312,11 +354,30 @@ function App({
   };
 
   const onApplyMove = (move: Parameters<typeof applyGameMove>[1]): void => {
+    const playerBefore = gameState.activePlayer;
+    const diceBefore = gameState.dice;
+    const positionBefore = gameState.position;
+    const phaseBefore = openingTurnPending ? "opening" : "normal";
     const result = applyGameMove(gameState, move);
 
     if (!result.ok) {
       setMessage(getApplyFailureMessage(result.reason));
       return;
+    }
+
+    if (diceBefore !== null) {
+      appendTurnRecord({
+        player: playerBefore,
+        dice: diceBefore,
+        outcome: {
+          kind: "move",
+          move
+        },
+        positionBefore,
+        positionAfter: result.state.position,
+        gameStatusAfter: result.status,
+        phase: phaseBefore
+      });
     }
 
     setGameState(result.state);
@@ -336,11 +397,29 @@ function App({
   };
 
   const onPassTurn = (): void => {
+    const playerBefore = gameState.activePlayer;
+    const diceBefore = gameState.dice;
+    const positionBefore = gameState.position;
+    const phaseBefore = openingTurnPending ? "opening" : "normal";
     const result = passTurn(gameState);
 
     if (!result.ok) {
       setMessage(getPassFailureMessage(result.reason));
       return;
+    }
+
+    if (diceBefore !== null) {
+      appendTurnRecord({
+        player: playerBefore,
+        dice: diceBefore,
+        outcome: {
+          kind: "pass"
+        },
+        positionBefore,
+        positionAfter: result.state.position,
+        gameStatusAfter: getGameStatus(result.state.position),
+        phase: phaseBefore
+      });
     }
 
     setGameState(result.state);
@@ -398,7 +477,80 @@ function App({
     setOpeningTurnPending(false);
     setDieOne(DEFAULT_MANUAL_DIE_ONE);
     setDieTwo(DEFAULT_MANUAL_DIE_TWO);
+    setTurnHistory([]);
+    setHistoryInspection(null);
     resetTransientState();
+  };
+
+  const onSelectHistoryTurn = (turnNumber: number): void => {
+    clearStagedSelection();
+    setHistoryInspection({
+      turnNumber,
+      view: "after"
+    });
+  };
+
+  const onSelectInspectionView = (view: InspectionView): void => {
+    if (historyInspection === null) {
+      return;
+    }
+
+    setHistoryInspection({
+      turnNumber: historyInspection.turnNumber,
+      view
+    });
+  };
+
+  const onSelectPreviousInspectionTurn = (): void => {
+    if (historyInspection === null) {
+      return;
+    }
+
+    const inspectionIndex = turnHistory.findIndex(
+      (record) => record.turnNumber === historyInspection.turnNumber
+    );
+
+    if (inspectionIndex <= 0) {
+      return;
+    }
+
+    const previousTurn = turnHistory[inspectionIndex - 1];
+    if (previousTurn === undefined) {
+      return;
+    }
+
+    setHistoryInspection({
+      turnNumber: previousTurn.turnNumber,
+      view: historyInspection.view
+    });
+  };
+
+  const onSelectNextInspectionTurn = (): void => {
+    if (historyInspection === null) {
+      return;
+    }
+
+    const inspectionIndex = turnHistory.findIndex(
+      (record) => record.turnNumber === historyInspection.turnNumber
+    );
+
+    if (inspectionIndex < 0 || inspectionIndex >= turnHistory.length - 1) {
+      return;
+    }
+
+    const nextTurn = turnHistory[inspectionIndex + 1];
+    if (nextTurn === undefined) {
+      return;
+    }
+
+    setHistoryInspection({
+      turnNumber: nextTurn.turnNumber,
+      view: historyInspection.view
+    });
+  };
+
+  const onReturnToCurrentGame = (): void => {
+    setHistoryInspection(null);
   };
 
   const onSelectSource = (source: SelectableSource): void => {
@@ -457,10 +609,14 @@ function App({
   };
 
   const selectableSources =
-    gameState.dice !== null && gameStatus.state !== "complete" && legalMovesResult.ok
+    !isInspectingHistory &&
+    gameState.dice !== null &&
+    gameStatus.state !== "complete" &&
+    legalMovesResult.ok
       ? getSelectableSources(candidateMoves, selectedSteps)
       : [];
   const selectableDestinations =
+    !isInspectingHistory &&
     selectedSource !== null &&
     gameState.dice !== null &&
     gameStatus.state !== "complete" &&
@@ -583,6 +739,10 @@ function App({
   }, [candidateMoves, selectedSteps.length]);
 
   const breadcrumb = (() => {
+    if (isInspectingHistory) {
+      return "";
+    }
+
     if (selectedSource === null) {
       return formatSelectedStepsBreadcrumb(selectedSteps);
     }
@@ -609,13 +769,23 @@ function App({
     openingResolved &&
     !openingTurnPending &&
     gameStatus.state !== "complete" &&
-    gameState.dice === null;
+    gameState.dice === null &&
+    !isInspectingHistory;
   const canSetDiceManually = canRollDice;
-  const boardActivePlayer = gameState.activePlayer;
+  const boardActivePlayer = isInspectingHistory ? inspectedTurn.player : gameState.activePlayer;
+  const boardPosition = isInspectingHistory
+    ? historyInspection?.view === "before"
+      ? inspectedTurn.positionBefore
+      : inspectedTurn.positionAfter
+    : stagedPosition;
 
   const interactionStatus = (() => {
     if (gameStatus.state === "complete") {
       return "Game complete";
+    }
+
+    if (isInspectingHistory && historyInspection !== null) {
+      return `Inspecting turn ${historyInspection.turnNumber} (${historyInspection.view})`;
     }
 
     if (openingRollState.phase === "waiting") {
@@ -650,6 +820,10 @@ function App({
   })();
 
   const hoverPreviewText = (() => {
+    if (isInspectingHistory) {
+      return "";
+    }
+
     if (hoveredStep === null) {
       return "";
     }
@@ -673,7 +847,8 @@ function App({
     setHoveredDestination(null);
   };
 
-  const shouldShowUndoSelection = selectedSteps.length > 0 || selectedSource !== null;
+  const shouldShowUndoSelection =
+    !isInspectingHistory && (selectedSteps.length > 0 || selectedSource !== null);
 
   return (
     <div className={styles.appFrame}>
@@ -693,20 +868,26 @@ function App({
       <main className={styles.mainLayout}>
         <section aria-labelledby="board-workspace-title" className={styles.boardSection}>
           <h2 id="board-workspace-title">Board Workspace</h2>
+          {isInspectingHistory && historyInspection !== null ? (
+            <p className={styles.selectionMeta} data-testid="history-inspection-banner">
+              History inspection mode: turn {historyInspection.turnNumber} ({historyInspection.view}
+              )
+            </p>
+          ) : null}
           <BackgammonBoard
-            position={stagedPosition}
+            position={boardPosition}
             activePlayer={boardActivePlayer}
-            showActivePlayer={openingResolved}
+            showActivePlayer={openingResolved && !isInspectingHistory}
             selectableSources={selectableSources}
             selectableDestinations={selectableDestinations}
-            previewSources={previewSources}
-            previewDestinations={previewDestinations}
+            previewSources={isInspectingHistory ? [] : previewSources}
+            previewDestinations={isInspectingHistory ? [] : previewDestinations}
             hoveredDestination={hoveredDestination}
             selectedSource={selectedSource}
-            onSelectSource={onSelectSource}
-            onSelectDestination={onSelectDestination}
-            onHoverDestination={onHoverDestination}
-            onClearHoveredDestination={onClearHoveredDestination}
+            {...(isInspectingHistory ? {} : { onSelectSource })}
+            {...(isInspectingHistory ? {} : { onSelectDestination })}
+            {...(isInspectingHistory ? {} : { onHoverDestination })}
+            {...(isInspectingHistory ? {} : { onClearHoveredDestination })}
             {...(shouldShowUndoSelection ? { onCancelSelection: onUndoLastStep } : {})}
           />
           <p className={styles.selectionMeta} data-testid="interaction-status" aria-live="polite">
@@ -720,14 +901,19 @@ function App({
           </p>
           <section className={styles.candidatePanel} aria-label="Remaining move candidates">
             <h3>Remaining candidates</h3>
+            {isInspectingHistory ? (
+              <p className={styles.selectionMeta} data-testid="candidate-panel-locked">
+                Candidate previews are hidden while inspecting history.
+              </p>
+            ) : null}
             <p
               className={styles.selectionMeta}
               data-testid="continuations-count"
               aria-live="polite"
             >
-              Continuations: {continuationSummaryRows.length}
+              Continuations: {isInspectingHistory ? 0 : continuationSummaryRows.length}
             </p>
-            {continuationSummaryRows.length > 0 ? (
+            {!isInspectingHistory && continuationSummaryRows.length > 0 ? (
               <ul className={styles.candidateList} data-testid="candidate-continuations">
                 {continuationSummaryRows.map((row) => (
                   <li key={`continuation-${row.stepText}`}>
@@ -746,9 +932,9 @@ function App({
               data-testid="completed-moves-count"
               aria-live="polite"
             >
-              Completed moves: {completedMoveSummaryRows.length}
+              Completed moves: {isInspectingHistory ? 0 : completedMoveSummaryRows.length}
             </p>
-            {completedMoveSummaryRows.length > 0 ? (
+            {!isInspectingHistory && completedMoveSummaryRows.length > 0 ? (
               <ul className={styles.candidateList} data-testid="candidate-completed-moves">
                 {completedMoveSummaryRows.map((row) => (
                   <li key={`completed-${row.moveText}`}>
@@ -771,6 +957,18 @@ function App({
               Show Best Move
             </button>
           </div>
+
+          <TurnHistoryPanel
+            history={turnHistory}
+            inspectionTurnNumber={historyInspection?.turnNumber ?? null}
+            inspectionView={historyInspection?.view ?? "after"}
+            inspectionActive={isInspectingHistory}
+            onSelectTurn={onSelectHistoryTurn}
+            onSelectView={onSelectInspectionView}
+            onSelectPreviousTurn={onSelectPreviousInspectionTurn}
+            onSelectNextTurn={onSelectNextInspectionTurn}
+            onReturnToCurrentGame={onReturnToCurrentGame}
+          />
         </section>
 
         <EngineSandboxPanel
@@ -784,6 +982,7 @@ function App({
           onDieTwoChange={setDieTwo}
           openingRollState={openingRollState}
           openingTurnPending={openingTurnPending}
+          interactionLocked={isInspectingHistory}
           canRollDice={canRollDice}
           canSetDiceManually={canSetDiceManually}
           onRollForOpening={onRollForOpening}

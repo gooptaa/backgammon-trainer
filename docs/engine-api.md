@@ -25,6 +25,43 @@ Scope limits:
 - No player names
 - No move history or UI state
 
+## TurnRecord
+
+`TurnRecord` captures one completed committed turn as an immutable value.
+
+Shape summary:
+
+- `turnNumber`: sequential turn index (1, 2, 3, ...)
+- `player`: player who took the committed turn
+- `dice`: dice used by that turn
+- `outcome`: either:
+  - `{ kind: "move", move }` with canonical complete engine `Move`, or
+  - `{ kind: "pass" }`
+- `positionBefore`: committed position before transition
+- `positionAfter`: committed position after transition
+- `gameStatusAfter`: result from `getGameStatus(positionAfter)`
+- `phase`: `"opening" | "normal"`
+
+Notes:
+
+- This type contains no UI-only staged interaction state.
+- Passes are represented explicitly and are not encoded as empty moves.
+
+## createTurnRecord
+
+`createTurnRecord(input)` returns a canonical immutable `TurnRecord` snapshot.
+
+Behavior:
+
+- clones dice, outcome payload, and both board positions
+- preserves exact move step metadata (`kind`, `fromPoint`, `toPoint`, `dieValue`, `dieIndex`, hit metadata)
+- does not mutate the provided input objects
+
+Scope notes:
+
+- This helper does not apply moves, evaluate legality, or transition turns.
+- Callers append records only after a successful committed transition (`applyGameMove(...)` or `passTurn(...)`).
+
 ## createGameState
 
 `createGameState(position, activePlayer)` returns a new game state with:

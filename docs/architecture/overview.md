@@ -35,6 +35,34 @@ Standard opening-roll orchestration also remains in the web layer: White and Bla
 
 Opening-roll dice ordering convention is explicit and stable: the dice tuple passed to engine turn state is `[whiteDie, blackDie]`. This ordering is preserved even when Black wins the opening roll; no sorting or winner-first reordering is applied.
 
+## Canonical turn records and move history
+
+Completed turns are now captured as immutable canonical turn records built from engine-domain types. Each record includes:
+
+- sequential `turnNumber` (1, 2, 3, ...)
+- acting player
+- dice used for that committed turn
+- explicit outcome (`move` with canonical `Move` metadata, or `pass`)
+- `positionBefore` and `positionAfter`
+- `gameStatusAfter`
+- turn phase (`opening` or `normal`)
+
+Ownership boundaries remain explicit:
+
+- Engine package owns the reusable record shape and immutable record-construction helper.
+- Web app owns in-memory history state and inspection interaction.
+- No transient staged selection is persisted as turn history.
+- Only successful committed transitions (`applyGameMove(...)` or `passTurn(...)`) append records.
+
+History inspection reuses the main board in explicit inspection mode:
+
+- selected record can be viewed as `before` or `after`
+- board interaction and dice/pass/opening controls are disabled while inspecting
+- live committed game state is preserved and restored on return
+- staged selection is cleared when inspection begins to prevent mixed transient/live context
+
+This model supports future replay, serialization, and portability without coupling record data to React component state, DOM APIs, or persistence-specific infrastructure.
+
 ## Why credentials require a server boundary
 
 Any variable bundled by Vite into client code is public. Provider keys and model credentials must therefore remain server-only. The server mediates model calls, applies timeouts/retries later, and shields secrets from the browser.

@@ -4,6 +4,7 @@ import { validateBoardPosition } from "@backgammon-trainer/backgammon-domain";
 import {
   applyMove,
   applyGameMove,
+  createTurnRecord,
   type ApplyMoveFailureReason,
   createGameState,
   type DiceRoll,
@@ -18,7 +19,8 @@ import {
   type GameStatus,
   type LegalMoveResult,
   type Move,
-  type MoveStep
+  type MoveStep,
+  type TurnRecord
 } from "../src/index";
 import {
   BLACK_BEAR_OFF_EXACT_FIXTURE,
@@ -150,6 +152,10 @@ describe("backgammon engine exports", () => {
     expect(getGameStatus).toBeTypeOf("function");
   });
 
+  it("exports createTurnRecord", () => {
+    expect(createTurnRecord).toBeTypeOf("function");
+  });
+
   it("exposes move model types", () => {
     const step: MoveStep = {
       kind: "point-to-point",
@@ -172,6 +178,100 @@ describe("backgammon engine exports", () => {
 
     expect(result.moves[0]?.steps[0]?.kind).toBe("point-to-point");
     expect(status.state).toBe("in-progress");
+  });
+});
+
+describe("createTurnRecord", () => {
+  it("stores move outcome with exact step metadata and immutable snapshots", () => {
+    const moveInput = requireLegalMove(
+      {
+        position: WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+        player: "white",
+        roll: {
+          dice: [1, 2]
+        }
+      },
+      (move) =>
+        move.steps.length === 2 && move.steps[0]?.dieIndex === 0 && move.steps[1]?.dieIndex === 1,
+      "turn-record canonical move"
+    );
+
+    const positionBefore = WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE;
+    const applied = applyMove(positionBefore, "white", { dice: [1, 2] }, moveInput);
+
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) {
+      return;
+    }
+
+    const record: TurnRecord = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: {
+        kind: "move",
+        move: moveInput
+      },
+      positionBefore,
+      positionAfter: applied.position,
+      gameStatusAfter: getGameStatus(applied.position),
+      phase: "opening"
+    });
+
+    expect(record.turnNumber).toBe(1);
+    expect(record.phase).toBe("opening");
+    expect(record.outcome.kind).toBe("move");
+    if (record.outcome.kind === "move") {
+      expect(record.outcome.move.steps[0]?.dieIndex).toBe(0);
+      expect(record.outcome.move.steps[1]?.dieIndex).toBe(1);
+      expect(record.outcome.move.steps[0]?.fromPoint).toBe(moveInput.steps[0]?.fromPoint);
+      expect(record.outcome.move.steps[1]?.toPoint).toBe(moveInput.steps[1]?.toPoint);
+      expect(record.outcome.move).not.toBe(moveInput);
+    }
+
+    expect(record.positionBefore).toEqual(positionBefore);
+    expect(record.positionBefore).not.toBe(positionBefore);
+    expect(record.positionAfter).toEqual(applied.position);
+    expect(record.positionAfter).not.toBe(applied.position);
+    expect(record.dice).toEqual({ dice: [1, 2] });
+  });
+
+  it("stores pass outcome with before/after snapshots", () => {
+    const passPosition = WHITE_BAR_BLOCKED_ENTRY_FIXTURE;
+    const passState = createGameState(passPosition, "white");
+    const withDice = setDice(passState, { dice: [1, 1] });
+
+    expect(withDice.ok).toBe(true);
+    if (!withDice.ok) {
+      return;
+    }
+
+    const passResult = passTurn(withDice.state);
+    expect(passResult.ok).toBe(true);
+    if (!passResult.ok) {
+      return;
+    }
+
+    const record = createTurnRecord({
+      turnNumber: 2,
+      player: "white",
+      dice: { dice: [1, 1] },
+      outcome: {
+        kind: "pass"
+      },
+      positionBefore: withDice.state.position,
+      positionAfter: passResult.state.position,
+      gameStatusAfter: getGameStatus(passResult.state.position),
+      phase: "normal"
+    });
+
+    expect(record.turnNumber).toBe(2);
+    expect(record.phase).toBe("normal");
+    expect(record.outcome).toEqual({ kind: "pass" });
+    expect(record.positionBefore).toEqual(passPosition);
+    expect(record.positionAfter).toEqual(passPosition);
+    expect(record.positionBefore).not.toBe(withDice.state.position);
+    expect(record.positionAfter).not.toBe(passResult.state.position);
   });
 });
 

@@ -17,6 +17,7 @@ interface EngineSandboxPanelProps {
   legalMovesResult: GetLegalMovesForStateResult;
   openingRollState: OpeningRollState;
   openingTurnPending: boolean;
+  interactionLocked: boolean;
   canRollDice: boolean;
   canSetDiceManually: boolean;
   onDieOneChange: (value: DieValue) => void;
@@ -71,6 +72,7 @@ export function EngineSandboxPanel({
   legalMovesResult,
   openingRollState,
   openingTurnPending,
+  interactionLocked,
   canRollDice,
   canSetDiceManually,
   onDieOneChange,
@@ -84,9 +86,14 @@ export function EngineSandboxPanel({
   const isComplete = gameStatus.state === "complete";
   const legalMoves = legalMovesResult.ok ? legalMovesResult.moves : [];
   const canPass =
-    !isComplete && gameState.dice !== null && legalMovesResult.ok && legalMoves.length === 0;
+    !interactionLocked &&
+    !isComplete &&
+    gameState.dice !== null &&
+    legalMovesResult.ok &&
+    legalMoves.length === 0;
   const occupiedPointRows = getOccupiedPointRows(gameState);
-  const canRollForOpening = !isComplete && openingRollState.phase !== "resolved";
+  const canRollForOpening =
+    !interactionLocked && !isComplete && openingRollState.phase !== "resolved";
 
   return (
     <section aria-labelledby="engine-sandbox-title" className={styles.panel}>
@@ -135,7 +142,7 @@ export function EngineSandboxPanel({
           </button>
         ) : null}
 
-        <button type="button" onClick={onRollDice} disabled={!canRollDice}>
+        <button type="button" onClick={onRollDice} disabled={!canRollDice || interactionLocked}>
           Roll Dice
         </button>
 
@@ -156,7 +163,7 @@ export function EngineSandboxPanel({
               <select
                 id="die-one"
                 value={dieOne}
-                disabled={!canSetDiceManually}
+                disabled={!canSetDiceManually || interactionLocked}
                 onChange={(event) => onDieOneChange(Number(event.currentTarget.value) as DieValue)}
               >
                 {DIE_VALUES.map((value) => (
@@ -171,7 +178,7 @@ export function EngineSandboxPanel({
               <select
                 id="die-two"
                 value={dieTwo}
-                disabled={!canSetDiceManually}
+                disabled={!canSetDiceManually || interactionLocked}
                 onChange={(event) => onDieTwoChange(Number(event.currentTarget.value) as DieValue)}
               >
                 {DIE_VALUES.map((value) => (
@@ -182,7 +189,11 @@ export function EngineSandboxPanel({
               </select>
             </div>
           </div>
-          <button type="button" onClick={onSetDice} disabled={!canSetDiceManually}>
+          <button
+            type="button"
+            onClick={onSetDice}
+            disabled={!canSetDiceManually || interactionLocked}
+          >
             Set Dice Manually
           </button>
         </details>
@@ -192,7 +203,13 @@ export function EngineSandboxPanel({
         </p>
       </div>
 
-      {gameState.dice !== null && !isComplete ? (
+      {interactionLocked ? (
+        <p className={styles.meta} data-testid="controls-locked-notice">
+          Live controls are disabled while inspecting history.
+        </p>
+      ) : null}
+
+      {gameState.dice !== null && !isComplete && !interactionLocked ? (
         legalMoves.length > 0 ? (
           <p className={styles.meta}>
             Legal completed moves: {legalMoves.length}. Select source and destination points on the

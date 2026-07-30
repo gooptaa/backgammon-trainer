@@ -63,6 +63,39 @@ export type GameStatus =
       readonly winner: Player;
     };
 
+export type TurnPhase = "opening" | "normal";
+
+export type TurnOutcome =
+  | {
+      readonly kind: "move";
+      readonly move: Move;
+    }
+  | {
+      readonly kind: "pass";
+    };
+
+export interface TurnRecord {
+  readonly turnNumber: number;
+  readonly player: Player;
+  readonly dice: DiceRoll;
+  readonly outcome: TurnOutcome;
+  readonly positionBefore: BoardPosition;
+  readonly positionAfter: BoardPosition;
+  readonly gameStatusAfter: GameStatus;
+  readonly phase: TurnPhase;
+}
+
+export interface CreateTurnRecordInput {
+  readonly turnNumber: number;
+  readonly player: Player;
+  readonly dice: DiceRoll;
+  readonly outcome: TurnOutcome;
+  readonly positionBefore: BoardPosition;
+  readonly positionAfter: BoardPosition;
+  readonly gameStatusAfter: GameStatus;
+  readonly phase: TurnPhase;
+}
+
 export interface GameState {
   readonly position: BoardPosition;
   readonly activePlayer: Player;
@@ -964,6 +997,86 @@ export const getGameStatus = (position: BoardPosition): GameStatus => {
 const cloneDiceRoll = (dice: DiceRoll): DiceRoll => {
   return {
     dice: [dice.dice[0], dice.dice[1]]
+  };
+};
+
+const cloneBoardPosition = (position: BoardPosition): BoardPosition => {
+  const nextPoints: Record<PointIndex, PointOccupancy | null> = { ...position.points };
+
+  for (const pointIndex of POINT_INDEXES) {
+    const occupancy = position.points[pointIndex];
+
+    nextPoints[pointIndex] =
+      occupancy === null
+        ? null
+        : {
+            player: occupancy.player,
+            checkerCount: occupancy.checkerCount
+          };
+  }
+
+  return {
+    points: nextPoints,
+    bar: {
+      white: position.bar.white,
+      black: position.bar.black
+    },
+    borneOff: {
+      white: position.borneOff.white,
+      black: position.borneOff.black
+    }
+  };
+};
+
+const cloneMove = (move: Move): Move => {
+  return {
+    player: move.player,
+    steps: move.steps.map((step) => ({
+      kind: step.kind,
+      fromPoint: step.fromPoint,
+      toPoint: step.toPoint,
+      dieValue: step.dieValue,
+      dieIndex: step.dieIndex,
+      hitsBlot: step.hitsBlot,
+      ...(step.hit === undefined
+        ? {}
+        : {
+            hit: {
+              player: step.hit.player,
+              point: step.hit.point
+            }
+          })
+    }))
+  };
+};
+
+const cloneGameStatus = (status: GameStatus): GameStatus => {
+  return status.state === "in-progress" ? { state: "in-progress" } : { ...status };
+};
+
+const cloneTurnOutcome = (outcome: TurnOutcome): TurnOutcome => {
+  if (outcome.kind === "pass") {
+    return {
+      kind: "pass"
+    };
+  }
+
+  return {
+    kind: "move",
+    move: cloneMove(outcome.move)
+  };
+};
+
+export const createTurnRecord = (input: CreateTurnRecordInput): TurnRecord => {
+  return {
+    turnNumber: input.turnNumber,
+    player: input.player,
+    dice: cloneDiceRoll(input.dice),
+    outcome: cloneTurnOutcome(input.outcome),
+    positionBefore: cloneBoardPosition(input.positionBefore),
+    positionAfter: cloneBoardPosition(input.positionAfter),
+    gameStatusAfter: cloneGameStatus(input.gameStatusAfter),
+    phase: input.phase
   };
 };
 
