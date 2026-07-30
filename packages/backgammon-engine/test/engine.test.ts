@@ -3,11 +3,17 @@ import { validateBoardPosition } from "@backgammon-trainer/backgammon-domain";
 
 import {
   applyMove,
+  applyGameMove,
   type ApplyMoveFailureReason,
+  createGameState,
   type DiceRoll,
+  getLegalMovesForState,
   getGameStatus,
   getLegalMoves,
   type GetLegalMovesInput,
+  passTurn,
+  setDice,
+  type GameState,
   type GameStatus,
   type LegalMoveResult,
   type Move,
@@ -2371,6 +2377,477 @@ describe("getGameStatus public API", () => {
     getGameStatus(position);
 
     expect(position).toEqual(snapshot);
+  });
+});
+
+describe("game turn state public API", () => {
+  const IN_PROGRESS_PLAYABLE_FIXTURE = createPosition({
+    points: {
+      24: { player: "white", checkerCount: 1 },
+      1: { player: "black", checkerCount: 1 }
+    },
+    borneOff: {
+      white: 14,
+      black: 14
+    }
+  });
+
+  it("creates game state with no dice", () => {
+    const state = createGameState(IN_PROGRESS_PLAYABLE_FIXTURE, "white");
+
+    expect(state.position).toBe(IN_PROGRESS_PLAYABLE_FIXTURE);
+    expect(state.activePlayer).toBe("white");
+    expect(state.dice).toBeNull();
+  });
+
+  it("sets dice immutably", () => {
+    const state = createGameState(IN_PROGRESS_PLAYABLE_FIXTURE, "white");
+    const dice: DiceRoll = { dice: [1, 2] };
+
+    const result = setDice(state, dice);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.state).not.toBe(state);
+      expect(result.state.position).toBe(state.position);
+      expect(result.state.activePlayer).toBe(state.activePlayer);
+      expect(result.state.dice).toEqual({ dice: [1, 2] });
+      expect(result.state.dice).not.toBe(dice);
+      expect(result.state.dice?.dice).not.toBe(dice.dice);
+    }
+
+    expect(state.dice).toBeNull();
+  });
+
+  it("rejects second dice assignment in same turn", () => {
+    const state = createGameState(IN_PROGRESS_PLAYABLE_FIXTURE, "white");
+    const firstSet = setDice(state, { dice: [1, 2] });
+
+    expect(firstSet.ok).toBe(true);
+    if (firstSet.ok) {
+      const secondSet = setDice(firstSet.state, { dice: [3, 4] });
+      expect(secondSet).toEqual({
+        ok: false,
+        reason: "dice-already-set"
+      });
+      expect(firstSet.state.dice).toEqual({ dice: [1, 2] });
+    }
+  });
+
+  it("retrieves legal moves from state", () => {
+    const base = createGameState(IN_PROGRESS_PLAYABLE_FIXTURE, "white");
+    const withDice = setDice(base, { dice: [1, 2] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const fromState = getLegalMovesForState(withDice.state);
+      const fromEngine = getLegalMoves({
+        position: withDice.state.position,
+        player: withDice.state.activePlayer,
+        roll: withDice.state.dice as DiceRoll
+      });
+
+      expect(fromState.ok).toBe(true);
+      if (fromState.ok) {
+        expect(fromState.moves).toEqual(fromEngine.moves);
+      }
+    }
+  });
+
+  it("applies a legal move", () => {
+    const base = createGameState(WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE, "white");
+    const withDice = setDice(base, { dice: [1, 2] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const legalMoves = getLegalMovesForState(withDice.state);
+      expect(legalMoves.ok).toBe(true);
+      if (legalMoves.ok) {
+        const move = legalMoves.moves[0] as Move;
+        const applied = applyGameMove(withDice.state, move);
+
+        expect(applied.ok).toBe(true);
+        if (applied.ok) {
+          expect(applied.state.position).not.toEqual(withDice.state.position);
+        }
+      }
+    }
+  });
+
+  it("switches active player after successful non-winning move", () => {
+    const base = createGameState(WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE, "white");
+    const withDice = setDice(base, { dice: [1, 2] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const move = requireLegalMove(
+        {
+          position: withDice.state.position,
+          player: withDice.state.activePlayer,
+          roll: withDice.state.dice as DiceRoll
+        },
+        (candidate) => candidate.steps.length === 1 && candidate.steps[0]?.toPoint === 1,
+        "non-winning game-state move"
+      );
+
+      const applied = applyGameMove(withDice.state, move);
+
+      expect(applied.ok).toBe(true);
+      if (applied.ok) {
+        expect(applied.status).toEqual({ state: "in-progress" });
+        expect(applied.state.activePlayer).toBe("black");
+      }
+    }
+  });
+
+  it("clears dice after successful move", () => {
+    const base = createGameState(WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE, "white");
+    const withDice = setDice(base, { dice: [1, 2] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const move = requireLegalMove(
+        {
+          position: withDice.state.position,
+          player: withDice.state.activePlayer,
+          roll: withDice.state.dice as DiceRoll
+        },
+        (candidate) => candidate.steps.length === 1,
+        "dice clear move"
+      );
+      const applied = applyGameMove(withDice.state, move);
+
+      expect(applied.ok).toBe(true);
+      if (applied.ok) {
+        expect(applied.state.dice).toBeNull();
+      }
+    }
+  });
+
+  it("rejects applying a second move during the same turn", () => {
+    const base = createGameState(WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE, "white");
+    const withDice = setDice(base, { dice: [1, 2] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const move = requireLegalMove(
+        {
+          position: withDice.state.position,
+          player: withDice.state.activePlayer,
+          roll: withDice.state.dice as DiceRoll
+        },
+        (candidate) => candidate.steps.length === 1,
+        "single move for second-apply rejection"
+      );
+
+      const firstApply = applyGameMove(withDice.state, move);
+
+      expect(firstApply.ok).toBe(true);
+      if (firstApply.ok) {
+        const secondApply = applyGameMove(firstApply.state, move);
+
+        expect(secondApply).toEqual({
+          ok: false,
+          reason: "dice-not-set"
+        });
+      }
+    }
+  });
+
+  it("applies a winning move", () => {
+    const winningPosition = createPosition({
+      points: {
+        1: { player: "white", checkerCount: 1 },
+        24: { player: "black", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 14,
+        black: 14
+      }
+    });
+    const base = createGameState(winningPosition, "white");
+    const withDice = setDice(base, { dice: [1, 6] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const move = requireLegalMove(
+        {
+          position: withDice.state.position,
+          player: withDice.state.activePlayer,
+          roll: withDice.state.dice as DiceRoll
+        },
+        (candidate) => candidate.steps.length === 1 && candidate.steps[0]?.kind === "bear-off",
+        "winning game move"
+      );
+
+      const applied = applyGameMove(withDice.state, move);
+
+      expect(applied.ok).toBe(true);
+      if (applied.ok) {
+        expect(applied.status).toEqual({ state: "complete", winner: "white" });
+      }
+    }
+  });
+
+  it("reports completed status after winning move", () => {
+    const winningPosition = createPosition({
+      points: {
+        1: { player: "white", checkerCount: 1 },
+        24: { player: "black", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 14,
+        black: 14
+      }
+    });
+    const base = createGameState(winningPosition, "white");
+    const withDice = setDice(base, { dice: [1, 6] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const move = requireLegalMove(
+        {
+          position: withDice.state.position,
+          player: withDice.state.activePlayer,
+          roll: withDice.state.dice as DiceRoll
+        },
+        (candidate) => candidate.steps.length === 1 && candidate.steps[0]?.kind === "bear-off",
+        "winning status move"
+      );
+      const applied = applyGameMove(withDice.state, move);
+
+      expect(applied.ok).toBe(true);
+      if (applied.ok) {
+        expect(getGameStatus(applied.state.position)).toEqual({
+          state: "complete",
+          winner: "white"
+        });
+        expect(applied.state.activePlayer).toBe("white");
+        expect(applied.state.dice).toBeNull();
+      }
+    }
+  });
+
+  it("rejects dice rolls after completion", () => {
+    const completePosition = createPosition({
+      borneOff: {
+        white: 15,
+        black: 14
+      }
+    });
+    const state = createGameState(completePosition, "white");
+
+    const result = setDice(state, { dice: [1, 2] });
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "game-complete"
+    });
+  });
+
+  it("rejects moves after completion", () => {
+    const completePosition = createPosition({
+      borneOff: {
+        white: 15,
+        black: 14
+      }
+    });
+    const state: GameState = {
+      position: completePosition,
+      activePlayer: "white",
+      dice: { dice: [1, 2] }
+    };
+    const move: Move = {
+      player: "white",
+      steps: [
+        {
+          kind: "point-to-point",
+          fromPoint: 24,
+          toPoint: 23,
+          dieValue: 1,
+          dieIndex: 0,
+          hitsBlot: false
+        }
+      ]
+    };
+
+    const result = applyGameMove(state, move);
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "game-complete"
+    });
+  });
+
+  it("rejects move application before dice are set", () => {
+    const state = createGameState(IN_PROGRESS_PLAYABLE_FIXTURE, "white");
+    const move: Move = {
+      player: "white",
+      steps: [
+        {
+          kind: "point-to-point",
+          fromPoint: 24,
+          toPoint: 23,
+          dieValue: 1,
+          dieIndex: 0,
+          hitsBlot: false
+        }
+      ]
+    };
+
+    const result = applyGameMove(state, move);
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "dice-not-set"
+    });
+  });
+
+  it("rejects illegal move without changing state", () => {
+    const base = createGameState(IN_PROGRESS_PLAYABLE_FIXTURE, "white");
+    const withDice = setDice(base, { dice: [1, 2] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const snapshot = structuredClone(withDice.state);
+      const illegalMove: Move = {
+        player: "white",
+        steps: [
+          {
+            kind: "point-to-point",
+            fromPoint: 24,
+            toPoint: 20,
+            dieValue: 4,
+            dieIndex: 0,
+            hitsBlot: false
+          }
+        ]
+      };
+
+      const result = applyGameMove(withDice.state, illegalMove);
+
+      expect(result).toEqual({
+        ok: false,
+        reason: "illegal-move"
+      });
+      expect(withDice.state).toEqual(snapshot);
+    }
+  });
+
+  it("passes when no legal move exists", () => {
+    const base = createGameState(WHITE_DOUBLE_NO_PLAY_FIXTURE, "white");
+    const withDice = setDice(base, { dice: [1, 1] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const legal = getLegalMovesForState(withDice.state);
+      expect(legal.ok).toBe(true);
+      if (legal.ok) {
+        expect(legal.moves).toHaveLength(0);
+      }
+
+      const passed = passTurn(withDice.state);
+
+      expect(passed.ok).toBe(true);
+    }
+  });
+
+  it("switches player and clears dice after legal pass", () => {
+    const base = createGameState(WHITE_DOUBLE_NO_PLAY_FIXTURE, "white");
+    const withDice = setDice(base, { dice: [1, 1] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const passed = passTurn(withDice.state);
+
+      expect(passed.ok).toBe(true);
+      if (passed.ok) {
+        expect(passed.state.activePlayer).toBe("black");
+        expect(passed.state.dice).toBeNull();
+        expect(passed.state.position).toBe(withDice.state.position);
+      }
+    }
+  });
+
+  it("rejects pass when legal move exists", () => {
+    const base = createGameState(IN_PROGRESS_PLAYABLE_FIXTURE, "white");
+    const withDice = setDice(base, { dice: [1, 2] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const passed = passTurn(withDice.state);
+
+      expect(passed).toEqual({
+        ok: false,
+        reason: "legal-moves-available"
+      });
+    }
+  });
+
+  it("rejects pass before dice are set", () => {
+    const state = createGameState(IN_PROGRESS_PLAYABLE_FIXTURE, "white");
+
+    const passed = passTurn(state);
+
+    expect(passed).toEqual({
+      ok: false,
+      reason: "dice-not-set"
+    });
+  });
+
+  it("keeps input state unchanged on success", () => {
+    const base = createGameState(WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE, "white");
+    const withDice = setDice(base, { dice: [1, 2] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const snapshot = structuredClone(withDice.state);
+      const move = requireLegalMove(
+        {
+          position: withDice.state.position,
+          player: withDice.state.activePlayer,
+          roll: withDice.state.dice as DiceRoll
+        },
+        (candidate) => candidate.steps.length === 1,
+        "immutability success move"
+      );
+
+      const applied = applyGameMove(withDice.state, move);
+
+      expect(applied.ok).toBe(true);
+      expect(withDice.state).toEqual(snapshot);
+    }
+  });
+
+  it("keeps input state unchanged on failure", () => {
+    const base = createGameState(IN_PROGRESS_PLAYABLE_FIXTURE, "white");
+    const withDice = setDice(base, { dice: [1, 2] });
+
+    expect(withDice.ok).toBe(true);
+    if (withDice.ok) {
+      const snapshot = structuredClone(withDice.state);
+      const illegalMove: Move = {
+        player: "white",
+        steps: [
+          {
+            kind: "point-to-point",
+            fromPoint: 24,
+            toPoint: 20,
+            dieValue: 4,
+            dieIndex: 0,
+            hitsBlot: false
+          }
+        ]
+      };
+
+      const applied = applyGameMove(withDice.state, illegalMove);
+
+      expect(applied).toEqual({
+        ok: false,
+        reason: "illegal-move"
+      });
+      expect(withDice.state).toEqual(snapshot);
+    }
   });
 });
 

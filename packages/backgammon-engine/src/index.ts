@@ -58,6 +58,63 @@ export type GameStatus =
       readonly winner: Player;
     };
 
+export interface GameState {
+  readonly position: BoardPosition;
+  readonly activePlayer: Player;
+  readonly dice: DiceRoll | null;
+}
+
+export type SetDiceFailureReason = "game-complete" | "dice-already-set";
+
+export type SetDiceResult =
+  | {
+      readonly ok: true;
+      readonly state: GameState;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: SetDiceFailureReason;
+    };
+
+export type GetLegalMovesForStateFailureReason = "game-complete" | "dice-not-set";
+
+export type GetLegalMovesForStateResult =
+  | {
+      readonly ok: true;
+      readonly moves: readonly Move[];
+      readonly warnings?: readonly string[];
+    }
+  | {
+      readonly ok: false;
+      readonly reason: GetLegalMovesForStateFailureReason;
+      readonly moves: readonly [];
+    };
+
+export type ApplyGameMoveFailureReason = "game-complete" | "dice-not-set" | ApplyMoveFailureReason;
+
+export type ApplyGameMoveResult =
+  | {
+      readonly ok: true;
+      readonly state: GameState;
+      readonly status: GameStatus;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: ApplyGameMoveFailureReason;
+    };
+
+export type PassTurnFailureReason = "game-complete" | "dice-not-set" | "legal-moves-available";
+
+export type PassTurnResult =
+  | {
+      readonly ok: true;
+      readonly state: GameState;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: PassTurnFailureReason;
+    };
+
 export type ApplyMoveFailureReason = "illegal-move" | "invalid-step-sequence";
 
 export type ApplyMoveResult =
@@ -737,5 +794,147 @@ export const getGameStatus = (position: BoardPosition): GameStatus => {
 
   return {
     state: "in-progress"
+  };
+};
+
+const cloneDiceRoll = (dice: DiceRoll): DiceRoll => {
+  return {
+    dice: [dice.dice[0], dice.dice[1]]
+  };
+};
+
+export const createGameState = (position: BoardPosition, activePlayer: Player): GameState => {
+  return {
+    position,
+    activePlayer,
+    dice: null
+  };
+};
+
+export const setDice = (state: GameState, dice: DiceRoll): SetDiceResult => {
+  if (getGameStatus(state.position).state === "complete") {
+    return {
+      ok: false,
+      reason: "game-complete"
+    };
+  }
+
+  if (state.dice !== null) {
+    return {
+      ok: false,
+      reason: "dice-already-set"
+    };
+  }
+
+  return {
+    ok: true,
+    state: {
+      position: state.position,
+      activePlayer: state.activePlayer,
+      dice: cloneDiceRoll(dice)
+    }
+  };
+};
+
+export const getLegalMovesForState = (state: GameState): GetLegalMovesForStateResult => {
+  if (getGameStatus(state.position).state === "complete") {
+    return {
+      ok: false,
+      reason: "game-complete",
+      moves: []
+    };
+  }
+
+  if (state.dice === null) {
+    return {
+      ok: false,
+      reason: "dice-not-set",
+      moves: []
+    };
+  }
+
+  return {
+    ok: true,
+    ...getLegalMoves({
+      position: state.position,
+      player: state.activePlayer,
+      roll: state.dice
+    })
+  };
+};
+
+export const applyGameMove = (state: GameState, move: Move): ApplyGameMoveResult => {
+  if (getGameStatus(state.position).state === "complete") {
+    return {
+      ok: false,
+      reason: "game-complete"
+    };
+  }
+
+  if (state.dice === null) {
+    return {
+      ok: false,
+      reason: "dice-not-set"
+    };
+  }
+
+  const applied = applyMove(state.position, state.activePlayer, state.dice, move);
+
+  if (!applied.ok) {
+    return {
+      ok: false,
+      reason: applied.reason
+    };
+  }
+
+  const status = getGameStatus(applied.position);
+
+  return {
+    ok: true,
+    status,
+    state: {
+      position: applied.position,
+      activePlayer:
+        status.state === "complete" ? state.activePlayer : getOpponent(state.activePlayer),
+      dice: null
+    }
+  };
+};
+
+export const passTurn = (state: GameState): PassTurnResult => {
+  if (getGameStatus(state.position).state === "complete") {
+    return {
+      ok: false,
+      reason: "game-complete"
+    };
+  }
+
+  if (state.dice === null) {
+    return {
+      ok: false,
+      reason: "dice-not-set"
+    };
+  }
+
+  const legalMoves = getLegalMoves({
+    position: state.position,
+    player: state.activePlayer,
+    roll: state.dice
+  });
+
+  if (legalMoves.moves.length > 0) {
+    return {
+      ok: false,
+      reason: "legal-moves-available"
+    };
+  }
+
+  return {
+    ok: true,
+    state: {
+      position: state.position,
+      activePlayer: getOpponent(state.activePlayer),
+      dice: null
+    }
   };
 };
