@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { validateBoardPosition } from "@backgammon-trainer/backgammon-domain";
 
 import {
   getLegalMoves,
@@ -7,6 +8,15 @@ import {
   type Move,
   type MoveStep
 } from "../src/index";
+import {
+  BAR_ENTRY_EXAMPLE_FIXTURE,
+  BEARING_OFF_EXAMPLE_FIXTURE,
+  EMPTY_BOARD_FIXTURE,
+  INITIAL_POSITION_FIXTURE,
+  SINGLE_CHECKER_FIXTURE,
+  createEmptyPoints,
+  createPosition
+} from "./fixtures/boardFixtures";
 
 describe("backgammon engine exports", () => {
   it("exports getLegalMoves", () => {
@@ -35,11 +45,58 @@ describe("backgammon engine exports", () => {
 
 describe("getLegalMoves stub", () => {
   it("returns an empty move collection", () => {
-    const input = null as unknown as GetLegalMovesInput;
+    const input: GetLegalMovesInput = {
+      position: INITIAL_POSITION_FIXTURE,
+      player: "white"
+    };
     const result = getLegalMoves(input);
 
     expect(result).toEqual({ moves: [] });
     expect(Array.isArray(result.moves)).toBe(true);
     expect(result.moves).toHaveLength(0);
+  });
+});
+
+describe("engine fixtures", () => {
+  it("provides readable named positions", () => {
+    const fixtures = [
+      INITIAL_POSITION_FIXTURE,
+      EMPTY_BOARD_FIXTURE,
+      SINGLE_CHECKER_FIXTURE,
+      BEARING_OFF_EXAMPLE_FIXTURE,
+      BAR_ENTRY_EXAMPLE_FIXTURE
+    ];
+
+    expect(fixtures).toHaveLength(5);
+  });
+
+  it("produces complete point maps from helper", () => {
+    const points = createEmptyPoints();
+
+    expect(Object.keys(points)).toHaveLength(24);
+  });
+
+  it("creates valid board positions for current fixture set", () => {
+    const fixtures = [
+      INITIAL_POSITION_FIXTURE,
+      EMPTY_BOARD_FIXTURE,
+      SINGLE_CHECKER_FIXTURE,
+      BEARING_OFF_EXAMPLE_FIXTURE,
+      BAR_ENTRY_EXAMPLE_FIXTURE,
+      createPosition({
+        points: {
+          6: { player: "white", checkerCount: 1 },
+          19: { player: "black", checkerCount: 1 }
+        },
+        borneOff: {
+          white: 14,
+          black: 14
+        }
+      })
+    ];
+
+    for (const fixture of fixtures) {
+      expect(validateBoardPosition(fixture)).toEqual({ valid: true });
+    }
   });
 });
