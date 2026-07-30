@@ -49,6 +49,15 @@ export interface LegalMoveResult {
   readonly warnings?: readonly string[];
 }
 
+export type GameStatus =
+  | {
+      readonly state: "in-progress";
+    }
+  | {
+      readonly state: "complete";
+      readonly winner: Player;
+    };
+
 export type ApplyMoveFailureReason = "illegal-move" | "invalid-step-sequence";
 
 export type ApplyMoveResult =
@@ -77,6 +86,8 @@ export interface DiceRoll {
 const isPointIndex = (value: number): value is PointIndex => {
   return Number.isInteger(value) && value >= 1 && value <= 24;
 };
+
+const WINNING_BORNE_OFF_COUNT = 15;
 
 const getForwardDirection = (player: Player): 1 | -1 => {
   return player === "white" ? -1 : 1;
@@ -710,5 +721,21 @@ export const applyMove = (
   return {
     ok: true,
     position: nextPosition
+  };
+};
+
+export const getGameStatus = (position: BoardPosition): GameStatus => {
+  const whiteComplete = position.borneOff.white === WINNING_BORNE_OFF_COUNT;
+  const blackComplete = position.borneOff.black === WINNING_BORNE_OFF_COUNT;
+
+  if (whiteComplete !== blackComplete) {
+    return {
+      state: "complete",
+      winner: whiteComplete ? "white" : "black"
+    };
+  }
+
+  return {
+    state: "in-progress"
   };
 };

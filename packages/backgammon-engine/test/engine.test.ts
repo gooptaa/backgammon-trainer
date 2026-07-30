@@ -5,8 +5,10 @@ import {
   applyMove,
   type ApplyMoveFailureReason,
   type DiceRoll,
+  getGameStatus,
   getLegalMoves,
   type GetLegalMovesInput,
+  type GameStatus,
   type LegalMoveResult,
   type Move,
   type MoveStep
@@ -137,6 +139,10 @@ describe("backgammon engine exports", () => {
     expect(applyMove).toBeTypeOf("function");
   });
 
+  it("exports getGameStatus", () => {
+    expect(getGameStatus).toBeTypeOf("function");
+  });
+
   it("exposes move model types", () => {
     const step: MoveStep = {
       kind: "point-to-point",
@@ -153,8 +159,12 @@ describe("backgammon engine exports", () => {
     const result: LegalMoveResult = {
       moves: [move]
     };
+    const status: GameStatus = {
+      state: "in-progress"
+    };
 
     expect(result.moves[0]?.steps[0]?.kind).toBe("point-to-point");
+    expect(status.state).toBe("in-progress");
   });
 });
 
@@ -2219,6 +2229,148 @@ describe("applyMove public API", () => {
     const result = applyMove(input.position, input.player, input.roll, wrongDieIndexMove);
 
     expectApplyFailureReason(result, "illegal-move");
+  });
+});
+
+describe("getGameStatus public API", () => {
+  it("reports a normal position as in progress", () => {
+    expect(getGameStatus(INITIAL_POSITION_FIXTURE)).toEqual({ state: "in-progress" });
+  });
+
+  it("reports white as winner when white has borne off all 15 checkers", () => {
+    const position = createPosition({
+      points: {
+        24: { player: "black", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 15,
+        black: 14
+      }
+    });
+
+    expect(getGameStatus(position)).toEqual({ state: "complete", winner: "white" });
+  });
+
+  it("reports black as winner when black has borne off all 15 checkers", () => {
+    const position = createPosition({
+      points: {
+        1: { player: "white", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 14,
+        black: 15
+      }
+    });
+
+    expect(getGameStatus(position)).toEqual({ state: "complete", winner: "black" });
+  });
+
+  it("keeps fourteen borne-off checkers in progress", () => {
+    const position = createPosition({
+      points: {
+        1: { player: "white", checkerCount: 1 },
+        24: { player: "black", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 14,
+        black: 14
+      }
+    });
+
+    expect(getGameStatus(position)).toEqual({ state: "in-progress" });
+  });
+
+  it("reports complete after a successful final bearing-off move", () => {
+    const input: GetLegalMovesInput = {
+      position: createPosition({
+        points: {
+          1: { player: "white", checkerCount: 1 },
+          24: { player: "black", checkerCount: 1 }
+        },
+        borneOff: {
+          white: 14,
+          black: 14
+        }
+      }),
+      player: "white",
+      roll: { dice: [1, 6] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps.length === 1 && candidate.steps[0]?.kind === "bear-off",
+      "winning bear-off move"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(getGameStatus(result.position)).toEqual({ state: "complete", winner: "white" });
+    }
+  });
+
+  it("keeps status in progress after a non-winning applied move", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps.length === 1 && candidate.steps[0]?.toPoint === 1,
+      "non-winning move"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(getGameStatus(result.position)).toEqual({ state: "in-progress" });
+    }
+  });
+
+  it("leaves original position and status unchanged after failed applyMove", () => {
+    const position = structuredClone(
+      createPosition({
+        points: {
+          24: { player: "white", checkerCount: 1 },
+          1: { player: "black", checkerCount: 1 }
+        },
+        borneOff: {
+          white: 14,
+          black: 14
+        }
+      })
+    );
+    const snapshot = structuredClone(position);
+    const illegalMove: Move = {
+      player: "white",
+      steps: [
+        {
+          kind: "point-to-point",
+          fromPoint: 24,
+          toPoint: 20,
+          dieValue: 4,
+          dieIndex: 0,
+          hitsBlot: false
+        }
+      ]
+    };
+
+    const result = applyMove(position, "white", { dice: [1, 2] }, illegalMove);
+
+    expectApplyFailureReason(result, "illegal-move");
+    expect(getGameStatus(position)).toEqual({ state: "in-progress" });
+    expect(position).toEqual(snapshot);
+  });
+
+  it("does not mutate input position when reading game status", () => {
+    const position = structuredClone(WHITE_BEAR_OFF_ALL_HOME_FIXTURE);
+    const snapshot = structuredClone(position);
+
+    getGameStatus(position);
+
+    expect(position).toEqual(snapshot);
   });
 });
 
