@@ -1,101 +1,76 @@
 # Game Turn State
 
-Date: 2026-07-30
+Timestamp: 2026-07-30-1534
 
-Branch: main
+Previous worklog: docs/worklog/2026-07-30-1521-game-completion-detection.md
 
-Starting commit: b4d8e65ddbbc97ccbbe345387d8fde6309556e64
+Goal:
 
-Ending commit: (pending)
+Introduce a minimal public turn-state orchestration API that coordinates position, active player, dice, legal move lookup, move application, pass turns, and completed-game behavior by reusing existing engine APIs.
 
-## Goal
-
-Introduce a public game-state orchestration layer that coordinates current position, active player, turn dice, legal move lookup, move application, passing on no-legal-move turns, and completed-game behavior by reusing existing engine APIs.
-
-## Files changed
+Files changed:
 
 - packages/backgammon-engine/src/index.ts
 - packages/backgammon-engine/test/engine.test.ts
 - docs/engine-api.md
 - docs/worklog/2026-07-30-1534-game-turn-state.md
 
-## Architectural decisions
+Architectural decisions:
 
 - Added minimal public `GameState` shape:
-  - `position: BoardPosition`
-  - `activePlayer: Player`
-  - `dice: DiceRoll | null`
-- Added public orchestration APIs:
-  - `createGameState(position, activePlayer)`
-  - `setDice(state, dice)`
-  - `getLegalMovesForState(state)`
-  - `applyGameMove(state, move)`
-  - `passTurn(state)`
-- Added small discriminated result types for non-throwing transition failures:
-  - `SetDiceResult`
-  - `GetLegalMovesForStateResult`
-  - `ApplyGameMoveResult`
-  - `PassTurnResult`
-- Reused existing rules APIs instead of duplicating logic:
-  - `getLegalMoves(...)` for move generation
-  - `applyMove(...)` for move legality and step validation
-  - `getGameStatus(...)` for completion/winner detection
-- Turn lifecycle behavior:
-  - Dice must be explicitly set before move lookup or move application.
-  - Successful non-winning move switches active player and clears dice.
-  - Successful winning move keeps active player as the winner and clears dice.
-  - No-legal-move pass is explicit via `passTurn(...)`; no auto-pass in `setDice(...)`.
+- `position: BoardPosition`
+- `activePlayer: Player`
+- `dice: DiceRoll | null`
+- Added public orchestration APIs: `createGameState(...)`, `setDice(...)`, `getLegalMovesForState(...)`, `applyGameMove(...)`, `passTurn(...)`.
+- Added small non-throwing discriminated result types: `SetDiceResult`, `GetLegalMovesForStateResult`, `ApplyGameMoveResult`, `PassTurnResult`.
+- Reused existing rule APIs without duplicating move rules: `getLegalMoves(...)`, `applyMove(...)`, `getGameStatus(...)`.
+- Turn lifecycle:
+- Dice must be explicitly set before legal move lookup or move application.
+- Successful non-winning move updates position, switches active player, and clears dice.
+- Successful winning move updates position, keeps active player as winner, and clears dice.
+- No-legal-move turn handling is explicit with `passTurn(...)`; no auto-pass in `setDice(...)`.
 - Completed-game behavior:
-  - Setting dice, applying moves, and passing are rejected once complete.
-  - Completed active player convention is winner-retained after winning move.
+- Setting dice, applying moves, and passing are rejected after completion.
+- Winner-retained active-player convention is used after a winning move.
 
-## Tests added
+Tests added:
 
-Added `game turn state public API` tests covering:
+- Added `game turn state public API` tests for:
+- creation with no dice
+- dice assignment and second-assignment rejection
+- legal move lookup from state
+- legal move application, active-player switching, and dice clearing
+- second move rejection in same turn
+- winning move application and completed status reporting
+- rejection of dice, moves, and pass after completion
+- rejection of move before dice are set
+- illegal-move rejection without state mutation
+- pass success only when no legal moves, and pass rejection when legal moves exist
+- immutability on success and failure paths
+- Existing engine tests remain passing.
 
-1. Creating a game state with no dice.
-2. Setting dice immutably.
-3. Rejecting second dice assignment in same turn.
-4. Retrieving legal moves from state.
-5. Applying a legal move.
-6. Switching active player after successful non-winning move.
-7. Clearing dice after successful move.
-8. Rejecting a second move in the same turn after dice clear.
-9. Applying a winning move.
-10. Reporting completed status after a winning move.
-11. Rejecting dice rolls after completion.
-12. Rejecting moves after completion.
-13. Rejecting move application before dice are set.
-14. Rejecting illegal move without changing state.
-15. Passing when no legal move exists.
-16. Switching player and clearing dice after legal pass.
-17. Rejecting pass when legal moves exist.
-18. Rejecting pass before dice are set.
-19. Preserving input state on successful transitions.
-20. Preserving input state on failed transitions.
-
-## Validation performed
+Validation performed:
 
 - pnpm --filter @backgammon-trainer/backgammon-engine test
 - pnpm check
 - git diff --check
 - git status
 
-## Deviations from plan
+Deviations from plan:
 
-- `getLegalMovesForState(...)` returns a small discriminated result with explicit failure reasons (`game-complete`, `dice-not-set`) rather than always returning `{ moves: [] }`. This keeps no-dice and complete-state handling explicit for UI consumers while preserving non-throwing behavior.
+- `getLegalMovesForState(...)` returns an explicit discriminated failure result (`game-complete`, `dice-not-set`) instead of always returning `{ moves: [] }`.
 
-## Follow-up suggestions
+Follow-up suggestions:
 
-- If future state validation is introduced, keep it separate from turn orchestration and avoid widening the base `GameState` shape.
-- Consider adding optional helper APIs for turn readiness (for example, `canSetDice`) only when concrete consumer needs appear.
+- Keep any future invalid-position reporting separate from this turn-state wrapper milestone.
+- Add helper readiness APIs (for example, `canSetDice`) only when concrete consumer demand appears.
 
-## Open questions
+Open questions:
 
-- Whether future externally supplied position paths should include explicit invalid-state results (distinct from `in-progress`) without widening current `GameStatus` semantics.
+- Should externally supplied-position flows eventually expose explicit invalid-state results distinct from `in-progress`?
 
-## Notes for future contributors
+Notes for future contributors:
 
 - Move-generation behavior was not intentionally changed in this milestone.
 - Move-application behavior was not intentionally changed in this milestone.
-- Turn-state APIs are wrappers around existing lower-level rules APIs; keep rule logic centralized in lower-level engine functions.
+- Turn-state APIs are orchestration wrappers over existing lower-level engine rules APIs.
