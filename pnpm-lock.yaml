@@ -110,6 +110,12 @@ importers:
 
   packages/backgammon-domain: {}
 
+  packages/backgammon-engine:
+    dependencies:
+      "@backgammon-trainer/backgammon-domain":
+        specifier: workspace:*
+        version: link:../backgammon-domain
+
   packages/shared: {}
 
 packages:
