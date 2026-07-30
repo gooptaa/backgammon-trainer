@@ -17,12 +17,15 @@ import {
   INITIAL_POSITION_FIXTURE,
   SINGLE_CHECKER_FIXTURE,
   WHITE_BLOCKED_DESTINATION_FIXTURE,
+  WHITE_HIT_AND_BLOCKED_DESTINATIONS_FIXTURE,
+  WHITE_MULTIPLE_HIT_OPPORTUNITIES_FIXTURE,
   WHITE_MULTIPLE_BLOCKED_DESTINATIONS_FIXTURE,
   WHITE_MULTIPLE_MOVES_FIXTURE,
   WHITE_OPEN_DESTINATION_FIXTURE,
   WHITE_ONE_DESTINATION_FIXTURE,
-  WHITE_SINGLE_OPPONENT_DESTINATION_FIXTURE,
+  WHITE_SINGLE_HIT_DESTINATION_FIXTURE,
   WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
+  WHITE_TWO_DICE_INDEPENDENT_HITS_FIXTURE,
   createEmptyPoints,
   createPosition
 } from "./fixtures/boardFixtures";
@@ -112,9 +115,9 @@ describe("getLegalMoves basic forward generation", () => {
     expect(result.moves).toEqual([]);
   });
 
-  it("treats single opposing checker destinations as unsupported for now", () => {
+  it("generates a hit move against a single opposing checker", () => {
     const input: GetLegalMovesInput = {
-      position: WHITE_SINGLE_OPPONENT_DESTINATION_FIXTURE,
+      position: WHITE_SINGLE_HIT_DESTINATION_FIXTURE,
       player: "white",
       roll: {
         dice: [1, 1]
@@ -123,7 +126,115 @@ describe("getLegalMoves basic forward generation", () => {
 
     const result = getLegalMoves(input);
 
-    expect(result.moves).toEqual([]);
+    expect(result.moves).toHaveLength(2);
+    expect(result.moves[0]?.steps[0]?.hitsBlot).toBe(true);
+    expect(result.moves[0]?.steps[0]?.toPoint).toBe(23);
+  });
+
+  it("includes hit metadata on generated hit moves", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_SINGLE_HIT_DESTINATION_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+    const firstStep = result.moves[0]?.steps[0];
+
+    expect(firstStep?.hitsBlot).toBe(true);
+    expect(firstStep?.hit).toEqual({
+      player: "black",
+      point: 23
+    });
+  });
+
+  it("keeps blocked destinations excluded when hit and blocked options coexist", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_HIT_AND_BLOCKED_DESTINATIONS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(1);
+    expect(result.moves[0]?.steps[0]?.toPoint).toBe(23);
+    expect(result.moves[0]?.steps[0]?.hitsBlot).toBe(true);
+  });
+
+  it("preserves die association when duplicate dice generate hits", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_SINGLE_HIT_DESTINATION_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(result.moves[0]?.steps[0]?.dieIndex).toBe(0);
+    expect(result.moves[1]?.steps[0]?.dieIndex).toBe(1);
+    expect(result.moves[0]?.steps[0]?.hitsBlot).toBe(true);
+    expect(result.moves[1]?.steps[0]?.hitsBlot).toBe(true);
+  });
+
+  it("generates multiple independent hit opportunities", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_MULTIPLE_HIT_OPPORTUNITIES_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(result.moves.every((move) => move.steps[0]?.hitsBlot)).toBe(true);
+    expect(
+      result.moves.some((move) => move.steps[0]?.toPoint === 23 && move.steps[0]?.dieValue === 1)
+    ).toBe(true);
+    expect(
+      result.moves.some((move) => move.steps[0]?.toPoint === 22 && move.steps[0]?.dieValue === 2)
+    ).toBe(true);
+  });
+
+  it("supports both dice producing independent hits from different starting points", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_TWO_DICE_INDEPENDENT_HITS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.fromPoint === 24 &&
+          move.steps[0]?.toPoint === 23 &&
+          move.steps[0]?.dieValue === 1 &&
+          move.steps[0]?.hitsBlot
+      )
+    ).toBe(true);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.fromPoint === 13 &&
+          move.steps[0]?.toPoint === 11 &&
+          move.steps[0]?.dieValue === 2 &&
+          move.steps[0]?.hitsBlot
+      )
+    ).toBe(true);
   });
 
   it("generates moves from one die when the other die has no legal destination", () => {
@@ -288,11 +399,14 @@ describe("engine fixtures", () => {
       WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
       WHITE_OPEN_DESTINATION_FIXTURE,
       WHITE_BLOCKED_DESTINATION_FIXTURE,
-      WHITE_SINGLE_OPPONENT_DESTINATION_FIXTURE,
-      WHITE_MULTIPLE_BLOCKED_DESTINATIONS_FIXTURE
+      WHITE_MULTIPLE_BLOCKED_DESTINATIONS_FIXTURE,
+      WHITE_SINGLE_HIT_DESTINATION_FIXTURE,
+      WHITE_MULTIPLE_HIT_OPPORTUNITIES_FIXTURE,
+      WHITE_HIT_AND_BLOCKED_DESTINATIONS_FIXTURE,
+      WHITE_TWO_DICE_INDEPENDENT_HITS_FIXTURE
     ];
 
-    expect(fixtures).toHaveLength(13);
+    expect(fixtures).toHaveLength(16);
   });
 
   it("produces complete point maps from helper", () => {
@@ -314,8 +428,11 @@ describe("engine fixtures", () => {
       WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
       WHITE_OPEN_DESTINATION_FIXTURE,
       WHITE_BLOCKED_DESTINATION_FIXTURE,
-      WHITE_SINGLE_OPPONENT_DESTINATION_FIXTURE,
       WHITE_MULTIPLE_BLOCKED_DESTINATIONS_FIXTURE,
+      WHITE_SINGLE_HIT_DESTINATION_FIXTURE,
+      WHITE_MULTIPLE_HIT_OPPORTUNITIES_FIXTURE,
+      WHITE_HIT_AND_BLOCKED_DESTINATIONS_FIXTURE,
+      WHITE_TWO_DICE_INDEPENDENT_HITS_FIXTURE,
       createPosition({
         points: {
           6: { player: "white", checkerCount: 1 },

@@ -24,6 +24,10 @@ export interface MoveStep {
   readonly dieValue: DieValue;
   readonly dieIndex: 0 | 1;
   readonly hitsBlot: boolean;
+  readonly hit?: {
+    readonly player: Player;
+    readonly point: PointIndex;
+  };
 }
 
 /**
@@ -111,7 +115,7 @@ const isSingleOpponentChecker = (occupancy: PointOccupancy, player: Player): boo
  * This milestone supports only basic forward one-step generation rules:
  * - one die at a time
  * - forward movement only
- * - empty destination points only
+ * - empty destinations and single-opponent hits
  *
  * Unsupported rule situations are intentionally omitted for now.
  */
@@ -158,6 +162,23 @@ export const getLegalMoves = (input: GetLegalMovesInput): LegalMoveResult => {
       }
 
       if (isSingleOpponentChecker(destinationOccupancy, input.player)) {
+        moves.push({
+          player: input.player,
+          steps: [
+            {
+              kind: "point-to-point",
+              fromPoint,
+              toPoint: destinationPoint,
+              dieValue,
+              dieIndex,
+              hitsBlot: true,
+              hit: {
+                player: destinationOccupancy.player,
+                point: destinationPoint
+              }
+            }
+          ]
+        });
         continue;
       }
     }
