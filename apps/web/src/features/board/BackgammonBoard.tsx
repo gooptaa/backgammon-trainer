@@ -18,6 +18,7 @@ import styles from "./BackgammonBoard.module.css";
 export interface BackgammonBoardProps {
   position: BoardPosition;
   activePlayer?: Player;
+  showActivePlayer?: boolean;
   selectableSources?: readonly SelectableSource[];
   selectableDestinations?: readonly SelectableDestination[];
   previewSources?: readonly SelectableSource[];
@@ -278,6 +279,7 @@ function PointRow({
 export function BackgammonBoard({
   position,
   activePlayer = "white",
+  showActivePlayer = true,
   selectableSources = [],
   selectableDestinations = [],
   previewSources = [],
@@ -290,6 +292,7 @@ export function BackgammonBoard({
   onClearHoveredDestination,
   onCancelSelection
 }: BackgammonBoardProps): JSX.Element {
+  const effectiveActivePlayer = activePlayer;
   const selectableSourceSet = new Set<SelectableSource>(selectableSources);
   const selectableDestinationSet = new Set<SelectableDestination>(selectableDestinations);
   const previewSourceSet = new Set<SelectableSource>(previewSources);
@@ -299,9 +302,11 @@ export function BackgammonBoard({
   return (
     <section className={styles.boardRoot} aria-label="Graphical backgammon board" role="region">
       <header className={styles.boardHeader}>
-        <p className={styles.activePlayer} aria-live="polite">
-          Active player: {activePlayer}
-        </p>
+        {showActivePlayer ? (
+          <p className={styles.activePlayer} aria-live="polite">
+            Active player: {effectiveActivePlayer}
+          </p>
+        ) : null}
         <p className={styles.orientationNote}>Orientation: white home board on the right</p>
       </header>
 
@@ -322,7 +327,7 @@ export function BackgammonBoard({
           {...(onSelectDestination === undefined ? {} : { onSelectDestination })}
           {...(onHoverDestination === undefined ? {} : { onHoverDestination })}
           {...(onClearHoveredDestination === undefined ? {} : { onClearHoveredDestination })}
-          activePlayer={activePlayer}
+          activePlayer={effectiveActivePlayer}
         />
         <PointRow
           leftPoints={BOTTOM_LEFT_POINTS}
@@ -340,7 +345,7 @@ export function BackgammonBoard({
           {...(onSelectDestination === undefined ? {} : { onSelectDestination })}
           {...(onHoverDestination === undefined ? {} : { onHoverDestination })}
           {...(onClearHoveredDestination === undefined ? {} : { onClearHoveredDestination })}
-          activePlayer={activePlayer}
+          activePlayer={effectiveActivePlayer}
         />
       </div>
 
@@ -348,11 +353,13 @@ export function BackgammonBoard({
         <p
           aria-label={`White borne off checkers ${position.borneOff.white}`}
           className={
-            offDestinationSelectable && activePlayer === "white" ? styles.selectableOff : ""
+            offDestinationSelectable && effectiveActivePlayer === "white"
+              ? styles.selectableOff
+              : ""
           }
         >
           White borne off: {position.borneOff.white}
-          {offDestinationSelectable && activePlayer === "white" ? (
+          {offDestinationSelectable && effectiveActivePlayer === "white" ? (
             <button
               type="button"
               className={styles.offButton}
@@ -368,11 +375,13 @@ export function BackgammonBoard({
         <p
           aria-label={`Black borne off checkers ${position.borneOff.black}`}
           className={
-            offDestinationSelectable && activePlayer === "black" ? styles.selectableOff : ""
+            offDestinationSelectable && effectiveActivePlayer === "black"
+              ? styles.selectableOff
+              : ""
           }
         >
           Black borne off: {position.borneOff.black}
-          {offDestinationSelectable && activePlayer === "black" ? (
+          {offDestinationSelectable && effectiveActivePlayer === "black" ? (
             <button
               type="button"
               className={styles.offButton}

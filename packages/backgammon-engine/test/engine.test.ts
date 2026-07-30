@@ -12,6 +12,7 @@ import {
   getLegalMoves,
   type GetLegalMovesInput,
   passTurn,
+  previewMovePrefix,
   setDice,
   type GameState,
   type GameStatus,
@@ -2235,6 +2236,94 @@ describe("applyMove public API", () => {
     const result = applyMove(input.position, input.player, input.roll, wrongDieIndexMove);
 
     expectApplyFailureReason(result, "illegal-move");
+  });
+});
+
+describe("previewMovePrefix", () => {
+  it("projects staged position for the first step of a same-checker two-step sequence", () => {
+    const result = previewMovePrefix(
+      WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+      "white",
+      { dice: [1, 2] },
+      [{ fromPoint: 8, toPoint: 7 }]
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.points[8]).toBeNull();
+      expect(result.position.points[7]).toEqual({ player: "white", checkerCount: 1 });
+      expect(result.candidateMoves.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("projects staged hit transitions including bar updates", () => {
+    const result = previewMovePrefix(
+      WHITE_HIT_THEN_SECOND_MOVE_FIXTURE,
+      "white",
+      { dice: [1, 2] },
+      [{ fromPoint: 8, toPoint: 7 }]
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.points[8]).toBeNull();
+      expect(result.position.points[7]).toEqual({ player: "white", checkerCount: 1 });
+      expect(result.position.bar.black).toBe(1);
+    }
+  });
+
+  it("projects staged bar-entry and bearing-off transitions", () => {
+    const barEntryResult = previewMovePrefix(
+      WHITE_BAR_ENTRY_THEN_ORDINARY_MOVE_FIXTURE,
+      "white",
+      { dice: [1, 2] },
+      [{ fromPoint: "bar", toPoint: 24 }]
+    );
+
+    expect(barEntryResult.ok).toBe(true);
+    if (barEntryResult.ok) {
+      expect(barEntryResult.position.bar.white).toBe(0);
+      expect(barEntryResult.position.points[24]).toEqual({ player: "white", checkerCount: 1 });
+    }
+
+    const bearOffResult = previewMovePrefix(
+      WHITE_BEAR_OFF_EXACT_FIXTURE,
+      "white",
+      { dice: [6, 1] },
+      [{ fromPoint: 6, toPoint: "off" }]
+    );
+
+    expect(bearOffResult.ok).toBe(true);
+    if (bearOffResult.ok) {
+      expect(bearOffResult.position.points[6]).toBeNull();
+      expect(bearOffResult.position.borneOff.white).toBe(15);
+    }
+  });
+
+  it("projects black-direction staged movement", () => {
+    const result = previewMovePrefix(BLACK_FORWARD_FIXTURE, "black", { dice: [1, 6] }, [
+      { fromPoint: 1, toPoint: 2 }
+    ]);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.points[1]).toBeNull();
+      expect(result.position.points[2]).toEqual({ player: "black", checkerCount: 1 });
+    }
+  });
+
+  it("rejects illegal prefixes without mutating committed position", () => {
+    const original = structuredClone(WHITE_OPEN_DESTINATION_FIXTURE);
+
+    const result = previewMovePrefix(original, "white", { dice: [1, 2] }, [
+      { fromPoint: 24, toPoint: 20 }
+    ]);
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "illegal-prefix"
+    });
+    expect(original).toEqual(WHITE_OPEN_DESTINATION_FIXTURE);
   });
 });
 

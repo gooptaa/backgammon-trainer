@@ -98,6 +98,33 @@ Completed-game behavior:
 - winner determination is still from `getGameStatus(position)`
 - this wrapper preserves the winning player as `activePlayer` after a winning move
 
+## previewMovePrefix
+
+`previewMovePrefix(position, player, dice, selectedSteps)` validates and projects a selected prefix of a legal completed move.
+
+Input step shape:
+
+- `selectedSteps` contains ordered `{ fromPoint, toPoint }` entries.
+- Prefix steps are compared against complete legal moves from `getLegalMoves(...)`.
+
+Success:
+
+- returns `{ ok: true, position, candidateMoves }`
+- `position` is the immutable staged position after applying only prefix steps
+- `candidateMoves` are complete legal moves that still match the selected prefix
+
+Failure:
+
+- `{ ok: false, reason: "illegal-prefix" }` when the selected prefix matches no complete legal move
+- `{ ok: false, reason: "invalid-step-sequence" }` when prefix shape or projection is invalid
+
+Contract notes:
+
+- This API does not generate partial moves.
+- This API does not widen `applyMove(...)` semantics.
+- Move legality still originates from complete legal move generation.
+- Prefix projection reuses existing immutable engine checker-transition behavior.
+
 ## passTurn
 
 `passTurn(state)` passes the turn only when no legal move exists.
@@ -132,6 +159,11 @@ Failure:
 5. Next turn begins with `dice: null`.
 
 No automatic pass is performed by `setDice(...)`.
+
+Opening-roll note:
+
+- Standard opening-roll resolution (White die, Black die, tie rerolls, starting player selection) is intentionally orchestrated in the web layer.
+- The engine remains deterministic and receives resolved values through existing game-state APIs.
 
 ## Immutability Guarantees
 

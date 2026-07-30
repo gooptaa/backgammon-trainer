@@ -3,7 +3,7 @@ import type {
   GameStatus,
   GetLegalMovesForStateResult
 } from "@backgammon-trainer/backgammon-engine";
-import { POINT_INDEXES, type DieValue } from "@backgammon-trainer/backgammon-domain";
+import { POINT_INDEXES, type DieValue, type Player } from "@backgammon-trainer/backgammon-domain";
 
 import { DiceDisplay } from "./DiceDisplay";
 import styles from "./EngineSandboxPanel.module.css";
@@ -15,15 +15,40 @@ interface EngineSandboxPanelProps {
   dieTwo: DieValue;
   message: string | null;
   legalMovesResult: GetLegalMovesForStateResult;
+  openingRollState: OpeningRollState;
+  openingTurnPending: boolean;
+  canRollDice: boolean;
+  canSetDiceManually: boolean;
   onDieOneChange: (value: DieValue) => void;
   onDieTwoChange: (value: DieValue) => void;
+  onRollForOpening: () => void;
   onRollDice: () => void;
   onSetDice: () => void;
   onPassTurn: () => void;
   onNewGame: () => void;
 }
 
+type OpeningRollState =
+  | {
+      readonly phase: "waiting";
+    }
+  | {
+      readonly phase: "tied";
+      readonly whiteDie: DieValue;
+      readonly blackDie: DieValue;
+    }
+  | {
+      readonly phase: "resolved";
+      readonly whiteDie: DieValue;
+      readonly blackDie: DieValue;
+      readonly startingPlayer: Player;
+    };
+
 const DIE_VALUES: readonly DieValue[] = [1, 2, 3, 4, 5, 6];
+
+const getPlayerLabel = (player: Player): string => {
+  return player === "white" ? "White" : "Black";
+};
 
 const getOccupiedPointRows = (gameState: GameState): readonly string[] => {
   return POINT_INDEXES.flatMap((point) => {
@@ -44,28 +69,57 @@ export function EngineSandboxPanel({
   dieTwo,
   message,
   legalMovesResult,
+  openingRollState,
+  openingTurnPending,
+  canRollDice,
+  canSetDiceManually,
   onDieOneChange,
   onDieTwoChange,
+  onRollForOpening,
   onRollDice,
   onSetDice,
   onPassTurn,
   onNewGame
 }: EngineSandboxPanelProps): JSX.Element {
   const isComplete = gameStatus.state === "complete";
-  const canAssignDice = !isComplete && gameState.dice === null;
   const legalMoves = legalMovesResult.ok ? legalMovesResult.moves : [];
   const canPass =
     !isComplete && gameState.dice !== null && legalMovesResult.ok && legalMoves.length === 0;
   const occupiedPointRows = getOccupiedPointRows(gameState);
+  const canRollForOpening = !isComplete && openingRollState.phase !== "resolved";
 
   return (
     <section aria-labelledby="engine-sandbox-title" className={styles.panel}>
       <h2 id="engine-sandbox-title">Engine Game Sandbox</h2>
       <p className={styles.meta}>Status: {isComplete ? "complete" : "in-progress"}</p>
-      <p className={styles.meta}>Active player: {gameState.activePlayer}</p>
+      {openingRollState.phase === "resolved" ? (
+        <p className={styles.meta}>Active player: {gameState.activePlayer}</p>
+      ) : null}
       {isComplete && gameStatus.state === "complete" ? (
         <p className={styles.meta}>Winner: {gameStatus.winner}</p>
       ) : null}
+
+      <p className={styles.meta} data-testid="opening-phase">
+        Opening phase: {openingRollState.phase}
+      </p>
+      {openingRollState.phase !== "waiting" ? (
+        <>
+          <p className={styles.meta} aria-label={`White opening die ${openingRollState.whiteDie}`}>
+            White opening die: {openingRollState.whiteDie}
+          </p>
+          <p className={styles.meta} aria-label={`Black opening die ${openingRollState.blackDie}`}>
+            Black opening die: {openingRollState.blackDie}
+          </p>
+        </>
+      ) : null}
+      {openingRollState.phase === "resolved" ? (
+        <p className={styles.meta} data-testid="opening-resolution">
+          {getPlayerLabel(openingRollState.startingPlayer)} starts with {openingRollState.whiteDie}-
+          {openingRollState.blackDie}
+          {openingTurnPending ? " (opening turn in progress)" : ""}
+        </p>
+      ) : null}
+
       <DiceDisplay dice={gameState.dice} />
       <p className={styles.meta} data-testid="turn-dice-value">
         Turn dice:{" "}
@@ -75,7 +129,13 @@ export function EngineSandboxPanel({
       </p>
 
       <div className={styles.controls}>
-        <button type="button" onClick={onRollDice} disabled={!canAssignDice}>
+        {canRollForOpening ? (
+          <button type="button" onClick={onRollForOpening}>
+            {openingRollState.phase === "tied" ? "Roll Again" : "Roll for Opening"}
+          </button>
+        ) : null}
+
+        <button type="button" onClick={onRollDice} disabled={!canRollDice}>
           Roll Dice
         </button>
 
@@ -96,7 +156,7 @@ export function EngineSandboxPanel({
               <select
                 id="die-one"
                 value={dieOne}
-                disabled={!canAssignDice}
+                disabled={!canSetDiceManually}
                 onChange={(event) => onDieOneChange(Number(event.currentTarget.value) as DieValue)}
               >
                 {DIE_VALUES.map((value) => (
@@ -111,7 +171,7 @@ export function EngineSandboxPanel({
               <select
                 id="die-two"
                 value={dieTwo}
-                disabled={!canAssignDice}
+                disabled={!canSetDiceManually}
                 onChange={(event) => onDieTwoChange(Number(event.currentTarget.value) as DieValue)}
               >
                 {DIE_VALUES.map((value) => (
@@ -122,7 +182,7 @@ export function EngineSandboxPanel({
               </select>
             </div>
           </div>
-          <button type="button" onClick={onSetDice} disabled={!canAssignDice}>
+          <button type="button" onClick={onSetDice} disabled={!canSetDiceManually}>
             Set Dice Manually
           </button>
         </details>

@@ -29,6 +29,10 @@ Legal move evaluation must remain deterministic and testable. LLM output can be 
 
 Dice randomness is intentionally kept in the web app layer (outside the rules engine) and passed into existing turn-state validation (`setDice(...)`). The UI roll helper supports random-source injection so tests can deterministically verify full game-loop behavior without introducing nondeterminism into engine rule logic.
 
+Progressive move construction in the UI uses a staged-position model. The staged board is derived from a selected legal move prefix via engine projection APIs and is never treated as committed game state. This allows visual preview of multi-step turns, hits, bar-entry effects, and bearing-off effects while preserving the canonical committed state until `applyGameMove(...)` succeeds.
+
+Standard opening-roll orchestration also remains in the web layer: White and Black opening dice are rolled in UI state, ties are rerolled explicitly, and the resolved opening dice are injected into the first engine `GameState` turn through `setDice(...)`.
+
 ## Why credentials require a server boundary
 
 Any variable bundled by Vite into client code is public. Provider keys and model credentials must therefore remain server-only. The server mediates model calls, applies timeouts/retries later, and shields secrets from the browser.

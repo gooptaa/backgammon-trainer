@@ -5,6 +5,7 @@ import {
   getGameStatus,
   getLegalMovesForState,
   passTurn,
+  previewMovePrefix,
   setDice,
   type ApplyGameMoveFailureReason,
   type GameState,
@@ -13,24 +14,27 @@ import {
   type SetDiceFailureReason,
   type Move
 } from "@backgammon-trainer/backgammon-engine";
-import { STANDARD_STARTING_POSITION, type DieValue } from "@backgammon-trainer/backgammon-domain";
+import {
+  STANDARD_STARTING_POSITION,
+  type DieValue,
+  type Player
+} from "@backgammon-trainer/backgammon-domain";
 import { useEffect, useMemo, useState } from "react";
 
 import { BackgammonBoard } from "./features/board/BackgammonBoard";
 import { EngineSandboxPanel } from "./features/sandbox/EngineSandboxPanel";
 import {
-  filterCandidateMoves,
   formatSelectedStep,
   formatSelectedStepsBreadcrumb,
   getSelectableDestinations,
   getSelectableSources,
   getSingleCompletedMove,
-  moveStartsWithSelectedSteps,
   type SelectableDestination,
   type SelectableSource,
   type SelectedStep
 } from "./features/sandbox/moveSelection";
 import { rollDice, type RandomSource } from "./features/sandbox/rollDice";
+import { rollOpeningDice } from "./features/sandbox/rollOpeningDice";
 
 const createInitialGameState = (): GameState => {
   return createGameState(STANDARD_STARTING_POSITION, "white");
@@ -38,6 +42,44 @@ const createInitialGameState = (): GameState => {
 
 const DEFAULT_MANUAL_DIE_ONE: DieValue = 1;
 const DEFAULT_MANUAL_DIE_TWO: DieValue = 2;
+
+type OpeningRollState =
+  | {
+      readonly phase: "waiting";
+    }
+  | {
+      readonly phase: "tied";
+      readonly whiteDie: DieValue;
+      readonly blackDie: DieValue;
+    }
+  | {
+      readonly phase: "resolved";
+      readonly whiteDie: DieValue;
+      readonly blackDie: DieValue;
+      readonly startingPlayer: Player;
+    };
+
+const DEFAULT_TEST_OPENING_DIE: DieValue = 1;
+const SECOND_TEST_OPENING_DIE: DieValue = 2;
+
+const getInitialOpeningRollState = (initialGameState?: GameState): OpeningRollState => {
+  if (initialGameState === undefined) {
+    return {
+      phase: "waiting"
+    };
+  }
+
+  return {
+    phase: "resolved",
+    whiteDie: DEFAULT_TEST_OPENING_DIE,
+    blackDie: SECOND_TEST_OPENING_DIE,
+    startingPlayer: initialGameState.activePlayer
+  };
+};
+
+const getPlayerLabel = (player: Player): string => {
+  return player === "white" ? "White" : "Black";
+};
 
 const getSetDiceFailureMessage = (reason: SetDiceFailureReason): string => {
   if (reason === "game-complete") {
@@ -78,11 +120,24 @@ const getPassFailureMessage = (reason: PassTurnFailureReason): string => {
 interface AppProps {
   initialGameState?: GameState;
   randomSource?: RandomSource;
+  initialOpeningRollState?: OpeningRollState;
+  initialOpeningTurnPending?: boolean;
 }
 
-function App({ initialGameState, randomSource }: AppProps): JSX.Element {
+function App({
+  initialGameState,
+  randomSource,
+  initialOpeningRollState,
+  initialOpeningTurnPending
+}: AppProps): JSX.Element {
   const [gameState, setGameState] = useState<GameState>(
     () => initialGameState ?? createInitialGameState()
+  );
+  const [openingRollState, setOpeningRollState] = useState<OpeningRollState>(
+    () => initialOpeningRollState ?? getInitialOpeningRollState(initialGameState)
+  );
+  const [openingTurnPending, setOpeningTurnPending] = useState<boolean>(
+    initialOpeningTurnPending ?? false
   );
   const [dieOne, setDieOne] = useState<DieValue>(DEFAULT_MANUAL_DIE_ONE);
   const [dieTwo, setDieTwo] = useState<DieValue>(DEFAULT_MANUAL_DIE_TWO);
@@ -92,14 +147,52 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
   const [hoveredDestination, setHoveredDestination] = useState<SelectableDestination | null>(null);
   const gameStatus = useMemo(() => getGameStatus(gameState.position), [gameState]);
   const legalMovesResult = useMemo(() => getLegalMovesForState(gameState), [gameState]);
-  const legalMoves = legalMovesResult.ok ? legalMovesResult.moves : [];
+  const openingResolved = openingRollState.phase === "resolved";
+
+  const stagedPrefixResult = useMemo(() => {
+    if (
+      selectedSteps.length === 0 ||
+      gameState.dice === null ||
+      !legalMovesResult.ok ||
+      gameStatus.state === "complete"
+    ) {
+      return null;
+    }
+
+    return previewMovePrefix(
+      gameState.position,
+      gameState.activePlayer,
+      gameState.dice,
+      selectedSteps
+    );
+  }, [gameState, gameStatus.state, legalMovesResult, selectedSteps]);
+
   const candidateMoves = useMemo<readonly Move[]>(() => {
     if (!legalMovesResult.ok || gameStatus.state === "complete" || gameState.dice === null) {
       return [];
     }
 
-    return filterCandidateMoves(legalMovesResult.moves, selectedSteps);
-  }, [gameState.dice, gameStatus.state, legalMovesResult, selectedSteps]);
+    if (selectedSteps.length === 0) {
+      return legalMovesResult.moves;
+    }
+
+    if (stagedPrefixResult !== null && stagedPrefixResult.ok) {
+      return stagedPrefixResult.candidateMoves;
+    }
+
+    return [];
+  }, [
+    gameState.dice,
+    gameStatus.state,
+    legalMovesResult,
+    selectedSteps.length,
+    stagedPrefixResult
+  ]);
+
+  const stagedPosition =
+    stagedPrefixResult !== null && stagedPrefixResult.ok
+      ? stagedPrefixResult.position
+      : gameState.position;
 
   useEffect(() => {
     if (gameState.dice === null || !legalMovesResult.ok || gameStatus.state === "complete") {
@@ -118,8 +211,8 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
       return;
     }
 
-    if (!legalMovesResult.moves.some((move) => moveStartsWithSelectedSteps(move, selectedSteps))) {
-      if (selectedSteps.length > 0 || selectedSource !== null) {
+    if (stagedPrefixResult !== null && !stagedPrefixResult.ok) {
+      if (selectedSteps.length > 0 || selectedSource !== null || hoveredDestination !== null) {
         setSelectedSteps([]);
         setSelectedSource(null);
         setHoveredDestination(null);
@@ -132,7 +225,8 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
     hoveredDestination,
     legalMovesResult,
     selectedSource,
-    selectedSteps
+    selectedSteps,
+    stagedPrefixResult
   ]);
 
   const resetTransientState = (): void => {
@@ -149,6 +243,11 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
   };
 
   const onSetDice = (): void => {
+    if (!openingResolved) {
+      setMessage("Finish opening roll before setting turn dice manually.");
+      return;
+    }
+
     const result = setDice(gameState, {
       dice: [dieOne, dieTwo]
     });
@@ -164,6 +263,11 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
   };
 
   const onRollDice = (): void => {
+    if (!openingResolved) {
+      setMessage("Finish opening roll before rolling turn dice.");
+      return;
+    }
+
     const result = setDice(gameState, rollDice(randomSource));
 
     if (!result.ok) {
@@ -186,12 +290,18 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
 
     setGameState(result.state);
     resetForNewTurn();
+    if (openingTurnPending) {
+      setOpeningTurnPending(false);
+    }
+
     if (result.status.state === "complete") {
       setMessage(`Game complete: ${result.status.winner} wins.`);
       return;
     }
 
-    setMessage("Move applied.");
+    setMessage(
+      openingTurnPending ? "Opening turn complete. Roll dice for the next turn." : "Move applied."
+    );
   };
 
   const onPassTurn = (): void => {
@@ -204,11 +314,57 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
 
     setGameState(result.state);
     resetForNewTurn();
-    setMessage("Turn passed.");
+    if (openingTurnPending) {
+      setOpeningTurnPending(false);
+    }
+
+    setMessage(
+      openingTurnPending ? "Opening turn passed. Roll dice for the next turn." : "Turn passed."
+    );
+  };
+
+  const onRollForOpening = (): void => {
+    const openingResult = rollOpeningDice(randomSource);
+
+    if (openingResult.outcome === "tie") {
+      setOpeningRollState({
+        phase: "tied",
+        whiteDie: openingResult.whiteDie,
+        blackDie: openingResult.blackDie
+      });
+      resetForNewTurn();
+      setMessage("Opening roll tied. Roll again.");
+      return;
+    }
+
+    const openingState = createGameState(STANDARD_STARTING_POSITION, openingResult.startingPlayer);
+    const assignedOpeningDice = setDice(openingState, openingResult.dice);
+
+    if (!assignedOpeningDice.ok) {
+      setOpeningRollState({ phase: "waiting" });
+      resetForNewTurn();
+      setMessage("Unable to start opening turn. Try rolling for opening again.");
+      return;
+    }
+
+    setOpeningRollState({
+      phase: "resolved",
+      whiteDie: openingResult.whiteDie,
+      blackDie: openingResult.blackDie,
+      startingPlayer: openingResult.startingPlayer
+    });
+    setGameState(assignedOpeningDice.state);
+    setOpeningTurnPending(true);
+    resetForNewTurn();
+    setMessage(
+      `White rolled ${openingResult.whiteDie}. Black rolled ${openingResult.blackDie}. ${getPlayerLabel(openingResult.startingPlayer)} starts with ${openingResult.whiteDie}-${openingResult.blackDie}.`
+    );
   };
 
   const onNewGame = (): void => {
     setGameState(createInitialGameState());
+    setOpeningRollState({ phase: "waiting" });
+    setOpeningTurnPending(false);
     setDieOne(DEFAULT_MANUAL_DIE_ONE);
     setDieTwo(DEFAULT_MANUAL_DIE_TWO);
     resetTransientState();
@@ -235,9 +391,18 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
       }
     ];
 
-    const nextCandidates = filterCandidateMoves(legalMoves, nextSelectedSteps);
+    if (gameState.dice === null) {
+      return;
+    }
 
-    if (nextCandidates.length === 0) {
+    const nextPreview = previewMovePrefix(
+      gameState.position,
+      gameState.activePlayer,
+      gameState.dice,
+      nextSelectedSteps
+    );
+
+    if (!nextPreview.ok) {
       setMessage("That step is not part of any legal move sequence.");
       setSelectedSource(null);
       return;
@@ -246,7 +411,7 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
     setSelectedSteps(nextSelectedSteps);
     setSelectedSource(null);
 
-    const completedMove = getSingleCompletedMove(nextCandidates, nextSelectedSteps);
+    const completedMove = getSingleCompletedMove(nextPreview.candidateMoves, nextSelectedSteps);
 
     if (completedMove !== null) {
       onApplyMove(completedMove);
@@ -310,8 +475,19 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
       : null;
   const hoveredStepPrefix: readonly SelectedStep[] =
     hoveredStep === null ? selectedSteps : [...selectedSteps, hoveredStep];
+  const hoveredPrefixResult =
+    hoveredStep === null || gameState.dice === null
+      ? null
+      : previewMovePrefix(
+          gameState.position,
+          gameState.activePlayer,
+          gameState.dice,
+          hoveredStepPrefix
+        );
   const hoveredCandidates: readonly Move[] =
-    hoveredStep === null ? [] : filterCandidateMoves(candidateMoves, hoveredStepPrefix);
+    hoveredPrefixResult !== null && hoveredPrefixResult.ok
+      ? hoveredPrefixResult.candidateMoves
+      : [];
   const hoverCompletesAutomatically =
     hoveredStep !== null && getSingleCompletedMove(hoveredCandidates, hoveredStepPrefix) !== null;
   const uniquePreviewStep =
@@ -327,9 +503,25 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
       : getSelectableDestinations(hoveredCandidates, hoveredStepPrefix, singlePreviewSource);
 
   const breadcrumb = formatSelectedStepsBreadcrumb(selectedSteps);
+  const canRollDice =
+    openingResolved &&
+    !openingTurnPending &&
+    gameStatus.state !== "complete" &&
+    gameState.dice === null;
+  const canSetDiceManually = canRollDice;
+  const boardActivePlayer = gameState.activePlayer;
+
   const interactionStatus = (() => {
     if (gameStatus.state === "complete") {
       return "Game complete";
+    }
+
+    if (openingRollState.phase === "waiting") {
+      return "Roll for opening to start game";
+    }
+
+    if (openingRollState.phase === "tied") {
+      return "Opening roll tied. Roll again";
     }
 
     if (gameState.dice === null) {
@@ -400,8 +592,9 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
         <section aria-labelledby="board-workspace-title" className={styles.boardSection}>
           <h2 id="board-workspace-title">Board Workspace</h2>
           <BackgammonBoard
-            position={gameState.position}
-            activePlayer={gameState.activePlayer}
+            position={stagedPosition}
+            activePlayer={boardActivePlayer}
+            showActivePlayer={openingResolved}
             selectableSources={selectableSources}
             selectableDestinations={selectableDestinations}
             previewSources={previewSources}
@@ -442,6 +635,11 @@ function App({ initialGameState, randomSource }: AppProps): JSX.Element {
           legalMovesResult={legalMovesResult}
           onDieOneChange={setDieOne}
           onDieTwoChange={setDieTwo}
+          openingRollState={openingRollState}
+          openingTurnPending={openingTurnPending}
+          canRollDice={canRollDice}
+          canSetDiceManually={canSetDiceManually}
+          onRollForOpening={onRollForOpening}
           onRollDice={onRollDice}
           onSetDice={onSetDice}
           onPassTurn={onPassTurn}

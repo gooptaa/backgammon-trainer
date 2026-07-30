@@ -40,6 +40,11 @@ export interface Move {
   readonly steps: readonly MoveStep[];
 }
 
+export interface MovePrefixStep {
+  readonly fromPoint: PointIndex | "bar";
+  readonly toPoint: PointIndex | "off";
+}
+
 /**
  * Result container returned by the legal-move engine API.
  * Includes candidate turn list and optional non-fatal diagnostics.
@@ -116,6 +121,19 @@ export type PassTurnResult =
     };
 
 export type ApplyMoveFailureReason = "illegal-move" | "invalid-step-sequence";
+
+export type PreviewMovePrefixFailureReason = "illegal-prefix" | "invalid-step-sequence";
+
+export type PreviewMovePrefixResult =
+  | {
+      readonly ok: true;
+      readonly position: BoardPosition;
+      readonly candidateMoves: readonly Move[];
+    }
+  | {
+      readonly ok: false;
+      readonly reason: PreviewMovePrefixFailureReason;
+    };
 
 export type ApplyMoveResult =
   | {
@@ -531,6 +549,33 @@ const areStepsEquivalent = (expected: MoveStep, supplied: MoveStep): boolean => 
   return expected.hit.player === supplied.hit.player && expected.hit.point === supplied.hit.point;
 };
 
+const isValidPrefixStepShape = (step: MovePrefixStep): boolean => {
+  if (step.fromPoint === "bar") {
+    return step.toPoint !== "off";
+  }
+
+  if (step.toPoint === "off") {
+    return true;
+  }
+
+  return true;
+};
+
+const moveStartsWithPrefixSteps = (move: Move, prefixSteps: readonly MovePrefixStep[]): boolean => {
+  if (prefixSteps.length > move.steps.length) {
+    return false;
+  }
+
+  return prefixSteps.every((prefixStep, index) => {
+    const moveStep = move.steps[index];
+    return (
+      moveStep !== undefined &&
+      moveStep.fromPoint === prefixStep.fromPoint &&
+      moveStep.toPoint === prefixStep.toPoint
+    );
+  });
+};
+
 export const areMovesEquivalent = (expected: Move, supplied: Move): boolean => {
   if (expected.player !== supplied.player || expected.steps.length !== supplied.steps.length) {
     return false;
@@ -732,6 +777,74 @@ export const getLegalMoves = (input: GetLegalMovesInput): LegalMoveResult => {
 
   return {
     moves: filterTurnCandidatesByDiceUsage(input.roll, assembledTurns)
+  };
+};
+
+export const previewMovePrefix = (
+  position: BoardPosition,
+  player: Player,
+  dice: DiceRoll,
+  selectedSteps: readonly MovePrefixStep[]
+): PreviewMovePrefixResult => {
+  if (!selectedSteps.every(isValidPrefixStepShape)) {
+    return {
+      ok: false,
+      reason: "invalid-step-sequence"
+    };
+  }
+
+  const legalMoves = getLegalMoves({
+    position,
+    player,
+    roll: dice
+  }).moves;
+
+  const candidateMoves = legalMoves.filter((move) =>
+    moveStartsWithPrefixSteps(move, selectedSteps)
+  );
+
+  if (candidateMoves.length === 0) {
+    return {
+      ok: false,
+      reason: "illegal-prefix"
+    };
+  }
+
+  let stagedPosition = position;
+
+  try {
+    const firstCandidate = candidateMoves[0];
+
+    if (firstCandidate === undefined) {
+      return {
+        ok: false,
+        reason: "illegal-prefix"
+      };
+    }
+
+    for (let stepIndex = 0; stepIndex < selectedSteps.length; stepIndex += 1) {
+      const step = firstCandidate.steps[stepIndex];
+
+      if (step === undefined) {
+        return {
+          ok: false,
+          reason: "invalid-step-sequence"
+        };
+      }
+
+      stagedPosition = applyMoveStepUnchecked(stagedPosition, player, step);
+    }
+  } catch {
+    return {
+      ok: false,
+      reason: "invalid-step-sequence"
+    };
+  }
+
+  return {
+    ok: true,
+    position: stagedPosition,
+    candidateMoves
   };
 };
 

@@ -79,12 +79,22 @@ pnpm check
 - `docs/architecture`: architecture overview + ADRs
 - `docs/roadmap.md`: ordered milestones
 
-## Dice and reset behavior
+## Turn flow and staged interaction
 
-- Production dice rolls are generated in `apps/web/src/features/sandbox/rollDice.ts`.
-- The utility accepts an injectable random source so tests can deterministically validate roll outcomes.
-- UI roll and manual dice-assignment controls both flow through engine `setDice(...)` turn-state validation.
-- `New Game` resets to the standard starting position with white as starting player and clears dice + in-progress UI interaction state.
+- The board interaction model only uses complete legal moves returned by the engine.
+- While the player is selecting a multi-step move, the UI renders a derived staged position from the selected legal prefix.
+- The committed `GameState.position` is not mutated until a full legal move is applied through `applyGameMove(...)`.
+- Staged rendering supports same-checker-twice turns, hits, bar entry, and bearing off because prefix projection reuses engine transition logic.
+
+## Opening roll and dice behavior
+
+- New games start in an explicit opening-roll phase.
+- `Roll for Opening` rolls one die for White and one die for Black.
+- Ties are shown and must be rerolled by the user.
+- The higher die determines the starting player.
+- The two opening dice become the starting player's first turn dice without requiring a separate `Roll Dice` click.
+- After the opening turn is applied or passed, ordinary two-die `Roll Dice` continues for the rest of the game.
+- Dice randomness remains in `apps/web` and uses injectable random sources for deterministic tests.
 
 ## Environment setup
 
