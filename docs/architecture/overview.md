@@ -30,6 +30,14 @@ Core deterministic pipeline direction is now:
 
 - `packages/backgammon-engine` -> `packages/backgammon-analysis` -> host layers (`apps/web`, future backend/coach adapters)
 
+Move-outcome analysis pipeline boundary is:
+
+- position + dice + active player
+- engine complete legal moves (`getLegalMoves(...)`)
+- analysis move outcomes (apply each legal move through engine + compute factual before/after)
+- future evaluator layer (equity/ranking, deferred)
+- future coaching layer (pedagogy/prose, deferred)
+
 No package under `packages/` depends on React, Fastify, browser APIs, or vendor SDKs.
 
 The analysis layer intentionally stays factual and machine-readable. It does not rank moves, compute equities, or generate coaching prose.

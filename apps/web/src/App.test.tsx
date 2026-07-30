@@ -7,6 +7,7 @@ import {
   encodeGameSnapshot,
   GAME_SNAPSHOT_FORMAT,
   GAME_SNAPSHOT_VERSION,
+  getLegalMoves,
   type GameSnapshot,
   type GameState
 } from "@backgammon-trainer/backgammon-engine";
@@ -1161,5 +1162,253 @@ describe("App game snapshot persistence", () => {
 
     expect(inspectable.getValue()).toBeNull();
     expect(screen.getByTestId("turn-history-count")).toHaveTextContent("Recorded turns: 1");
+  });
+});
+
+describe("App legal move outcomes panel", () => {
+  it("shows pre-dice empty state after opening resolves", () => {
+    renderApp({ randomSource: createRandomSource([0.8, 0.2]) });
+
+    clickOpeningRoll();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+    selectSourcePoint(8);
+    selectDestinationPoint(6);
+
+    expect(screen.getByTestId("legal-outcomes-no-dice")).toHaveTextContent(
+      "Roll or assign dice to inspect legal move outcomes."
+    );
+  });
+
+  it("is unavailable before opening roll resolves", () => {
+    renderApp();
+
+    expect(screen.getByTestId("legal-outcomes-opening-unresolved")).toHaveTextContent(
+      "Opening roll must resolve before legal move outcomes are available."
+    );
+  });
+
+  it("shows opening tie state without legal outcomes", () => {
+    renderApp({ randomSource: createRandomSource([0.3, 0.3]) });
+
+    clickOpeningRoll();
+
+    expect(screen.getByTestId("opening-phase")).toHaveTextContent("Opening phase: tied");
+    expect(screen.getByTestId("legal-outcomes-opening-unresolved")).toBeInTheDocument();
+  });
+
+  it("shows outcome rows for resolved opening dice and ordinary turn dice", () => {
+    renderApp({ randomSource: createRandomSource([0.8, 0.2]) });
+
+    clickOpeningRoll();
+
+    const openingList = screen.getByTestId("legal-outcomes-list");
+    expect(within(openingList).getAllByRole("listitem").length).toBeGreaterThan(0);
+
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+    selectSourcePoint(8);
+    selectDestinationPoint(6);
+    setDiceManually("1", "2");
+
+    const normalList = screen.getByTestId("legal-outcomes-list");
+    expect(within(normalList).getAllByRole("listitem").length).toBeGreaterThan(0);
+  });
+
+  it("matches legal outcome row count to complete legal move count", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "2");
+
+    const expectedCount = getLegalMoves({
+      position: initialGameState.position,
+      player: "white",
+      roll: { dice: [1, 2] }
+    }).moves.length;
+
+    const list = screen.getByTestId("legal-outcomes-list");
+    expect(within(list).getAllByRole("listitem")).toHaveLength(expectedCount);
+  });
+
+  it("shows no-legal-move pass-oriented state without fake moves", () => {
+    const initialGameState: GameState = {
+      position: createNoLegalMovePosition(),
+      activePlayer: "white",
+      dice: {
+        dice: [1, 1]
+      }
+    };
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white", 1, 1),
+      initialOpeningTurnPending: true
+    });
+
+    expect(screen.getByTestId("legal-outcomes-no-legal-moves")).toHaveTextContent(
+      "No legal checker move."
+    );
+    expect(screen.queryByTestId("legal-outcomes-list")).not.toBeInTheDocument();
+  });
+
+  it("shows readable move labels and factual deltas without strategic wording", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "2");
+
+    const outcomesSection = screen
+      .getByRole("heading", { name: "Legal Move Outcomes" })
+      .closest("section");
+    if (outcomesSection === null) {
+      throw new Error("Expected legal move outcomes section");
+    }
+
+    expect(screen.getAllByText(/^Move:/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/pips:/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Status:/i).length).toBeGreaterThan(0);
+    expect(
+      within(outcomesSection).queryByText(/best|recommended|mistake|good|bad/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("selecting an outcome shows details and enters labeled preview mode", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "2");
+    fireEvent.click(screen.getAllByRole("button", { name: "Preview move" })[0]!);
+
+    expect(screen.getByTestId("legal-outcome-details")).toBeInTheDocument();
+    expect(screen.getByTestId("move-outcome-preview-banner")).toHaveTextContent(
+      "Move Outcome Preview"
+    );
+  });
+
+  it("preview mode disables checker interaction and roll/pass/manual controls", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "2");
+    fireEvent.click(screen.getAllByRole("button", { name: "Preview move" })[0]!);
+
+    expect(screen.queryAllByRole("button", { name: /Select source (point|bar)/i })).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Pass Turn" })).toBeDisabled();
+    openDevelopmentControls();
+    expect(screen.getByRole("button", { name: "Set Dice Manually" })).toBeDisabled();
+  });
+
+  it("preview mode does not mutate committed state or append history and returns cleanly", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "2");
+    const beforeHistory = screen.getByTestId("turn-history-count").textContent;
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Preview move" })[0]!);
+    expect(screen.getByTestId("turn-history-count").textContent).toBe(beforeHistory);
+
+    fireEvent.click(screen.getByRole("button", { name: "Return to Current Game" }));
+    expect(screen.queryByTestId("move-outcome-preview-banner")).not.toBeInTheDocument();
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: 1, 2");
+    expectPointCheckerCount(8, "white", 1);
+  });
+
+  it("entering history inspection exits preview and entering preview exits history inspection", () => {
+    renderApp({ randomSource: createRandomSource([0.8, 0.2]) });
+
+    clickOpeningRoll();
+    selectSourcePoint(13);
+    selectDestinationPoint(8);
+    selectSourcePoint(8);
+    selectDestinationPoint(6);
+    setDiceManually("1", "2");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Preview move" })[0]!);
+    expect(screen.getByTestId("move-outcome-preview-banner")).toBeInTheDocument();
+
+    selectHistoryTurn(1);
+    expect(screen.getByTestId("history-inspection-banner")).toBeInTheDocument();
+    expect(screen.queryByTestId("move-outcome-preview-banner")).not.toBeInTheDocument();
+    expect(screen.getByTestId("legal-outcomes-history-disabled")).toHaveTextContent(
+      "Return to the current game to inspect legal move outcomes."
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Return to Current Game" }));
+    setDiceManually("1", "2");
+    fireEvent.click(screen.getAllByRole("button", { name: "Preview move" })[0]!);
+    expect(screen.queryByTestId("history-inspection-banner")).not.toBeInTheDocument();
+    expect(screen.getByTestId("move-outcome-preview-banner")).toBeInTheDocument();
+  });
+
+  it("new game and successful import exit outcome preview mode", () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderApp({
+      initialGameState: createGameState(createUndoPreviewPosition(), "white"),
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "2");
+    fireEvent.click(screen.getAllByRole("button", { name: "Preview move" })[0]!);
+    expect(screen.getByTestId("move-outcome-preview-banner")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "New Game" }));
+    expect(screen.queryByTestId("move-outcome-preview-banner")).not.toBeInTheDocument();
+
+    clickOpeningRoll();
+    setDiceManually("1", "2");
+    openImportSection();
+    fireEvent.change(screen.getByTestId("import-snapshot-text"), {
+      target: { value: createSavedSnapshotText() }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Validate and Import" }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.queryByTestId("move-outcome-preview-banner")).not.toBeInTheDocument();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("completed games do not expose playable move outcomes", () => {
+    const initialGameState = createGameState(
+      createPosition({
+        borneOff: {
+          white: 15,
+          black: 0
+        }
+      }),
+      "white"
+    );
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    expect(screen.getByTestId("legal-outcomes-game-complete")).toHaveTextContent(
+      "Game complete. No further legal move analysis is available."
+    );
   });
 });

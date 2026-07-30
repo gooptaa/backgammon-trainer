@@ -260,7 +260,7 @@ export function EngineSandboxPanel({
 
       {interactionLocked ? (
         <p className={styles.meta} data-testid="controls-locked-notice">
-          Live controls are disabled while inspecting history.
+          Live controls are disabled while inspecting a read-only position.
         </p>
       ) : null}
 

@@ -1,5 +1,9 @@
 import styles from "./App.module.css";
 import {
+  analyzeLegalMoveOutcomes,
+  type AnalyzeLegalMoveOutcomesResult
+} from "@backgammon-trainer/backgammon-analysis";
+import {
   applyGameMove,
   decodeGameSnapshot,
   encodeGameSnapshot,
@@ -33,7 +37,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BackgammonBoard } from "./features/board/BackgammonBoard";
 import { EngineSandboxPanel } from "./features/sandbox/EngineSandboxPanel";
+import { LegalMoveOutcomesPanel } from "./features/sandbox/LegalMoveOutcomesPanel";
 import { TurnHistoryPanel } from "./features/sandbox/TurnHistoryPanel";
+import { getMoveFingerprint } from "./features/sandbox/moveFingerprint";
 import {
   formatSelectablePoint,
   formatSelectedStep,
@@ -358,6 +364,20 @@ interface HistoryInspectionState {
   readonly view: InspectionView;
 }
 
+const getOutcomeByKey = (
+  analysisResult: AnalyzeLegalMoveOutcomesResult | null,
+  key: string | null
+) => {
+  if (analysisResult === null || !analysisResult.ok || key === null) {
+    return null;
+  }
+
+  return (
+    analysisResult.analysis.outcomes.find((outcome) => getMoveFingerprint(outcome.move) === key) ??
+    null
+  );
+};
+
 function App({
   initialGameState,
   randomSource,
@@ -397,6 +417,7 @@ function App({
     () => initialDurableState.turnHistory
   );
   const [historyInspection, setHistoryInspection] = useState<HistoryInspectionState | null>(null);
+  const [selectedOutcomeKey, setSelectedOutcomeKey] = useState<string | null>(null);
   const [importText, setImportText] = useState<string>("");
   const skipInitialPersistRef = useRef(true);
   const gameStatus = useMemo(() => getGameStatus(gameState.position), [gameState]);
@@ -411,6 +432,31 @@ function App({
     [historyInspection, turnHistory]
   );
   const isInspectingHistory = historyInspection !== null && inspectedTurn !== null;
+  const legalMoveOutcomesResult = useMemo<AnalyzeLegalMoveOutcomesResult | null>(() => {
+    if (
+      isInspectingHistory ||
+      openingRollState.phase !== "resolved" ||
+      gameStatus.state === "complete" ||
+      gameState.dice === null
+    ) {
+      return null;
+    }
+
+    return analyzeLegalMoveOutcomes(gameState.position, gameState.activePlayer, gameState.dice);
+  }, [
+    gameState.activePlayer,
+    gameState.dice,
+    gameState.position,
+    gameStatus.state,
+    isInspectingHistory,
+    openingRollState.phase
+  ]);
+  const selectedOutcome = useMemo(
+    () => getOutcomeByKey(legalMoveOutcomesResult, selectedOutcomeKey),
+    [legalMoveOutcomesResult, selectedOutcomeKey]
+  );
+  const isPreviewingOutcome = selectedOutcome !== null && !isInspectingHistory;
+  const isReadOnlyInspection = isInspectingHistory || isPreviewingOutcome;
 
   const stagedPrefixResult = useMemo(() => {
     if (
@@ -754,6 +800,7 @@ function App({
     setDieTwo(DEFAULT_MANUAL_DIE_TWO);
     setTurnHistory(nextTurnHistory);
     setHistoryInspection(null);
+    setSelectedOutcomeKey(null);
     resetTransientState();
 
     if (saveFailed) {
@@ -804,6 +851,7 @@ function App({
     setOpeningRollState(restoredOpening.openingRollState);
     setOpeningTurnPending(restoredOpening.openingTurnPending);
     setHistoryInspection(null);
+    setSelectedOutcomeKey(null);
     setImportText("");
     resetTransientState();
     setMessage("Snapshot imported.");
@@ -822,6 +870,7 @@ function App({
 
   const onSelectHistoryTurn = (turnNumber: number): void => {
     clearStagedSelection();
+    setSelectedOutcomeKey(null);
     setHistoryInspection({
       turnNumber,
       view: "after"
@@ -889,6 +938,17 @@ function App({
 
   const onReturnToCurrentGame = (): void => {
     setHistoryInspection(null);
+    setSelectedOutcomeKey(null);
+  };
+
+  const onSelectOutcome = (outcomeKey: string): void => {
+    clearStagedSelection();
+    setHistoryInspection(null);
+    setSelectedOutcomeKey(outcomeKey);
+  };
+
+  const onReturnFromOutcomePreview = (): void => {
+    setSelectedOutcomeKey(null);
   };
 
   const onSelectSource = (source: SelectableSource): void => {
@@ -947,14 +1007,14 @@ function App({
   };
 
   const selectableSources =
-    !isInspectingHistory &&
+    !isReadOnlyInspection &&
     gameState.dice !== null &&
     gameStatus.state !== "complete" &&
     legalMovesResult.ok
       ? getSelectableSources(candidateMoves, selectedSteps)
       : [];
   const selectableDestinations =
-    !isInspectingHistory &&
+    !isReadOnlyInspection &&
     selectedSource !== null &&
     gameState.dice !== null &&
     gameStatus.state !== "complete" &&
@@ -1077,7 +1137,7 @@ function App({
   }, [candidateMoves, selectedSteps.length]);
 
   const breadcrumb = (() => {
-    if (isInspectingHistory) {
+    if (isReadOnlyInspection) {
       return "";
     }
 
@@ -1108,7 +1168,7 @@ function App({
     !openingTurnPending &&
     gameStatus.state !== "complete" &&
     gameState.dice === null &&
-    !isInspectingHistory;
+    !isReadOnlyInspection;
   const canSetDiceManually = canRollDice;
   const canCopySnapshot =
     typeof navigator !== "undefined" &&
@@ -1119,7 +1179,9 @@ function App({
     ? historyInspection?.view === "before"
       ? inspectedTurn.positionBefore
       : inspectedTurn.positionAfter
-    : stagedPosition;
+    : isPreviewingOutcome
+      ? selectedOutcome.positionAfter
+      : stagedPosition;
 
   const interactionStatus = (() => {
     if (gameStatus.state === "complete") {
@@ -1128,6 +1190,10 @@ function App({
 
     if (isInspectingHistory && historyInspection !== null) {
       return `Inspecting turn ${historyInspection.turnNumber} (${historyInspection.view})`;
+    }
+
+    if (isPreviewingOutcome) {
+      return "Move Outcome Preview";
     }
 
     if (openingRollState.phase === "waiting") {
@@ -1162,7 +1228,7 @@ function App({
   })();
 
   const hoverPreviewText = (() => {
-    if (isInspectingHistory) {
+    if (isReadOnlyInspection) {
       return "";
     }
 
@@ -1190,7 +1256,7 @@ function App({
   };
 
   const shouldShowUndoSelection =
-    !isInspectingHistory && (selectedSteps.length > 0 || selectedSource !== null);
+    !isReadOnlyInspection && (selectedSteps.length > 0 || selectedSource !== null);
 
   return (
     <div className={styles.appFrame}>
@@ -1216,20 +1282,25 @@ function App({
               )
             </p>
           ) : null}
+          {isPreviewingOutcome ? (
+            <p className={styles.selectionMeta} data-testid="move-outcome-preview-banner">
+              Move Outcome Preview
+            </p>
+          ) : null}
           <BackgammonBoard
             position={boardPosition}
             activePlayer={boardActivePlayer}
-            showActivePlayer={openingResolved && !isInspectingHistory}
+            showActivePlayer={openingResolved && !isReadOnlyInspection}
             selectableSources={selectableSources}
             selectableDestinations={selectableDestinations}
-            previewSources={isInspectingHistory ? [] : previewSources}
-            previewDestinations={isInspectingHistory ? [] : previewDestinations}
+            previewSources={isReadOnlyInspection ? [] : previewSources}
+            previewDestinations={isReadOnlyInspection ? [] : previewDestinations}
             hoveredDestination={hoveredDestination}
             selectedSource={selectedSource}
-            {...(isInspectingHistory ? {} : { onSelectSource })}
-            {...(isInspectingHistory ? {} : { onSelectDestination })}
-            {...(isInspectingHistory ? {} : { onHoverDestination })}
-            {...(isInspectingHistory ? {} : { onClearHoveredDestination })}
+            {...(isReadOnlyInspection ? {} : { onSelectSource })}
+            {...(isReadOnlyInspection ? {} : { onSelectDestination })}
+            {...(isReadOnlyInspection ? {} : { onHoverDestination })}
+            {...(isReadOnlyInspection ? {} : { onClearHoveredDestination })}
             {...(shouldShowUndoSelection ? { onCancelSelection: onUndoLastStep } : {})}
           />
           <p className={styles.selectionMeta} data-testid="interaction-status" aria-live="polite">
@@ -1243,9 +1314,9 @@ function App({
           </p>
           <section className={styles.candidatePanel} aria-label="Remaining move candidates">
             <h3>Remaining candidates</h3>
-            {isInspectingHistory ? (
+            {isReadOnlyInspection ? (
               <p className={styles.selectionMeta} data-testid="candidate-panel-locked">
-                Candidate previews are hidden while inspecting history.
+                Candidate previews are hidden while inspecting a read-only position.
               </p>
             ) : null}
             <p
@@ -1253,9 +1324,9 @@ function App({
               data-testid="continuations-count"
               aria-live="polite"
             >
-              Continuations: {isInspectingHistory ? 0 : continuationSummaryRows.length}
+              Continuations: {isReadOnlyInspection ? 0 : continuationSummaryRows.length}
             </p>
-            {!isInspectingHistory && continuationSummaryRows.length > 0 ? (
+            {!isReadOnlyInspection && continuationSummaryRows.length > 0 ? (
               <ul className={styles.candidateList} data-testid="candidate-continuations">
                 {continuationSummaryRows.map((row) => (
                   <li key={`continuation-${row.stepText}`}>
@@ -1274,9 +1345,9 @@ function App({
               data-testid="completed-moves-count"
               aria-live="polite"
             >
-              Completed moves: {isInspectingHistory ? 0 : completedMoveSummaryRows.length}
+              Completed moves: {isReadOnlyInspection ? 0 : completedMoveSummaryRows.length}
             </p>
-            {!isInspectingHistory && completedMoveSummaryRows.length > 0 ? (
+            {!isReadOnlyInspection && completedMoveSummaryRows.length > 0 ? (
               <ul className={styles.candidateList} data-testid="candidate-completed-moves">
                 {completedMoveSummaryRows.map((row) => (
                   <li key={`completed-${row.moveText}`}>
@@ -1311,6 +1382,18 @@ function App({
             onSelectNextTurn={onSelectNextInspectionTurn}
             onReturnToCurrentGame={onReturnToCurrentGame}
           />
+
+          <LegalMoveOutcomesPanel
+            openingRollPhase={openingRollState.phase}
+            gameComplete={gameStatus.state === "complete"}
+            turnDiceAssigned={gameState.dice !== null}
+            isInspectingHistory={isInspectingHistory}
+            analysisResult={legalMoveOutcomesResult}
+            selectedOutcomeKey={selectedOutcomeKey}
+            previewActive={isPreviewingOutcome}
+            onSelectOutcome={onSelectOutcome}
+            onReturnToCurrentGame={onReturnFromOutcomePreview}
+          />
         </section>
 
         <EngineSandboxPanel
@@ -1324,7 +1407,7 @@ function App({
           onDieTwoChange={setDieTwo}
           openingRollState={openingRollState}
           openingTurnPending={openingTurnPending}
-          interactionLocked={isInspectingHistory}
+          interactionLocked={isReadOnlyInspection}
           canRollDice={canRollDice}
           canSetDiceManually={canSetDiceManually}
           exportSnapshotText={exportSnapshotText}

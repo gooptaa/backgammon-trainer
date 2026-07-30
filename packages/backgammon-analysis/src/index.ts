@@ -1,4 +1,10 @@
-import type { GameState } from "@backgammon-trainer/backgammon-engine";
+import {
+  applyMove,
+  getLegalMoves,
+  type DiceRoll,
+  type GameState,
+  type Move
+} from "@backgammon-trainer/backgammon-engine";
 
 export type Position = GameState["position"];
 export type Player = GameState["activePlayer"];
@@ -84,6 +90,31 @@ export interface PositionFeatureDelta {
     readonly pipCountLeaderAfter: PipCountLeader;
   };
 }
+
+export interface LegalMoveOutcome {
+  readonly move: Move;
+  readonly positionAfter: Position;
+  readonly analysisAfter: PositionAnalysis;
+  readonly featureDelta: PositionFeatureDelta;
+}
+
+export interface LegalMoveOutcomeAnalysis {
+  readonly player: Player;
+  readonly dice: DiceRoll;
+  readonly positionBefore: PositionAnalysis;
+  readonly outcomes: readonly LegalMoveOutcome[];
+}
+
+export type AnalyzeLegalMoveOutcomesResult =
+  | {
+      readonly ok: true;
+      readonly analysis: LegalMoveOutcomeAnalysis;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: "engine-transition-failed";
+      readonly message: string;
+    };
 
 const POINTS: readonly PointIdentifier[] = [
   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24
@@ -237,10 +268,10 @@ const getPlayerDelta = (
   };
 };
 
-export const comparePositions = (before: Position, after: Position): PositionFeatureDelta => {
-  const beforeAnalysis = analyzePosition(before);
-  const afterAnalysis = analyzePosition(after);
-
+const buildPositionFeatureDelta = (
+  beforeAnalysis: PositionAnalysis,
+  afterAnalysis: PositionAnalysis
+): PositionFeatureDelta => {
   return {
     white: getPlayerDelta(beforeAnalysis.white, afterAnalysis.white),
     black: getPlayerDelta(beforeAnalysis.black, afterAnalysis.black),
@@ -254,4 +285,114 @@ export const comparePositions = (before: Position, after: Position): PositionFea
       pipCountLeaderAfter: afterAnalysis.relationship.pipCountLeader
     }
   };
+};
+
+const cloneMove = (move: Move): Move => {
+  return {
+    player: move.player,
+    steps: move.steps.map((step) => ({
+      kind: step.kind,
+      fromPoint: step.fromPoint,
+      toPoint: step.toPoint,
+      dieValue: step.dieValue,
+      dieIndex: step.dieIndex,
+      hitsBlot: step.hitsBlot,
+      ...(step.hit === undefined
+        ? {}
+        : {
+            hit: {
+              player: step.hit.player,
+              point: step.hit.point
+            }
+          })
+    }))
+  };
+};
+
+const clonePosition = (position: Position): Position => {
+  const nextPoints: Record<PointIdentifier, Position["points"][PointIdentifier]> = {
+    ...position.points
+  };
+
+  for (const point of POINTS) {
+    const occupancy = position.points[point];
+
+    nextPoints[point] =
+      occupancy === null
+        ? null
+        : {
+            player: occupancy.player,
+            checkerCount: occupancy.checkerCount
+          };
+  }
+
+  return {
+    points: nextPoints,
+    bar: {
+      white: position.bar.white,
+      black: position.bar.black
+    },
+    borneOff: {
+      white: position.borneOff.white,
+      black: position.borneOff.black
+    }
+  };
+};
+
+const cloneDice = (dice: DiceRoll): DiceRoll => {
+  return {
+    dice: [dice.dice[0], dice.dice[1]]
+  };
+};
+
+export const analyzeLegalMoveOutcomes = (
+  position: Position,
+  player: Player,
+  dice: DiceRoll
+): AnalyzeLegalMoveOutcomesResult => {
+  const legalMoves = getLegalMoves({
+    position,
+    player,
+    roll: dice
+  }).moves;
+  const positionBefore = analyzePosition(position);
+  const outcomes: LegalMoveOutcome[] = [];
+
+  for (const move of legalMoves) {
+    const applied = applyMove(position, player, dice, move);
+
+    if (!applied.ok) {
+      return {
+        ok: false,
+        reason: "engine-transition-failed",
+        message: `Engine failed to apply a legal move: ${applied.reason}.`
+      };
+    }
+
+    const analysisAfter = analyzePosition(applied.position);
+
+    outcomes.push({
+      move: cloneMove(move),
+      positionAfter: clonePosition(applied.position),
+      analysisAfter,
+      featureDelta: buildPositionFeatureDelta(positionBefore, analysisAfter)
+    });
+  }
+
+  return {
+    ok: true,
+    analysis: {
+      player,
+      dice: cloneDice(dice),
+      positionBefore,
+      outcomes
+    }
+  };
+};
+
+export const comparePositions = (before: Position, after: Position): PositionFeatureDelta => {
+  const beforeAnalysis = analyzePosition(before);
+  const afterAnalysis = analyzePosition(after);
+
+  return buildPositionFeatureDelta(beforeAnalysis, afterAnalysis);
 };

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@backgammon-trainer/ai-contracts": "workspace:*",
+    "@backgammon-trainer/backgammon-analysis": "workspace:*",
     "@backgammon-trainer/backgammon-domain": "workspace:*",
     "@backgammon-trainer/backgammon-engine": "workspace:*",
     "@backgammon-trainer/shared": "workspace:*",

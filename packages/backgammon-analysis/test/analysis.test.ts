@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest";
+import {
+  applyMove,
+  getLegalMoves,
+  type DiceRoll,
+  type Move
+} from "@backgammon-trainer/backgammon-engine";
+import * as engineModule from "@backgammon-trainer/backgammon-engine";
+import { describe, expect, it, vi } from "vitest";
 import type { Position as AnalysisPosition } from "../src/index";
 
-import { analyzePosition, comparePositions } from "../src/index";
+import { analyzeLegalMoveOutcomes, analyzePosition, comparePositions } from "../src/index";
 
 type BoardPosition = AnalysisPosition;
 type Position = AnalysisPosition;
@@ -489,5 +496,417 @@ describe("comparePositions", () => {
 
     expect(delta.relationship.contactStatusBefore).toBe("contact");
     expect(delta.relationship.contactStatusAfter).toBe("race");
+  });
+});
+
+const moveKey = (move: Move): string => {
+  return move.steps
+    .map((step) => {
+      const hitKey = step.hit === undefined ? "" : `:${step.hit.player}:${step.hit.point}`;
+      return `${step.kind}:${step.fromPoint}:${step.toPoint}:${step.dieValue}:${step.dieIndex}:${step.hitsBlot}${hitKey}`;
+    })
+    .join("|");
+};
+
+const findMoveBySteps = (
+  moves: readonly Move[],
+  steps: ReadonlyArray<{ fromPoint: number | "bar"; toPoint: number | "off" }>
+): Move => {
+  const found = moves.find(
+    (move) =>
+      move.steps.length === steps.length &&
+      steps.every(
+        (step, index) =>
+          move.steps[index]?.fromPoint === step.fromPoint &&
+          move.steps[index]?.toPoint === step.toPoint
+      )
+  );
+
+  if (found === undefined) {
+    throw new Error(`Expected move with steps ${JSON.stringify(steps)}`);
+  }
+
+  return found;
+};
+
+describe("analyzeLegalMoveOutcomes", () => {
+  it("returns one outcome per complete legal move and preserves engine ordering", () => {
+    const dice: DiceRoll = { dice: [5, 3] };
+    const legalMoves = getLegalMoves({
+      position: STANDARD_STARTING_POSITION,
+      player: "white",
+      roll: dice
+    }).moves;
+
+    const result = analyzeLegalMoveOutcomes(STANDARD_STARTING_POSITION, "white", dice);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.analysis.outcomes).toHaveLength(legalMoves.length);
+    expect(result.analysis.outcomes.map((outcome) => moveKey(outcome.move))).toEqual(
+      legalMoves.map((move) => moveKey(move))
+    );
+  });
+
+  it("returns an empty outcomes list when no legal move exists", () => {
+    const noMovePosition = createPosition({
+      points: {
+        8: { player: "white", checkerCount: 1 },
+        7: { player: "black", checkerCount: 2 }
+      },
+      borneOff: {
+        white: 14,
+        black: 13
+      }
+    });
+    const result = analyzeLegalMoveOutcomes(noMovePosition, "white", { dice: [1, 1] });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.analysis.outcomes).toHaveLength(0);
+  });
+
+  it("does not mutate input position or dice", () => {
+    const positionBefore = JSON.parse(JSON.stringify(STANDARD_STARTING_POSITION)) as Position;
+    const dice: DiceRoll = { dice: [5, 3] };
+    const diceBefore = JSON.parse(JSON.stringify(dice)) as DiceRoll;
+
+    const result = analyzeLegalMoveOutcomes(STANDARD_STARTING_POSITION, "white", dice);
+
+    expect(result.ok).toBe(true);
+    expect(STANDARD_STARTING_POSITION).toEqual(positionBefore);
+    expect(dice).toEqual(diceBefore);
+  });
+
+  it("preserves canonical move metadata including die indices and hit metadata", () => {
+    const hitPosition = createPosition({
+      points: {
+        8: { player: "white", checkerCount: 1 },
+        7: { player: "black", checkerCount: 1 },
+        5: { player: "white", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 13,
+        black: 14
+      }
+    });
+    const dice: DiceRoll = { dice: [1, 2] };
+    const legalMoves = getLegalMoves({ position: hitPosition, player: "white", roll: dice }).moves;
+    const hitMove = findMoveBySteps(legalMoves, [
+      { fromPoint: 8, toPoint: 7 },
+      { fromPoint: 5, toPoint: 3 }
+    ]);
+
+    const result = analyzeLegalMoveOutcomes(hitPosition, "white", dice);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const outcome = result.analysis.outcomes.find(
+      (entry) => moveKey(entry.move) === moveKey(hitMove)
+    );
+    expect(outcome).toBeDefined();
+    expect(outcome?.move.steps[0]?.dieIndex).toBe(hitMove.steps[0]?.dieIndex);
+    expect(outcome?.move.steps[0]?.hitsBlot).toBe(true);
+    expect(outcome?.move.steps[0]?.hit).toEqual({ player: "black", point: 7 });
+  });
+
+  it("keeps distinct canonical moves distinct even when results can coincide", () => {
+    const position = createPosition({
+      points: {
+        8: { player: "white", checkerCount: 2 }
+      },
+      borneOff: {
+        white: 13,
+        black: 15
+      }
+    });
+    const dice: DiceRoll = { dice: [1, 1] };
+    const legalMoves = getLegalMoves({ position, player: "white", roll: dice }).moves;
+
+    const result = analyzeLegalMoveOutcomes(position, "white", dice);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(new Set(result.analysis.outcomes.map((outcome) => moveKey(outcome.move))).size).toBe(
+      legalMoves.length
+    );
+  });
+
+  it("matches direct engine application and direct feature computations for each outcome", () => {
+    const position = STANDARD_STARTING_POSITION;
+    const dice: DiceRoll = { dice: [5, 3] };
+    const result = analyzeLegalMoveOutcomes(position, "white", dice);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    for (const outcome of result.analysis.outcomes) {
+      const applied = applyMove(position, "white", dice, outcome.move);
+      expect(applied.ok).toBe(true);
+      if (!applied.ok) {
+        continue;
+      }
+
+      expect(outcome.positionAfter).toEqual(applied.position);
+      expect(outcome.analysisAfter).toEqual(analyzePosition(applied.position));
+      expect(outcome.featureDelta).toEqual(comparePositions(position, applied.position));
+      expect(outcome.featureDelta.white.pipCountDelta).toBe(
+        outcome.analysisAfter.white.pipCount - result.analysis.positionBefore.white.pipCount
+      );
+      expect(outcome.featureDelta.black.pipCountDelta).toBe(
+        outcome.analysisAfter.black.pipCount - result.analysis.positionBefore.black.pipCount
+      );
+    }
+  });
+
+  it("reports hit outcomes with opponent bar increase", () => {
+    const position = createPosition({
+      points: {
+        8: { player: "white", checkerCount: 1 },
+        7: { player: "black", checkerCount: 1 },
+        5: { player: "white", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 13,
+        black: 14
+      }
+    });
+    const result = analyzeLegalMoveOutcomes(position, "white", { dice: [1, 2] });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const hitOutcome = result.analysis.outcomes.find((outcome) => outcome.move.steps[0]?.hitsBlot);
+    expect(hitOutcome).toBeDefined();
+    expect(hitOutcome?.featureDelta.black.barCountDelta).toBe(1);
+  });
+
+  it("reports point-making and blot-leaving deltas", () => {
+    const position = createPosition({
+      points: {
+        8: { player: "white", checkerCount: 2 },
+        7: { player: "white", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 12,
+        black: 15
+      }
+    });
+    const result = analyzeLegalMoveOutcomes(position, "white", { dice: [1, 2] });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const makePoint = result.analysis.outcomes.find((outcome) =>
+      outcome.move.steps.some((step) => step.toPoint === 6)
+    );
+    const leaveBlot = result.analysis.outcomes.find((outcome) =>
+      outcome.move.steps.some((step) => step.fromPoint === 7)
+    );
+
+    expect(makePoint).toBeDefined();
+    expect(makePoint?.featureDelta.white.madePointCountDelta).toBeGreaterThanOrEqual(0);
+    expect(leaveBlot).toBeDefined();
+    expect(leaveBlot?.featureDelta.white.blotCountDelta).toBeGreaterThanOrEqual(0);
+  });
+
+  it("analyzes bar-entry, bearing-off, same-checker-twice, and black-direction outcomes", () => {
+    const barEntryPosition = createPosition({
+      points: {
+        8: { player: "white", checkerCount: 1 }
+      },
+      bar: {
+        white: 1
+      },
+      borneOff: {
+        white: 13,
+        black: 14
+      }
+    });
+    const barResult = analyzeLegalMoveOutcomes(barEntryPosition, "white", { dice: [1, 2] });
+    expect(barResult.ok).toBe(true);
+    if (barResult.ok) {
+      const entryOutcome = barResult.analysis.outcomes.find((outcome) =>
+        outcome.move.steps.some((step) => step.kind === "enter-from-bar")
+      );
+      expect(entryOutcome).toBeDefined();
+      expect(entryOutcome?.featureDelta.white.barCountDelta).toBeLessThan(0);
+    }
+
+    const bearOffPosition = createPosition({
+      points: {
+        6: { player: "white", checkerCount: 1 },
+        5: { player: "white", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 13,
+        black: 14
+      }
+    });
+    const bearOffResult = analyzeLegalMoveOutcomes(bearOffPosition, "white", { dice: [6, 1] });
+    expect(bearOffResult.ok).toBe(true);
+    if (bearOffResult.ok) {
+      const offOutcome = bearOffResult.analysis.outcomes.find((outcome) =>
+        outcome.move.steps.some((step) => step.kind === "bear-off")
+      );
+      expect(offOutcome).toBeDefined();
+      expect(offOutcome?.featureDelta.white.borneOffCountDelta).toBeGreaterThan(0);
+      expect(offOutcome?.featureDelta.white.pipCountDelta).toBeLessThan(0);
+    }
+
+    const sameCheckerPosition = createPosition({
+      points: {
+        8: { player: "white", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 14,
+        black: 14
+      }
+    });
+    const sameCheckerResult = analyzeLegalMoveOutcomes(sameCheckerPosition, "white", {
+      dice: [1, 2]
+    });
+    expect(sameCheckerResult.ok).toBe(true);
+    if (sameCheckerResult.ok) {
+      const twoStepOutcome = sameCheckerResult.analysis.outcomes.find(
+        (outcome) =>
+          outcome.move.steps.length === 2 &&
+          outcome.move.steps[0]?.fromPoint === 8 &&
+          outcome.move.steps[0]?.toPoint === 7 &&
+          outcome.move.steps[1]?.fromPoint === 7 &&
+          outcome.move.steps[1]?.toPoint === 5
+      );
+      expect(twoStepOutcome).toBeDefined();
+    }
+
+    const blackPosition = createPosition({
+      points: {
+        1: { player: "black", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 14,
+        black: 14
+      }
+    });
+    const blackResult = analyzeLegalMoveOutcomes(blackPosition, "black", { dice: [1, 6] });
+    expect(blackResult.ok).toBe(true);
+    if (blackResult.ok) {
+      expect(
+        blackResult.analysis.outcomes.some((outcome) => outcome.analysisAfter.black.pipCount >= 0)
+      ).toBe(true);
+    }
+  });
+
+  it("reports relationship transitions including contact-to-race and race-to-race", () => {
+    const contactPosition = createPosition({
+      points: {
+        13: { player: "white", checkerCount: 1 },
+        12: { player: "black", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 14,
+        black: 14
+      }
+    });
+    const contactResult = analyzeLegalMoveOutcomes(contactPosition, "white", { dice: [6, 1] });
+
+    expect(contactResult.ok).toBe(true);
+    if (contactResult.ok) {
+      expect(
+        contactResult.analysis.outcomes.some(
+          (outcome) =>
+            outcome.featureDelta.relationship.contactStatusBefore === "contact" &&
+            outcome.featureDelta.relationship.contactStatusAfter === "race"
+        )
+      ).toBe(true);
+    }
+
+    const racePosition = createPosition({
+      points: {
+        1: { player: "white", checkerCount: 1 },
+        24: { player: "black", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 14,
+        black: 14
+      }
+    });
+    const raceResult = analyzeLegalMoveOutcomes(racePosition, "white", { dice: [1, 1] });
+
+    expect(raceResult.ok).toBe(true);
+    if (raceResult.ok) {
+      expect(
+        raceResult.analysis.outcomes.every(
+          (outcome) =>
+            outcome.featureDelta.relationship.contactStatusBefore === "race" &&
+            outcome.featureDelta.relationship.contactStatusAfter === "race"
+        )
+      ).toBe(true);
+    }
+  });
+
+  it("returns stable results across repeated calls and isolates nested references", () => {
+    const dice: DiceRoll = { dice: [5, 3] };
+    const first = analyzeLegalMoveOutcomes(STANDARD_STARTING_POSITION, "white", dice);
+    const second = analyzeLegalMoveOutcomes(STANDARD_STARTING_POSITION, "white", dice);
+
+    expect(first).toEqual(second);
+    expect(first.ok).toBe(true);
+    if (!first.ok) {
+      return;
+    }
+
+    expect(first.analysis.outcomes.length).toBeGreaterThan(1);
+    const firstOutcome = first.analysis.outcomes[0];
+    const secondOutcome = first.analysis.outcomes[1];
+    if (firstOutcome === undefined || secondOutcome === undefined) {
+      throw new Error("Expected at least two outcomes.");
+    }
+
+    const originalSecondPip = secondOutcome.analysisAfter.white.pipCount;
+    const mutableFirst = firstOutcome as unknown as {
+      analysisAfter: { white: { pipCount: number } };
+      move: { steps: Array<{ dieIndex: number }> };
+    };
+    mutableFirst.analysisAfter.white.pipCount = -999;
+    mutableFirst.move.steps[0]!.dieIndex = 3;
+
+    expect(secondOutcome.analysisAfter.white.pipCount).toBe(originalSecondPip);
+    expect(secondOutcome.move.steps[0]?.dieIndex).not.toBe(3);
+  });
+
+  it("surfaces engine/legal-move invariant failures through the explicit failure contract", () => {
+    const applyMoveSpy = vi.spyOn(engineModule, "applyMove");
+    applyMoveSpy.mockReturnValueOnce({ ok: false, reason: "illegal-move" });
+
+    const result = analyzeLegalMoveOutcomes(STANDARD_STARTING_POSITION, "white", {
+      dice: [5, 3]
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("engine-transition-failed");
+      expect(result.message).toContain("legal move");
+    }
+
+    applyMoveSpy.mockRestore();
   });
 });

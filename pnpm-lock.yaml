@@ -68,6 +68,9 @@ importers:
       "@backgammon-trainer/ai-contracts":
         specifier: workspace:*
         version: link:../../packages/ai-contracts
+      "@backgammon-trainer/backgammon-analysis":
+        specifier: workspace:*
+        version: link:../../packages/backgammon-analysis
       "@backgammon-trainer/backgammon-domain":
         specifier: workspace:*
         version: link:../../packages/backgammon-domain
