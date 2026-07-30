@@ -89,6 +89,42 @@ const renderApp = (initialGameState?: GameState): void => {
   render(<App {...(initialGameState === undefined ? {} : { initialGameState })} />);
 };
 
+const applyFirstInteractiveMove = (): void => {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const sourceButtons = screen.queryAllByRole("button", {
+      name: /Select source (point|bar)/i
+    });
+
+    if (sourceButtons.length === 0) {
+      return;
+    }
+
+    fireEvent.click(sourceButtons[0] as HTMLElement);
+
+    const offDestination = screen.queryByRole("button", {
+      name: /Select destination off/i
+    });
+
+    if (offDestination !== null) {
+      fireEvent.click(offDestination);
+    } else {
+      const destinationButtons = screen.queryAllByRole("button", {
+        name: /Select destination point/i
+      });
+
+      if (destinationButtons.length === 0) {
+        return;
+      }
+
+      fireEvent.click(destinationButtons[0] as HTMLElement);
+    }
+
+    if (screen.getByTestId("turn-dice-value").textContent?.includes("not set") === true) {
+      return;
+    }
+  }
+};
+
 afterEach(() => {
   cleanup();
 });
@@ -123,7 +159,10 @@ describe("App engine game sandbox", () => {
 
     setDice("1", "2");
 
-    expect(screen.getAllByRole("button", { name: /Apply:/i }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("button", { name: /Select source (point|bar)/i }).length
+    ).toBeGreaterThan(0);
+    expect(screen.getByText(/Legal completed moves:/i)).toBeInTheDocument();
   });
 
   it("applying a legal move updates position", () => {
@@ -136,7 +175,7 @@ describe("App engine game sandbox", () => {
       .filter((value) => value.startsWith("Point "));
 
     setDice("1", "2");
-    fireEvent.click(screen.getAllByRole("button", { name: /Apply:/i })[0] as HTMLElement);
+    applyFirstInteractiveMove();
 
     const afterPointLabels = screen
       .getAllByRole("group")
@@ -151,7 +190,7 @@ describe("App engine game sandbox", () => {
     renderApp();
 
     setDice("1", "2");
-    fireEvent.click(screen.getAllByRole("button", { name: /Apply:/i })[0] as HTMLElement);
+    applyFirstInteractiveMove();
 
     const boardRegion = screen.getByRole("region", { name: "Graphical backgammon board" });
     expect(within(boardRegion).getByText("Active player: black")).toBeInTheDocument();
@@ -161,10 +200,12 @@ describe("App engine game sandbox", () => {
     renderApp();
 
     setDice("1", "2");
-    fireEvent.click(screen.getAllByRole("button", { name: /Apply:/i })[0] as HTMLElement);
+    applyFirstInteractiveMove();
 
     expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
-    expect(screen.queryByRole("button", { name: /Apply:/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Select source (point|bar)/i })
+    ).not.toBeInTheDocument();
   });
 
   it("pass is available only when no legal move exists", () => {

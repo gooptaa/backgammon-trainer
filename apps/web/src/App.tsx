@@ -9,14 +9,24 @@ import {
   type ApplyGameMoveFailureReason,
   type GameState,
   type PassTurnFailureReason,
-  type SetDiceFailureReason
+  type SetDiceFailureReason,
+  type Move
 } from "@backgammon-trainer/backgammon-engine";
 import { STANDARD_STARTING_POSITION, type DieValue } from "@backgammon-trainer/backgammon-domain";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { BackgammonBoard } from "./features/board/BackgammonBoard";
 import { EngineSandboxPanel } from "./features/sandbox/EngineSandboxPanel";
-import { formatMove } from "./features/sandbox/formatMove";
+import {
+  filterCandidateMoves,
+  getSelectableDestinations,
+  getSelectableSources,
+  getSingleCompletedMove,
+  moveStartsWithSelectedSteps,
+  type SelectableDestination,
+  type SelectableSource,
+  type SelectedStep
+} from "./features/sandbox/moveSelection";
 
 const createInitialGameState = (): GameState => {
   return createGameState(STANDARD_STARTING_POSITION, "white");
@@ -69,8 +79,45 @@ function App({ initialGameState }: AppProps): JSX.Element {
   const [dieOne, setDieOne] = useState<DieValue>(1);
   const [dieTwo, setDieTwo] = useState<DieValue>(2);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedSteps, setSelectedSteps] = useState<readonly SelectedStep[]>([]);
+  const [selectedSource, setSelectedSource] = useState<SelectableSource | null>(null);
   const gameStatus = useMemo(() => getGameStatus(gameState.position), [gameState]);
   const legalMovesResult = useMemo(() => getLegalMovesForState(gameState), [gameState]);
+  const legalMoves = legalMovesResult.ok ? legalMovesResult.moves : [];
+  const candidateMoves = useMemo<readonly Move[]>(() => {
+    if (!legalMovesResult.ok || gameStatus.state === "complete" || gameState.dice === null) {
+      return [];
+    }
+
+    return filterCandidateMoves(legalMovesResult.moves, selectedSteps);
+  }, [gameState.dice, gameStatus.state, legalMovesResult, selectedSteps]);
+
+  useEffect(() => {
+    if (gameState.dice === null || !legalMovesResult.ok || gameStatus.state === "complete") {
+      if (selectedSteps.length > 0) {
+        setSelectedSteps([]);
+      }
+
+      if (selectedSource !== null) {
+        setSelectedSource(null);
+      }
+
+      return;
+    }
+
+    if (!legalMovesResult.moves.some((move) => moveStartsWithSelectedSteps(move, selectedSteps))) {
+      if (selectedSteps.length > 0 || selectedSource !== null) {
+        setSelectedSteps([]);
+        setSelectedSource(null);
+        setMessage("Move selection reset because legal options changed.");
+      }
+    }
+  }, [gameState.dice, gameStatus.state, legalMovesResult, selectedSource, selectedSteps]);
+
+  const resetMoveSelection = (): void => {
+    setSelectedSteps([]);
+    setSelectedSource(null);
+  };
 
   const onSetDice = (): void => {
     const result = setDice(gameState, {
@@ -83,6 +130,7 @@ function App({ initialGameState }: AppProps): JSX.Element {
     }
 
     setGameState(result.state);
+    resetMoveSelection();
     setMessage(null);
   };
 
@@ -95,6 +143,7 @@ function App({ initialGameState }: AppProps): JSX.Element {
     }
 
     setGameState(result.state);
+    resetMoveSelection();
     if (result.status.state === "complete") {
       setMessage(`Game complete: ${result.status.winner} wins.`);
       return;
@@ -112,8 +161,61 @@ function App({ initialGameState }: AppProps): JSX.Element {
     }
 
     setGameState(result.state);
+    resetMoveSelection();
     setMessage("Turn passed.");
   };
+
+  const onSelectSource = (source: SelectableSource): void => {
+    setSelectedSource(source);
+    setMessage(null);
+  };
+
+  const onSelectDestination = (destination: SelectableDestination): void => {
+    if (selectedSource === null) {
+      return;
+    }
+
+    const nextSelectedSteps: readonly SelectedStep[] = [
+      ...selectedSteps,
+      {
+        fromPoint: selectedSource,
+        toPoint: destination
+      }
+    ];
+
+    const nextCandidates = filterCandidateMoves(legalMoves, nextSelectedSteps);
+
+    if (nextCandidates.length === 0) {
+      setMessage("That step is not part of any legal move sequence.");
+      setSelectedSource(null);
+      return;
+    }
+
+    setSelectedSteps(nextSelectedSteps);
+    setSelectedSource(null);
+
+    const completedMove = getSingleCompletedMove(nextCandidates, nextSelectedSteps);
+
+    if (completedMove !== null) {
+      onApplyMove(completedMove);
+      return;
+    }
+
+    setMessage("Step selected. Choose the next source point.");
+  };
+
+  const selectableSources =
+    gameState.dice !== null && gameStatus.state !== "complete" && legalMovesResult.ok
+      ? getSelectableSources(candidateMoves, selectedSteps)
+      : [];
+  const selectableDestinations =
+    selectedSource !== null &&
+    gameState.dice !== null &&
+    gameStatus.state !== "complete" &&
+    legalMovesResult.ok
+      ? getSelectableDestinations(candidateMoves, selectedSteps, selectedSource)
+      : [];
+  const shouldShowCancelSelection = selectedSteps.length > 0 || selectedSource !== null;
 
   return (
     <div className={styles.appFrame}>
@@ -133,7 +235,16 @@ function App({ initialGameState }: AppProps): JSX.Element {
       <main className={styles.mainLayout}>
         <section aria-labelledby="board-workspace-title" className={styles.boardSection}>
           <h2 id="board-workspace-title">Board Workspace</h2>
-          <BackgammonBoard position={gameState.position} activePlayer={gameState.activePlayer} />
+          <BackgammonBoard
+            position={gameState.position}
+            activePlayer={gameState.activePlayer}
+            selectableSources={selectableSources}
+            selectableDestinations={selectableDestinations}
+            selectedSource={selectedSource}
+            onSelectSource={onSelectSource}
+            onSelectDestination={onSelectDestination}
+            {...(shouldShowCancelSelection ? { onCancelSelection: resetMoveSelection } : {})}
+          />
           <div className={styles.controlsRow}>
             <button type="button" disabled>
               Hint
@@ -151,11 +262,9 @@ function App({ initialGameState }: AppProps): JSX.Element {
           dieTwo={dieTwo}
           message={message}
           legalMovesResult={legalMovesResult}
-          formatMove={formatMove}
           onDieOneChange={setDieOne}
           onDieTwoChange={setDieTwo}
           onSetDice={onSetDice}
-          onApplyMove={onApplyMove}
           onPassTurn={onPassTurn}
         />
       </main>

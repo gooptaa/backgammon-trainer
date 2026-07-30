@@ -1,8 +1,7 @@
 import type {
   GameState,
   GameStatus,
-  GetLegalMovesForStateResult,
-  Move
+  GetLegalMovesForStateResult
 } from "@backgammon-trainer/backgammon-engine";
 import { POINT_INDEXES, type DieValue } from "@backgammon-trainer/backgammon-domain";
 
@@ -15,11 +14,9 @@ interface EngineSandboxPanelProps {
   dieTwo: DieValue;
   message: string | null;
   legalMovesResult: GetLegalMovesForStateResult;
-  formatMove: (move: Move) => string;
   onDieOneChange: (value: DieValue) => void;
   onDieTwoChange: (value: DieValue) => void;
   onSetDice: () => void;
-  onApplyMove: (move: Move) => void;
   onPassTurn: () => void;
 }
 
@@ -44,11 +41,9 @@ export function EngineSandboxPanel({
   dieTwo,
   message,
   legalMovesResult,
-  formatMove,
   onDieOneChange,
   onDieTwoChange,
   onSetDice,
-  onApplyMove,
   onPassTurn
 }: EngineSandboxPanelProps): JSX.Element {
   const isComplete = gameStatus.state === "complete";
@@ -122,20 +117,10 @@ export function EngineSandboxPanel({
 
       {gameState.dice !== null && !isComplete ? (
         legalMoves.length > 0 ? (
-          <ul className={styles.moveList} aria-label="Legal moves">
-            {legalMoves.map((move, index) => {
-              const label = formatMove(move);
-
-              return (
-                <li key={`${label}-${index}`}>
-                  <span className={styles.moveText}>{label}</span>
-                  <button type="button" onClick={() => onApplyMove(move)}>
-                    Apply: {label}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <p className={styles.meta}>
+            Legal completed moves: {legalMoves.length}. Select source and destination points on the
+            board to construct a legal move.
+          </p>
         ) : (
           <p className={styles.meta}>No legal moves for this roll. You may pass the turn.</p>
         )

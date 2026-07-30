@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { type BoardPosition } from "@backgammon-trainer/backgammon-domain";
 
 import { BackgammonBoard } from "./BackgammonBoard";
@@ -172,5 +172,73 @@ describe("BackgammonBoard", () => {
     expect(
       screen.getByRole("group", { name: "Point 24 (top right) is empty" })
     ).toBeInTheDocument();
+  });
+
+  it("renders selectable source controls and emits selection callbacks", () => {
+    const onSelectSource = vi.fn();
+    render(
+      <BackgammonBoard
+        position={STANDARD_STARTING_POSITION}
+        selectableSources={[13]}
+        onSelectSource={onSelectSource}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select source point 13 with 5 white checkers" })
+    );
+
+    expect(onSelectSource).toHaveBeenCalledWith(13);
+  });
+
+  it("renders selectable destination controls and emits destination callbacks", () => {
+    const onSelectDestination = vi.fn();
+    render(
+      <BackgammonBoard
+        position={STANDARD_STARTING_POSITION}
+        selectableDestinations={[8]}
+        onSelectDestination={onSelectDestination}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Select destination point 8" }));
+
+    expect(onSelectDestination).toHaveBeenCalledWith(8);
+  });
+
+  it("supports bar source selection and bearing-off destination selection", () => {
+    const onSelectSource = vi.fn();
+    const onSelectDestination = vi.fn();
+
+    render(
+      <BackgammonBoard
+        position={STANDARD_STARTING_POSITION}
+        activePlayer="white"
+        selectableSources={["bar"]}
+        selectableDestinations={["off"]}
+        onSelectSource={onSelectSource}
+        onSelectDestination={onSelectDestination}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Select source bar checker for white" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select destination off for white" }));
+
+    expect(onSelectSource).toHaveBeenCalledWith("bar");
+    expect(onSelectDestination).toHaveBeenCalledWith("off");
+  });
+
+  it("renders a cancel selection control when cancel handler is provided", () => {
+    const onCancelSelection = vi.fn();
+    render(
+      <BackgammonBoard
+        position={STANDARD_STARTING_POSITION}
+        onCancelSelection={onCancelSelection}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Selection" }));
+
+    expect(onCancelSelection).toHaveBeenCalledTimes(1);
   });
 });

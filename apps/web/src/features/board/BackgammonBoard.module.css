@@ -84,6 +84,10 @@
   gap: 0.22rem;
 }
 
+.selectableBar {
+  box-shadow: inset 0 0 0 2px rgba(214, 171, 127, 0.82);
+}
+
 .barLabel {
   margin: 0;
   font-size: 0.85rem;
@@ -97,11 +101,45 @@
   font-size: 0.9rem;
 }
 
+.barButton {
+  margin-top: 0.3rem;
+  border: 1px solid rgba(245, 238, 229, 0.62);
+  border-radius: 999px;
+  background: rgba(245, 238, 229, 0.18);
+  color: var(--bar-text);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.2rem 0.45rem;
+  cursor: pointer;
+}
+
+.barButton:hover {
+  background: rgba(245, 238, 229, 0.3);
+}
+
+.barButton:focus-visible {
+  outline: 2px solid #f5eee5;
+  outline-offset: 2px;
+}
+
 .pointColumn {
   position: relative;
   min-height: 166px;
   border-radius: 6px;
   overflow: hidden;
+}
+
+.selectableSourcePoint {
+  outline: 2px solid rgba(16, 80, 112, 0.48);
+  outline-offset: -2px;
+}
+
+.selectableDestinationPoint {
+  box-shadow: inset 0 0 0 3px rgba(14, 119, 72, 0.42);
+}
+
+.selectedSourcePoint {
+  box-shadow: inset 0 0 0 3px rgba(206, 116, 22, 0.8);
 }
 
 .pointTriangle {
@@ -135,6 +173,23 @@
   align-items: center;
   gap: 0.12rem;
   pointer-events: none;
+}
+
+.interactionButton {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  border: 0;
+  cursor: pointer;
+  background: transparent;
+  z-index: 3;
+}
+
+.interactionButton:focus-visible {
+  opacity: 1;
+  background: rgba(16, 80, 112, 0.12);
+  outline: 2px solid #105070;
+  outline-offset: -2px;
 }
 
 .stackTop {
@@ -200,6 +255,59 @@
   margin: 0;
   font-weight: 700;
   color: #1d2d3a;
+}
+
+.selectableOff {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px dashed rgba(14, 119, 72, 0.65);
+  border-radius: 8px;
+  padding: 0.24rem 0.4rem;
+}
+
+.offButton {
+  border: 1px solid rgba(17, 63, 90, 0.32);
+  border-radius: 999px;
+  background: #fffefb;
+  color: #173346;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.18rem 0.5rem;
+  cursor: pointer;
+}
+
+.offButton:hover {
+  background: #f2efe8;
+}
+
+.offButton:focus-visible {
+  outline: 2px solid #173346;
+  outline-offset: 1px;
+}
+
+.selectionControls {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cancelSelectionButton {
+  border: 1px solid rgba(17, 63, 90, 0.3);
+  border-radius: 8px;
+  background: #fffefb;
+  color: #173346;
+  font-weight: 700;
+  padding: 0.38rem 0.6rem;
+  cursor: pointer;
+}
+
+.cancelSelectionButton:hover {
+  background: #f0ece2;
+}
+
+.cancelSelectionButton:focus-visible {
+  outline: 2px solid #173346;
+  outline-offset: 1px;
 }
 
 @media (max-width: 900px) {
