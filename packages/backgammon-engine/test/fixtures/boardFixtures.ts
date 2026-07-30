@@ -1019,3 +1019,61 @@ export const BLACK_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE: BoardPosition = createPos
     black: 14
   }
 });
+
+/**
+ * White can move onto a point occupied by one own checker.
+ */
+export const WHITE_OWN_STACK_SINGLE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    7: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
+
+/**
+ * White can move onto a point occupied by multiple own checkers.
+ */
+export const WHITE_OWN_STACK_MULTIPLE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    7: { player: "white", checkerCount: 3 }
+  },
+  borneOff: {
+    white: 11,
+    black: 15
+  }
+});
+
+/**
+ * White can enter from bar onto a point already occupied by own checkers.
+ */
+export const WHITE_BAR_ENTRY_ON_OWN_POINT_FIXTURE: BoardPosition = createPosition({
+  points: {
+    24: { player: "white", checkerCount: 2 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 12,
+    black: 15
+  }
+});
+
+/**
+ * Branching non-double scenario used to audit ordering and duplicate output behavior.
+ */
+export const WHITE_ORDERING_AND_DUPLICATE_AUDIT_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    9: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});

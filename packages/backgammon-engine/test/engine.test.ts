@@ -51,6 +51,7 @@ import {
   WHITE_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
   WHITE_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
   WHITE_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
+  WHITE_BAR_ENTRY_ON_OWN_POINT_FIXTURE,
   WHITE_DOUBLE_BEAR_OFF_FEWER_PLAYS_FIXTURE,
   WHITE_DOUBLE_BEAR_OFF_FOUR_PLAYS_FIXTURE,
   WHITE_DOUBLE_BEAR_OFF_OVERSIZED_SHIFT_FIXTURE,
@@ -76,9 +77,29 @@ import {
   WHITE_TWO_DICE_INDEPENDENT_HITS_FIXTURE,
   WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
   WHITE_HIT_THEN_SECOND_MOVE_FIXTURE,
+  WHITE_ORDERING_AND_DUPLICATE_AUDIT_FIXTURE,
+  WHITE_OWN_STACK_MULTIPLE_FIXTURE,
+  WHITE_OWN_STACK_SINGLE_FIXTURE,
   createEmptyPoints,
   createPosition
 } from "./fixtures/boardFixtures";
+
+const getMoveSemanticKey = (move: Move, includeDieIndex: boolean): string => {
+  const stepKey = move.steps
+    .map((step) => {
+      const hitKey = step.hit === undefined ? "" : `:${step.hit.player}:${step.hit.point}`;
+      const dieIndexKey = includeDieIndex ? `:${step.dieIndex}` : "";
+      return `${step.kind}:${step.fromPoint}:${step.toPoint}:${step.dieValue}${dieIndexKey}:${step.hitsBlot}${hitKey}`;
+    })
+    .join("|");
+
+  return `${move.player}::${stepKey}`;
+};
+
+const hasSemanticDuplicates = (moves: readonly Move[], includeDieIndex: boolean): boolean => {
+  const keys = moves.map((move) => getMoveSemanticKey(move, includeDieIndex));
+  return new Set(keys).size !== keys.length;
+};
 
 describe("backgammon engine exports", () => {
   it("exports getLegalMoves", () => {
@@ -1510,6 +1531,169 @@ describe("getLegalMoves basic forward generation", () => {
   });
 });
 
+describe("legal-move output contract audit", () => {
+  it("does not emit semantic duplicates in a branching non-double scenario", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_ORDERING_AND_DUPLICATE_AUDIT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(1);
+    expect(hasSemanticDuplicates(result.moves, false)).toBe(false);
+  });
+
+  it("does not emit semantic duplicates in a branching doubles scenario", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(1);
+    expect(hasSemanticDuplicates(result.moves, false)).toBe(false);
+    expect(hasSemanticDuplicates(result.moves, true)).toBe(false);
+  });
+
+  it("currently preserves deterministic traversal order for repeated calls", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_ORDERING_AND_DUPLICATE_AUDIT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const first = getLegalMoves(input);
+    const second = getLegalMoves(input);
+
+    expect(second).toEqual(first);
+  });
+
+  it("currently traverses non-double die orders as 0->1 then 1->0", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BOTH_DICE_BOTH_ORDERS_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+    const orderSignatures = result.moves.map((move) => move.steps.map((step) => step.dieIndex));
+    const firstReverseOrderIndex = orderSignatures.findIndex(
+      (signature) => signature[0] === 1 && signature[1] === 0
+    );
+
+    expect(firstReverseOrderIndex).toBeGreaterThanOrEqual(0);
+    expect(
+      orderSignatures.slice(0, firstReverseOrderIndex).every((signature) => signature[0] === 0)
+    ).toBe(true);
+  });
+});
+
+describe("own-point stacking regression checks", () => {
+  it("allows ordinary movement onto one own checker", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_OWN_STACK_SINGLE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 6]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.kind === "point-to-point" &&
+          move.steps[0]?.fromPoint === 8 &&
+          move.steps[0]?.toPoint === 7
+      )
+    ).toBe(true);
+  });
+
+  it("allows ordinary movement onto multiple own checkers", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_OWN_STACK_MULTIPLE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 6]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.kind === "point-to-point" &&
+          move.steps[0]?.fromPoint === 8 &&
+          move.steps[0]?.toPoint === 7
+      )
+    ).toBe(true);
+  });
+
+  it("allows bar entry onto an own occupied point", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_ENTRY_ON_OWN_POINT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 6]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps[0]?.kind === "enter-from-bar")).toBe(true);
+    expect(result.moves.some((move) => move.steps[0]?.toPoint === 24)).toBe(true);
+  });
+
+  it("supports doubles sequencing through own occupied points", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps.length === 4 &&
+          move.steps[0]?.toPoint === 7 &&
+          move.steps[1]?.toPoint === 7 &&
+          move.steps[2]?.toPoint === 7
+      )
+    ).toBe(true);
+  });
+
+  it("keeps blocked opposing points illegal while own-point stacking is enabled", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BLOCKED_DESTINATION_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    expect(getLegalMoves(input).moves).toEqual([]);
+  });
+});
+
 describe("engine fixtures", () => {
   it("provides readable named positions", () => {
     const fixtures = [
@@ -1578,10 +1762,14 @@ describe("engine fixtures", () => {
       WHITE_DOUBLE_BEAR_OFF_FOUR_PLAYS_FIXTURE,
       WHITE_DOUBLE_BEAR_OFF_FEWER_PLAYS_FIXTURE,
       WHITE_DOUBLE_BEAR_OFF_OVERSIZED_SHIFT_FIXTURE,
-      BLACK_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE
+      BLACK_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
+      WHITE_OWN_STACK_SINGLE_FIXTURE,
+      WHITE_OWN_STACK_MULTIPLE_FIXTURE,
+      WHITE_BAR_ENTRY_ON_OWN_POINT_FIXTURE,
+      WHITE_ORDERING_AND_DUPLICATE_AUDIT_FIXTURE
     ];
 
-    expect(fixtures).toHaveLength(66);
+    expect(fixtures).toHaveLength(70);
   });
 
   it("produces complete point maps from helper", () => {
@@ -1658,6 +1846,10 @@ describe("engine fixtures", () => {
       WHITE_DOUBLE_BEAR_OFF_FEWER_PLAYS_FIXTURE,
       WHITE_DOUBLE_BEAR_OFF_OVERSIZED_SHIFT_FIXTURE,
       BLACK_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
+      WHITE_OWN_STACK_SINGLE_FIXTURE,
+      WHITE_OWN_STACK_MULTIPLE_FIXTURE,
+      WHITE_BAR_ENTRY_ON_OWN_POINT_FIXTURE,
+      WHITE_ORDERING_AND_DUPLICATE_AUDIT_FIXTURE,
       createPosition({
         points: {
           6: { player: "white", checkerCount: 1 },
