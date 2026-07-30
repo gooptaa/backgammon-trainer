@@ -27,6 +27,23 @@
   gap: 0.55rem;
 }
 
+.devControls {
+  border: 1px solid rgba(17, 63, 90, 0.2);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem 0.55rem;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.devControls summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #173346;
+}
+
+.devControls p {
+  margin-top: 0.35rem;
+}
+
 .diceRow {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

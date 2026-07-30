@@ -30,10 +30,14 @@ import {
   type SelectableSource,
   type SelectedStep
 } from "./features/sandbox/moveSelection";
+import { rollDice, type RandomSource } from "./features/sandbox/rollDice";
 
 const createInitialGameState = (): GameState => {
   return createGameState(STANDARD_STARTING_POSITION, "white");
 };
+
+const DEFAULT_MANUAL_DIE_ONE: DieValue = 1;
+const DEFAULT_MANUAL_DIE_TWO: DieValue = 2;
 
 const getSetDiceFailureMessage = (reason: SetDiceFailureReason): string => {
   if (reason === "game-complete") {
@@ -73,14 +77,15 @@ const getPassFailureMessage = (reason: PassTurnFailureReason): string => {
 
 interface AppProps {
   initialGameState?: GameState;
+  randomSource?: RandomSource;
 }
 
-function App({ initialGameState }: AppProps): JSX.Element {
+function App({ initialGameState, randomSource }: AppProps): JSX.Element {
   const [gameState, setGameState] = useState<GameState>(
     () => initialGameState ?? createInitialGameState()
   );
-  const [dieOne, setDieOne] = useState<DieValue>(1);
-  const [dieTwo, setDieTwo] = useState<DieValue>(2);
+  const [dieOne, setDieOne] = useState<DieValue>(DEFAULT_MANUAL_DIE_ONE);
+  const [dieTwo, setDieTwo] = useState<DieValue>(DEFAULT_MANUAL_DIE_TWO);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedSteps, setSelectedSteps] = useState<readonly SelectedStep[]>([]);
   const [selectedSource, setSelectedSource] = useState<SelectableSource | null>(null);
@@ -130,7 +135,14 @@ function App({ initialGameState }: AppProps): JSX.Element {
     selectedSteps
   ]);
 
-  const resetMoveSelection = (): void => {
+  const resetTransientState = (): void => {
+    setSelectedSteps([]);
+    setSelectedSource(null);
+    setHoveredDestination(null);
+    setMessage(null);
+  };
+
+  const resetForNewTurn = (): void => {
     setSelectedSteps([]);
     setSelectedSource(null);
     setHoveredDestination(null);
@@ -147,7 +159,20 @@ function App({ initialGameState }: AppProps): JSX.Element {
     }
 
     setGameState(result.state);
-    resetMoveSelection();
+    resetForNewTurn();
+    setMessage(null);
+  };
+
+  const onRollDice = (): void => {
+    const result = setDice(gameState, rollDice(randomSource));
+
+    if (!result.ok) {
+      setMessage(getSetDiceFailureMessage(result.reason));
+      return;
+    }
+
+    setGameState(result.state);
+    resetForNewTurn();
     setMessage(null);
   };
 
@@ -160,7 +185,7 @@ function App({ initialGameState }: AppProps): JSX.Element {
     }
 
     setGameState(result.state);
-    resetMoveSelection();
+    resetForNewTurn();
     if (result.status.state === "complete") {
       setMessage(`Game complete: ${result.status.winner} wins.`);
       return;
@@ -178,8 +203,15 @@ function App({ initialGameState }: AppProps): JSX.Element {
     }
 
     setGameState(result.state);
-    resetMoveSelection();
+    resetForNewTurn();
     setMessage("Turn passed.");
+  };
+
+  const onNewGame = (): void => {
+    setGameState(createInitialGameState());
+    setDieOne(DEFAULT_MANUAL_DIE_ONE);
+    setDieTwo(DEFAULT_MANUAL_DIE_TWO);
+    resetTransientState();
   };
 
   const onSelectSource = (source: SelectableSource): void => {
@@ -301,11 +333,11 @@ function App({ initialGameState }: AppProps): JSX.Element {
     }
 
     if (gameState.dice === null) {
-      return "Set dice to start move selection";
+      return "Roll dice to start turn";
     }
 
     if (!legalMovesResult.ok) {
-      return "Set dice to start move selection";
+      return "Roll dice to start turn";
     }
 
     if (selectedSource !== null) {
@@ -380,7 +412,7 @@ function App({ initialGameState }: AppProps): JSX.Element {
             onSelectDestination={onSelectDestination}
             onHoverDestination={onHoverDestination}
             onClearHoveredDestination={onClearHoveredDestination}
-            {...(shouldShowCancelSelection ? { onCancelSelection: resetMoveSelection } : {})}
+            {...(shouldShowCancelSelection ? { onCancelSelection: resetTransientState } : {})}
           />
           <p className={styles.selectionMeta} data-testid="interaction-status" aria-live="polite">
             {interactionStatus}
@@ -410,8 +442,10 @@ function App({ initialGameState }: AppProps): JSX.Element {
           legalMovesResult={legalMovesResult}
           onDieOneChange={setDieOne}
           onDieTwoChange={setDieTwo}
+          onRollDice={onRollDice}
           onSetDice={onSetDice}
           onPassTurn={onPassTurn}
+          onNewGame={onNewGame}
         />
       </main>
     </div>

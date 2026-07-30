@@ -79,6 +79,13 @@ pnpm check
 - `docs/architecture`: architecture overview + ADRs
 - `docs/roadmap.md`: ordered milestones
 
+## Dice and reset behavior
+
+- Production dice rolls are generated in `apps/web/src/features/sandbox/rollDice.ts`.
+- The utility accepts an injectable random source so tests can deterministically validate roll outcomes.
+- UI roll and manual dice-assignment controls both flow through engine `setDice(...)` turn-state validation.
+- `New Game` resets to the standard starting position with white as starting player and clears dice + in-progress UI interaction state.
+
 ## Environment setup
 
 1. Copy `.env.example` values into your local environment (or `.env.local` for your shell tooling).
@@ -104,6 +111,11 @@ Production-like preview method:
 
 - `pnpm --filter @backgammon-trainer/web build`
 - `pnpm --filter @backgammon-trainer/web preview`
+
+Generated artifact policy:
+
+- `apps/web/dist/` and `apps/web/dev-dist/` are generated build/runtime artifacts and must not be committed.
+- Build outputs should be regenerated locally or in CI from source as needed.
 
 Offline scope disclaimer:
 

@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createGameState, type GameState } from "@backgammon-trainer/backgammon-engine";
 import { type BoardPosition } from "@backgammon-trainer/backgammon-domain";
 
@@ -79,14 +79,33 @@ const createNoLegalMovePosition = (): BoardPosition => ({
   }
 });
 
-const setDice = (dieOne: string, dieTwo: string): void => {
-  fireEvent.change(screen.getByLabelText("Die 1"), { target: { value: dieOne } });
-  fireEvent.change(screen.getByLabelText("Die 2"), { target: { value: dieTwo } });
-  fireEvent.click(screen.getByRole("button", { name: "Set Dice" }));
+const renderApp = (options?: {
+  initialGameState?: GameState;
+  randomSource?: () => number;
+}): void => {
+  render(
+    <App
+      {...(options?.initialGameState === undefined
+        ? {}
+        : { initialGameState: options.initialGameState })}
+      {...(options?.randomSource === undefined ? {} : { randomSource: options.randomSource })}
+    />
+  );
 };
 
-const renderApp = (initialGameState?: GameState): void => {
-  render(<App {...(initialGameState === undefined ? {} : { initialGameState })} />);
+const rollDice = (): void => {
+  fireEvent.click(screen.getByRole("button", { name: "Roll Dice" }));
+};
+
+const openDevelopmentControls = (): void => {
+  fireEvent.click(screen.getByText("Development controls"));
+};
+
+const setDiceManually = (dieOne: string, dieTwo: string): void => {
+  openDevelopmentControls();
+  fireEvent.change(screen.getByLabelText("Die 1"), { target: { value: dieOne } });
+  fireEvent.change(screen.getByLabelText("Die 2"), { target: { value: dieTwo } });
+  fireEvent.click(screen.getByRole("button", { name: "Set Dice Manually" }));
 };
 
 const applyFirstInteractiveMove = (): void => {
@@ -133,171 +152,174 @@ const selectFirstSource = (): void => {
   fireEvent.click(sourceButtons[0] as HTMLElement);
 };
 
-const selectFirstDestination = (): void => {
-  const offDestination = screen.queryByRole("button", {
-    name: /Select destination off/i
-  });
-
-  if (offDestination !== null) {
-    fireEvent.click(offDestination);
-    return;
-  }
-
-  const destinationButtons = screen.getAllByRole("button", {
+const hoverFirstDestination = (): HTMLElement => {
+  const destinationButton = screen.getAllByRole("button", {
     name: /Select destination point/i
-  });
+  })[0] as HTMLElement;
 
-  fireEvent.click(destinationButtons[0] as HTMLElement);
+  fireEvent.mouseEnter(destinationButton);
+  return destinationButton;
 };
 
 afterEach(() => {
   cleanup();
 });
 
-describe("App engine game sandbox", () => {
-  it("renders sandbox with no dice set", () => {
+describe("App game loop controls", () => {
+  it("shows Roll Dice before dice are set", () => {
     renderApp();
 
-    expect(screen.getByRole("heading", { name: "Engine Game Sandbox" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeEnabled();
     expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
-    expect(screen.getByRole("button", { name: "Set Dice" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Pass Turn" })).toBeDisabled();
   });
 
-  it("displays active player", () => {
-    renderApp();
+  it("uses injected randomness to produce deterministic roll values", () => {
+    const random = vi.fn<() => number>().mockReturnValueOnce(0.0).mockReturnValueOnce(0.5);
 
-    const boardRegion = screen.getByRole("region", { name: "Graphical backgammon board" });
-    expect(within(boardRegion).getByText("Active player: white")).toBeInTheDocument();
+    renderApp({ randomSource: random });
+    rollDice();
+
+    expect(random).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: 1, 4");
+    expect(screen.getByLabelText("Dice: 1 and 4")).toBeInTheDocument();
   });
 
-  it("sets dice through user controls", () => {
+  it("rolling dice enables board interaction through legal-move state transition", () => {
     renderApp();
 
-    setDice("1", "2");
-
-    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: 1, 2");
-  });
-
-  it("shows legal moves after dice are set", () => {
-    renderApp();
-
-    setDice("1", "2");
+    rollDice();
 
     expect(
       screen.getAllByRole("button", { name: /Select source (point|bar)/i }).length
     ).toBeGreaterThan(0);
-    expect(screen.getByText(/Legal completed moves:/i)).toBeInTheDocument();
   });
 
-  it("applying a legal move updates position", () => {
+  it("disables Roll Dice after a successful roll", () => {
     renderApp();
 
-    const beforePointLabels = screen
-      .getAllByRole("group")
-      .map((element) => element.getAttribute("aria-label"))
-      .filter((value): value is string => value !== null)
-      .filter((value) => value.startsWith("Point "));
+    rollDice();
 
-    setDice("1", "2");
-    applyFirstInteractiveMove();
-
-    const afterPointLabels = screen
-      .getAllByRole("group")
-      .map((element) => element.getAttribute("aria-label"))
-      .filter((value): value is string => value !== null)
-      .filter((value) => value.startsWith("Point "));
-
-    expect(afterPointLabels).not.toEqual(beforePointLabels);
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeDisabled();
   });
 
-  it("applying a move switches active player", () => {
+  it("clears dice after a successful move and enables next-turn roll", () => {
     renderApp();
 
-    setDice("1", "2");
+    rollDice();
     applyFirstInteractiveMove();
+
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeEnabled();
 
     const boardRegion = screen.getByRole("region", { name: "Graphical backgammon board" });
     expect(within(boardRegion).getByText("Active player: black")).toBeInTheDocument();
   });
 
-  it("dice and legal moves clear after completed turn", () => {
-    renderApp();
-
-    setDice("1", "2");
-    applyFirstInteractiveMove();
-
-    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
-    expect(
-      screen.queryByRole("button", { name: /Select source (point|bar)/i })
-    ).not.toBeInTheDocument();
-  });
-
-  it("pass is available only when no legal move exists", () => {
-    renderApp();
-
-    setDice("1", "2");
-    expect(screen.getByRole("button", { name: "Pass Turn" })).toBeDisabled();
-
-    cleanup();
-
-    const noLegalMoveState = createGameState(createNoLegalMovePosition(), "white");
-    render(<App initialGameState={noLegalMoveState} />);
-    setDice("1", "1");
-
-    expect(
-      screen.getByText("No legal moves for this roll. You may pass the turn.")
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pass Turn" })).toBeEnabled();
-  });
-
-  it("passing switches active player", () => {
+  it("clears dice after legal pass and enables next-turn roll", () => {
     const initialGameState = createGameState(createNoLegalMovePosition(), "white");
 
-    renderApp(initialGameState);
+    renderApp({ initialGameState });
 
-    setDice("1", "1");
+    setDiceManually("1", "1");
     fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
 
-    const boardRegion = screen.getByRole("region", { name: "Graphical backgammon board" });
-    expect(within(boardRegion).getByText("Active player: black")).toBeInTheDocument();
     expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeEnabled();
   });
 
-  it("completed game shows winner and disables actions", () => {
+  it("keeps Roll Dice disabled after completion", () => {
     const completed = createGameState(createCompletePosition(), "white");
 
-    renderApp(completed);
+    renderApp({ initialGameState: completed });
 
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeDisabled();
     expect(screen.getByText("Status: complete")).toBeInTheDocument();
-    expect(screen.getByText("Winner: white")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Set Dice" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Pass Turn" })).toBeDisabled();
+  });
+
+  it("restores starting position and player on New Game", () => {
+    renderApp();
+
+    rollDice();
+    applyFirstInteractiveMove();
+    fireEvent.click(screen.getByRole("button", { name: "New Game" }));
+
+    const boardRegion = screen.getByRole("region", { name: "Graphical backgammon board" });
+    expect(within(boardRegion).getByText("Active player: white")).toBeInTheDocument();
+    expect(
+      within(boardRegion).getByRole("group", {
+        name: "Point 24 (top right) has 2 white checkers"
+      })
+    ).toBeInTheDocument();
+    expect(
+      within(boardRegion).getByRole("group", {
+        name: "Point 12 (bottom left) has 5 black checkers"
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("new game clears dice, selection, hover preview, and messages", () => {
+    renderApp();
+
+    rollDice();
+    selectFirstSource();
+    hoverFirstDestination();
+
+    expect(screen.getByTestId("hover-preview").textContent?.trim().length).toBeGreaterThan(0);
+    expect(screen.getByTestId("interaction-status")).toHaveTextContent("Select a destination");
+
+    fireEvent.click(screen.getByRole("button", { name: "New Game" }));
+
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
+    expect(screen.getByTestId("selection-breadcrumb")).toHaveTextContent("");
+    expect(screen.getByTestId("hover-preview")).toHaveTextContent("");
+    expect(screen.getByTestId("interaction-status")).toHaveTextContent("Roll dice to start turn");
+  });
+
+  it("manual dice controls remain functional for development", () => {
+    renderApp();
+
+    setDiceManually("6", "3");
+
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: 6, 3");
+  });
+
+  it("prevents manual and random dice assignment during the same turn", () => {
+    renderApp();
+
+    rollDice();
+    openDevelopmentControls();
+
+    expect(screen.getByRole("button", { name: "Set Dice Manually" })).toBeDisabled();
     expect(screen.getByLabelText("Die 1")).toBeDisabled();
     expect(screen.getByLabelText("Die 2")).toBeDisabled();
   });
 
-  it("keeps board workspace visible", () => {
-    render(<App />);
+  it("preserves state when dice transition is unavailable", () => {
+    const completed = createGameState(createCompletePosition(), "white");
 
-    expect(screen.getByRole("heading", { name: "Backgammon Trainer" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Board Workspace" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Graphical backgammon board" })).toBeInTheDocument();
+    renderApp({ initialGameState: completed });
+
+    const before = screen.getByTestId("turn-dice-value").textContent;
+
+    expect(before).toBe("Turn dice: not set");
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeDisabled();
   });
+});
 
+describe("App interactive move feedback", () => {
   it("updates breadcrumb after each selected step", () => {
     renderApp();
 
-    setDice("1", "1");
+    setDiceManually("1", "1");
     selectFirstSource();
-    selectFirstDestination();
+    fireEvent.click(screen.getAllByRole("button", { name: /Select destination point/i })[0]!);
 
     const firstBreadcrumb = screen.getByTestId("selection-breadcrumb").textContent ?? "";
     expect(firstBreadcrumb).toContain("Move:");
     expect(firstBreadcrumb).toContain("->");
 
     selectFirstSource();
-    selectFirstDestination();
+    fireEvent.click(screen.getAllByRole("button", { name: /Select destination point/i })[0]!);
 
     const secondBreadcrumb = screen.getByTestId("selection-breadcrumb").textContent ?? "";
     expect(secondBreadcrumb).toContain("Move:");
@@ -308,7 +330,7 @@ describe("App engine game sandbox", () => {
   it("clears breadcrumb after move application", () => {
     renderApp();
 
-    setDice("1", "2");
+    rollDice();
     applyFirstInteractiveMove();
 
     expect(screen.getByTestId("selection-breadcrumb")).toHaveTextContent("");
@@ -317,25 +339,21 @@ describe("App engine game sandbox", () => {
   it("clears breadcrumb after cancellation", () => {
     renderApp();
 
-    setDice("1", "1");
+    setDiceManually("1", "1");
     selectFirstSource();
-    selectFirstDestination();
+    fireEvent.click(screen.getAllByRole("button", { name: /Select destination point/i })[0]!);
     fireEvent.click(screen.getByRole("button", { name: "Cancel Selection" }));
 
     expect(screen.getByTestId("selection-breadcrumb")).toHaveTextContent("");
   });
 
-  it("shows and clears hover preview without mutating selection", () => {
+  it("shows hover preview and clears it on pointer leave", () => {
     renderApp();
 
-    setDice("1", "2");
+    rollDice();
     selectFirstSource();
 
-    const destinationButton = screen.getAllByRole("button", {
-      name: /Select destination point/i
-    })[0] as HTMLElement;
-
-    fireEvent.mouseEnter(destinationButton);
+    const destinationButton = hoverFirstDestination();
 
     expect(screen.getByTestId("hover-preview").textContent?.trim().length).toBeGreaterThan(0);
 

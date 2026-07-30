@@ -27,6 +27,8 @@ No package under `packages/` depends on React, Fastify, browser APIs, or vendor 
 
 Legal move evaluation must remain deterministic and testable. LLM output can be wrong, inconsistent, or drift over time. For training quality and trust, legality and board transitions must come from rules code with reproducible behavior, not generated text.
 
+Dice randomness is intentionally kept in the web app layer (outside the rules engine) and passed into existing turn-state validation (`setDice(...)`). The UI roll helper supports random-source injection so tests can deterministically verify full game-loop behavior without introducing nondeterminism into engine rule logic.
+
 ## Why credentials require a server boundary
 
 Any variable bundled by Vite into client code is public. Provider keys and model credentials must therefore remain server-only. The server mediates model calls, applies timeouts/retries later, and shields secrets from the browser.

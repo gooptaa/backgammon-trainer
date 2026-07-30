@@ -5,6 +5,7 @@ import type {
 } from "@backgammon-trainer/backgammon-engine";
 import { POINT_INDEXES, type DieValue } from "@backgammon-trainer/backgammon-domain";
 
+import { DiceDisplay } from "./DiceDisplay";
 import styles from "./EngineSandboxPanel.module.css";
 
 interface EngineSandboxPanelProps {
@@ -16,8 +17,10 @@ interface EngineSandboxPanelProps {
   legalMovesResult: GetLegalMovesForStateResult;
   onDieOneChange: (value: DieValue) => void;
   onDieTwoChange: (value: DieValue) => void;
+  onRollDice: () => void;
   onSetDice: () => void;
   onPassTurn: () => void;
+  onNewGame: () => void;
 }
 
 const DIE_VALUES: readonly DieValue[] = [1, 2, 3, 4, 5, 6];
@@ -43,11 +46,13 @@ export function EngineSandboxPanel({
   legalMovesResult,
   onDieOneChange,
   onDieTwoChange,
+  onRollDice,
   onSetDice,
-  onPassTurn
+  onPassTurn,
+  onNewGame
 }: EngineSandboxPanelProps): JSX.Element {
   const isComplete = gameStatus.state === "complete";
-  const canSetDice = !isComplete && gameState.dice === null;
+  const canAssignDice = !isComplete && gameState.dice === null;
   const legalMoves = legalMovesResult.ok ? legalMovesResult.moves : [];
   const canPass =
     !isComplete && gameState.dice !== null && legalMovesResult.ok && legalMoves.length === 0;
@@ -61,6 +66,7 @@ export function EngineSandboxPanel({
       {isComplete && gameStatus.state === "complete" ? (
         <p className={styles.meta}>Winner: {gameStatus.winner}</p>
       ) : null}
+      <DiceDisplay dice={gameState.dice} />
       <p className={styles.meta} data-testid="turn-dice-value">
         Turn dice:{" "}
         {gameState.dice === null
@@ -69,46 +75,57 @@ export function EngineSandboxPanel({
       </p>
 
       <div className={styles.controls}>
-        <div className={styles.diceRow}>
-          <div className={styles.field}>
-            <label htmlFor="die-one">Die 1</label>
-            <select
-              id="die-one"
-              value={dieOne}
-              disabled={!canSetDice}
-              onChange={(event) => onDieOneChange(Number(event.currentTarget.value) as DieValue)}
-            >
-              {DIE_VALUES.map((value) => (
-                <option key={`die-one-${value}`} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className={styles.field}>
-            <label htmlFor="die-two">Die 2</label>
-            <select
-              id="die-two"
-              value={dieTwo}
-              disabled={!canSetDice}
-              onChange={(event) => onDieTwoChange(Number(event.currentTarget.value) as DieValue)}
-            >
-              {DIE_VALUES.map((value) => (
-                <option key={`die-two-${value}`} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <button type="button" onClick={onSetDice} disabled={!canSetDice}>
-          Set Dice
+        <button type="button" onClick={onRollDice} disabled={!canAssignDice}>
+          Roll Dice
         </button>
 
         <button type="button" onClick={onPassTurn} disabled={!canPass}>
           Pass Turn
         </button>
+
+        <button type="button" onClick={onNewGame}>
+          New Game
+        </button>
+
+        <details className={styles.devControls}>
+          <summary>Development controls</summary>
+          <p className={styles.meta}>Manual dice assignment for deterministic UI testing.</p>
+          <div className={styles.diceRow}>
+            <div className={styles.field}>
+              <label htmlFor="die-one">Die 1</label>
+              <select
+                id="die-one"
+                value={dieOne}
+                disabled={!canAssignDice}
+                onChange={(event) => onDieOneChange(Number(event.currentTarget.value) as DieValue)}
+              >
+                {DIE_VALUES.map((value) => (
+                  <option key={`die-one-${value}`} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.field}>
+              <label htmlFor="die-two">Die 2</label>
+              <select
+                id="die-two"
+                value={dieTwo}
+                disabled={!canAssignDice}
+                onChange={(event) => onDieTwoChange(Number(event.currentTarget.value) as DieValue)}
+              >
+                {DIE_VALUES.map((value) => (
+                  <option key={`die-two-${value}`} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <button type="button" onClick={onSetDice} disabled={!canAssignDice}>
+            Set Dice Manually
+          </button>
+        </details>
 
         <p aria-live="polite" className={styles.message}>
           {message ?? ""}
