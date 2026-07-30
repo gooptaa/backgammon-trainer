@@ -1,6 +1,7 @@
 import {
   POINT_INDEXES,
   type BoardPosition,
+  type PointIndex,
   type Player
 } from "@backgammon-trainer/backgammon-domain";
 import { useCallback, useEffect, useState } from "react";
@@ -10,8 +11,10 @@ import { CheckerStack } from "./CheckerStack";
 import { Point } from "./Point";
 import {
   areSelectionsEqual,
+  getDestinationSelectionLabel,
   getCheckerSelectionLabel,
-  type CheckerSelection
+  type CheckerSelection,
+  type ProposedMove
 } from "./checkerSelection";
 import {
   BAR_X0,
@@ -38,6 +41,7 @@ export interface BackgammonBoardProps {
   accessibleLabel?: string;
   showCoordinates?: boolean;
   onSelectionChange?: (selection: CheckerSelection | null) => void;
+  onProposedMoveChange?: (proposal: ProposedMove | null) => void;
 }
 
 const players: readonly Player[] = ["white", "black"];
@@ -100,19 +104,60 @@ export function BackgammonBoard({
   orientation = "white-home-right",
   accessibleLabel = "Backgammon board",
   showCoordinates = false,
-  onSelectionChange
+  onSelectionChange,
+  onProposedMoveChange
 }: BackgammonBoardProps): JSX.Element {
   const [selectedChecker, setSelectedChecker] = useState<CheckerSelection | null>(null);
+  const [destinationPointIndex, setDestinationPointIndex] = useState<PointIndex | null>(null);
   const orientationTransform = getOrientationTransform(orientation);
   const shouldShowCoordinates = showCoordinates && orientation === "white-home-right";
+  const proposedMove: ProposedMove | null =
+    selectedChecker !== null && destinationPointIndex !== null
+      ? { origin: selectedChecker, destinationPointIndex }
+      : null;
 
   const applySelection = useCallback(
     (nextSelection: CheckerSelection | null): void => {
+      const shouldClearDestination =
+        nextSelection === null || !areSelectionsEqual(nextSelection, selectedChecker);
+      const shouldNotifyProposalClear = shouldClearDestination && destinationPointIndex !== null;
+
       setSelectedChecker(nextSelection);
       onSelectionChange?.(nextSelection);
+
+      if (shouldClearDestination) {
+        setDestinationPointIndex(null);
+        if (shouldNotifyProposalClear) {
+          onProposedMoveChange?.(null);
+        }
+      }
     },
-    [onSelectionChange]
+    [destinationPointIndex, onProposedMoveChange, onSelectionChange, selectedChecker]
   );
+
+  const applyDestinationSelection = useCallback(
+    (pointIndex: PointIndex): void => {
+      if (selectedChecker === null) {
+        return;
+      }
+
+      setDestinationPointIndex(pointIndex);
+      onProposedMoveChange?.({
+        origin: selectedChecker,
+        destinationPointIndex: pointIndex
+      });
+    },
+    [onProposedMoveChange, selectedChecker]
+  );
+
+  const clearDestination = useCallback((): void => {
+    if (selectedChecker === null || destinationPointIndex === null) {
+      return;
+    }
+
+    setDestinationPointIndex(null);
+    onProposedMoveChange?.(null);
+  }, [destinationPointIndex, onProposedMoveChange, selectedChecker]);
 
   useEffect(() => {
     if (selectedChecker === null) {
@@ -193,9 +238,23 @@ export function BackgammonBoard({
             />
           </g>
 
-          <g aria-hidden="true">
+          <g>
             {POINT_INDEXES.map((pointIndex) => (
-              <Point key={pointIndex} pointIndex={pointIndex} />
+              <Point
+                key={pointIndex}
+                pointIndex={pointIndex}
+                destinationTargetEnabled={selectedChecker !== null}
+                destinationSelected={destinationPointIndex === pointIndex}
+                onSelectDestination={applyDestinationSelection}
+                {...(selectedChecker !== null
+                  ? {
+                      destinationLabel: getDestinationSelectionLabel(
+                        pointIndex,
+                        destinationPointIndex === pointIndex
+                      )
+                    }
+                  : {})}
+              />
             ))}
           </g>
 
@@ -309,6 +368,20 @@ export function BackgammonBoard({
       </svg>
       {selectedChecker ? (
         <div className={styles.selectionControls}>
+          <p aria-live="polite" className={styles.proposalStatus}>
+            {proposedMove
+              ? `Proposed move: ${proposedMove.origin.pointIndex} -> ${proposedMove.destinationPointIndex}`
+              : `Choose a destination for point ${selectedChecker.pointIndex}.`}
+          </p>
+          {destinationPointIndex !== null ? (
+            <button
+              className={styles.clearDestinationButton}
+              type="button"
+              onClick={clearDestination}
+            >
+              Clear Destination
+            </button>
+          ) : null}
           <button
             className={styles.cancelSelectionButton}
             type="button"

@@ -11,6 +11,15 @@ import {
 } from "./boardFixtures";
 
 describe("BackgammonBoard", () => {
+  it("has no destination controls active before selecting a checker", () => {
+    render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
+
+    expect(
+      screen.queryByRole("button", { name: "Move selected checker to point 18" })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear Destination" })).not.toBeInTheDocument();
+  });
+
   it("has no selected checker initially", () => {
     render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
 
@@ -60,7 +69,7 @@ describe("BackgammonBoard", () => {
     ).toHaveLength(12);
   });
 
-  it("selects an exposed checker when clicked", () => {
+  it("selecting a checker exposes destination targets", () => {
     const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
     const board = within(container);
 
@@ -68,110 +77,179 @@ describe("BackgammonBoard", () => {
 
     expect(
       board.getByRole("button", { name: "Selected white checker on point 24" })
+    ).toBeInTheDocument();
+    expect(
+      board.getByRole("button", { name: "Move selected checker to point 18" })
     ).toBeInTheDocument();
     expect(board.getByRole("button", { name: "Cancel Selection" })).toBeInTheDocument();
   });
 
-  it("deselects when the selected checker is clicked again", () => {
-    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
-    const board = within(container);
-
-    const checker = board.getByRole("button", { name: "Select white checker on point 24" });
-    fireEvent.click(checker);
-    fireEvent.click(board.getByRole("button", { name: "Selected white checker on point 24" }));
-
-    expect(board.queryByRole("button", { name: /^Selected / })).not.toBeInTheDocument();
-  });
-
-  it("transfers selection when a different exposed checker is clicked", () => {
+  it("selecting an empty point creates a proposal", () => {
     const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
     const board = within(container);
 
     fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
-    fireEvent.click(board.getByRole("button", { name: "Select black checker on point 1" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 18" }));
 
+    expect(board.getByText("Proposed move: 24 -> 18")).toBeInTheDocument();
     expect(
-      board.getByRole("button", { name: "Selected black checker on point 1" })
+      board.getByRole("button", { name: "Selected destination point 18" })
     ).toBeInTheDocument();
-    expect(
-      board.queryByRole("button", { name: "Selected white checker on point 24" })
-    ).not.toBeInTheDocument();
   });
 
-  it("selects the exposed checker when a covered checker in the same stack is clicked", () => {
+  it("selecting an occupied point creates a proposal", () => {
     const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
     const board = within(container);
-    const coveredChecker = container.querySelector(
-      "circle[data-checker-kind='point'][data-player='white'][data-point-index='24'][data-stack-index='0']"
-    );
 
-    expect(coveredChecker).toBeInTheDocument();
-    fireEvent.click(coveredChecker as SVGCircleElement);
+    fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 13" }));
+
+    expect(board.getByText("Proposed move: 24 -> 13")).toBeInTheDocument();
+  });
+
+  it("proposal contains canonical origin and destination indexes", () => {
+    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
+    const board = within(container);
+
+    fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 18" }));
+
+    expect(board.getByText("Proposed move: 24 -> 18")).toBeInTheDocument();
+  });
+
+  it("selecting a second destination replaces the first", () => {
+    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
+    const board = within(container);
+
+    fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 18" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 17" }));
+
+    expect(board.getByText("Proposed move: 24 -> 17")).toBeInTheDocument();
+    expect(board.queryByText("Proposed move: 24 -> 18")).not.toBeInTheDocument();
+  });
+
+  it("clear destination removes destination and preserves origin", () => {
+    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
+    const board = within(container);
+
+    fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 18" }));
+    fireEvent.click(board.getByRole("button", { name: "Clear Destination" }));
 
     expect(
       board.getByRole("button", { name: "Selected white checker on point 24" })
     ).toBeInTheDocument();
+    expect(board.queryByText("Proposed move: 24 -> 18")).not.toBeInTheDocument();
+    expect(board.getByText("Choose a destination for point 24.")).toBeInTheDocument();
   });
 
-  it("does not expose covered checkers as independently selectable", () => {
-    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
-
-    expect(
-      container.querySelectorAll("[data-selectable-checker='true'][data-point-index='24']")
-    ).toHaveLength(1);
-    expect(
-      container.querySelector(
-        "[data-selectable-checker='true'][data-point-index='24'][data-stack-index='0']"
-      )
-    ).not.toBeInTheDocument();
-  });
-
-  it("does not allow selecting empty points", () => {
-    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
-    const board = within(container);
-
-    expect(board.queryByRole("button", { name: /point 2$/ })).not.toBeInTheDocument();
-    expect(board.queryByRole("button", { name: /point 11$/ })).not.toBeInTheDocument();
-  });
-
-  it("does not allow selecting bar or borne-off checkers", () => {
-    const { container } = render(<BackgammonBoard position={NEARLY_BEAR_OFF_FIXTURE} />);
-
-    expect(container.querySelectorAll("circle[data-checker-kind='bar']")).toHaveLength(0);
-    expect(container.querySelectorAll("circle[data-checker-kind='borne-off']")).toHaveLength(25);
-    expect(container.querySelectorAll("[data-selectable-checker='true']")).toHaveLength(2);
-  });
-
-  it("clears selection when Escape is pressed", () => {
+  it("selecting another checker clears the previous destination", () => {
     const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
     const board = within(container);
 
     fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 18" }));
+    fireEvent.click(board.getByRole("button", { name: "Select black checker on point 1" }));
+
+    expect(board.queryByText("Proposed move: 24 -> 18")).not.toBeInTheDocument();
+    expect(board.getByText("Choose a destination for point 1.")).toBeInTheDocument();
+  });
+
+  it("clicking the selected checker again clears origin and destination", () => {
+    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
+    const board = within(container);
+
+    fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 18" }));
+    fireEvent.click(board.getByRole("button", { name: "Selected white checker on point 24" }));
+
+    expect(board.queryByText(/Proposed move:/)).not.toBeInTheDocument();
+    expect(board.queryByRole("button", { name: "Clear Destination" })).not.toBeInTheDocument();
+    expect(board.queryByRole("button", { name: /^Selected / })).not.toBeInTheDocument();
+  });
+
+  it("Escape clears origin and destination", () => {
+    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
+    const board = within(container);
+
+    fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 18" }));
     fireEvent.keyDown(window, { key: "Escape" });
 
-    expect(board.queryByRole("button", { name: /^Selected / })).not.toBeInTheDocument();
-  });
-
-  it("clears selection via Cancel Selection control", () => {
-    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
-    const board = within(container);
-
-    fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
-    fireEvent.click(board.getByRole("button", { name: "Cancel Selection" }));
-
-    expect(board.queryByRole("button", { name: /^Selected / })).not.toBeInTheDocument();
+    expect(board.queryByText(/Proposed move:/)).not.toBeInTheDocument();
     expect(board.queryByRole("button", { name: "Cancel Selection" })).not.toBeInTheDocument();
   });
 
-  it("does not mutate supplied domain position", () => {
+  it("Cancel Selection clears origin and destination", () => {
+    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
+    const board = within(container);
+
+    fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 18" }));
+    fireEvent.click(board.getByRole("button", { name: "Cancel Selection" }));
+
+    expect(board.queryByText(/Proposed move:/)).not.toBeInTheDocument();
+    expect(board.queryByRole("button", { name: /^Selected / })).not.toBeInTheDocument();
+  });
+
+  it("calls onProposedMoveChange with proposal and null transitions", () => {
+    const onProposedMoveChange = vi.fn();
+    const { container } = render(
+      <BackgammonBoard
+        onProposedMoveChange={onProposedMoveChange}
+        position={STANDARD_STARTING_POSITION}
+      />
+    );
+    const board = within(container);
+
+    fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 18" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 17" }));
+    fireEvent.click(board.getByRole("button", { name: "Clear Destination" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(onProposedMoveChange).toHaveBeenNthCalledWith(1, {
+      origin: { pointIndex: 24, player: "white" },
+      destinationPointIndex: 18
+    });
+    expect(onProposedMoveChange).toHaveBeenNthCalledWith(2, {
+      origin: { pointIndex: 24, player: "white" },
+      destinationPointIndex: 17
+    });
+    expect(onProposedMoveChange).toHaveBeenNthCalledWith(3, null);
+    expect(onProposedMoveChange).toHaveBeenCalledTimes(3);
+  });
+
+  it("selecting a destination does not mutate supplied position", () => {
     const snapshot = JSON.stringify(STANDARD_STARTING_POSITION);
     const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
     const board = within(container);
 
     fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 18" }));
 
     expect(JSON.stringify(STANDARD_STARTING_POSITION)).toBe(snapshot);
+  });
+
+  it("flipped orientation still emits canonical point indexes", () => {
+    const onProposedMoveChange = vi.fn();
+    const { container } = render(
+      <BackgammonBoard
+        onProposedMoveChange={onProposedMoveChange}
+        orientation="white-home-left"
+        position={STANDARD_STARTING_POSITION}
+      />
+    );
+    const board = within(container);
+
+    fireEvent.click(board.getByRole("button", { name: "Select white checker on point 24" }));
+    fireEvent.click(board.getByRole("button", { name: "Move selected checker to point 18" }));
+
+    expect(onProposedMoveChange).toHaveBeenCalledWith({
+      origin: { pointIndex: 24, player: "white" },
+      destinationPointIndex: 18
+    });
   });
 
   it("calls onSelectionChange with selection and null transitions", () => {
@@ -193,7 +271,7 @@ describe("BackgammonBoard", () => {
     expect(onSelectionChange).toHaveBeenNthCalledWith(3, null);
   });
 
-  it("still renders statically without interaction callback", () => {
+  it("static board rendering remains valid with no callbacks supplied", () => {
     const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
     const board = within(container);
 

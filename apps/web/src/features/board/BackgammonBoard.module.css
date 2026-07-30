@@ -73,6 +73,20 @@
   stroke-width: 1;
 }
 
+.destinationHitArea {
+  fill: rgba(255, 255, 255, 0.02);
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: all;
+}
+
+.destinationSelectedOverlay {
+  fill: rgba(255, 250, 224, 0.22);
+  stroke: #0f6f8f;
+  stroke-width: 4;
+  stroke-dasharray: 8 4;
+}
+
 .checkerWhite {
   fill: var(--checker-light);
   stroke: var(--checker-white-outline);
@@ -116,8 +130,18 @@
 
 .selectionControls {
   margin-top: 0.55rem;
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  gap: 0.45rem;
+  justify-items: end;
+}
+
+.proposalStatus {
+  margin: 0;
+  width: 100%;
+  color: #1f3f52;
+  font-size: 0.93rem;
+  font-weight: 650;
+  text-align: right;
 }
 
 .cancelSelectionButton {
@@ -131,7 +155,23 @@
   font-weight: 700;
 }
 
+.clearDestinationButton {
+  min-height: 36px;
+  border: 1px solid #9a6f14;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  background: #fff8e8;
+  color: #664714;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
 .cancelSelectionButton:focus-visible {
+  outline: 3px solid #e88f2a;
+  outline-offset: 2px;
+}
+
+.clearDestinationButton:focus-visible {
   outline: 3px solid #e88f2a;
   outline-offset: 2px;
 }

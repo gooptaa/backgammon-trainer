@@ -5,6 +5,11 @@ export interface CheckerSelection {
   readonly player: Player;
 }
 
+export interface ProposedMove {
+  readonly origin: CheckerSelection;
+  readonly destinationPointIndex: PointIndex;
+}
+
 export const areSelectionsEqual = (
   left: CheckerSelection | null,
   right: CheckerSelection | null
@@ -25,4 +30,15 @@ export const getCheckerSelectionLabel = (
   }
 
   return "Select " + selection.player + " checker on point " + selection.pointIndex;
+};
+
+export const getDestinationSelectionLabel = (
+  pointIndex: PointIndex,
+  isSelected: boolean
+): string => {
+  if (isSelected) {
+    return "Selected destination point " + pointIndex;
+  }
+
+  return "Move selected checker to point " + pointIndex;
 };

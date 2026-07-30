@@ -28,7 +28,8 @@ export function CheckerStack({
   return (
     <g>
       {centers.map((center, index) => {
-        const isPointStackSelectable = pointIndex !== undefined && onSelectExposedChecker !== undefined;
+        const isPointStackSelectable =
+          pointIndex !== undefined && onSelectExposedChecker !== undefined;
         const isExposedSelectable =
           pointIndex !== undefined &&
           index === selectableStackIndex &&
