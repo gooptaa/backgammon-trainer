@@ -132,6 +132,17 @@ const createBlackDirectionPreviewPosition = (): BoardPosition =>
     }
   });
 
+const createUndoPreviewPosition = (): BoardPosition =>
+  createPosition({
+    points: {
+      8: { player: "white", checkerCount: 1 }
+    },
+    borneOff: {
+      white: 14,
+      black: 14
+    }
+  });
+
 const resolvedOpeningState = (
   startingPlayer: "white" | "black",
   whiteDie: DieValue = 5,
@@ -336,7 +347,7 @@ describe("App staged move projection", () => {
     expect(screen.getByTestId("bar-counts")).toHaveTextContent("Bar: white 0, black 0");
     expect(screen.getByLabelText("Black bar checkers 1")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel Selection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo Last Step" }));
 
     expectPointCheckerCount(8, "white", 1);
     expectPointCheckerCount(7, "black", 1);
@@ -413,6 +424,116 @@ describe("App staged move projection", () => {
       screen.getByRole("group", { name: /Point 8 .* has 4 white checkers/ })
     ).toBeInTheDocument();
   });
+
+  it("undoes only the most recent staged step and preserves earlier steps", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "1");
+    selectSourcePoint(8);
+    selectDestinationPoint(7);
+    selectSourcePoint(7);
+    selectDestinationPoint(6);
+
+    expectPointCheckerCount(6, "white", 1);
+    expect(screen.getByTestId("selection-breadcrumb")).toHaveTextContent("Move: 8 -> 7 -> 6");
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo Last Step" }));
+
+    expectPointCheckerCount(7, "white", 1);
+    expect(
+      screen.getByRole("group", {
+        name: /Point 6 .* is empty/
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("selection-breadcrumb")).toHaveTextContent("Move: 8 -> 7");
+  });
+
+  it("undoes back to empty selection after repeated clicks", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "1");
+    selectSourcePoint(8);
+    selectDestinationPoint(7);
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo Last Step" }));
+
+    expect(screen.getByTestId("selection-breadcrumb")).toHaveTextContent("");
+    expect(screen.queryByRole("button", { name: "Undo Last Step" })).not.toBeInTheDocument();
+    expectPointCheckerCount(8, "white", 1);
+  });
+
+  it("recalculates remaining continuation candidates after undo", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "1");
+    selectSourcePoint(8);
+    selectDestinationPoint(7);
+    selectSourcePoint(7);
+    selectDestinationPoint(6);
+
+    expect(screen.getByTestId("candidate-continuations")).toHaveTextContent("6 -> 5");
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo Last Step" }));
+
+    expect(screen.getByTestId("candidate-continuations")).toHaveTextContent("7 -> 6");
+    expect(screen.getByTestId("candidate-continuations")).not.toHaveTextContent("6 -> 5");
+  });
+
+  it("clears hover preview when undoing a staged step", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "1");
+    selectSourcePoint(8);
+    selectDestinationPoint(7);
+    selectSourcePoint(7);
+
+    const hoveredDestination = screen.getByRole("button", { name: /Select destination point 6/i });
+    fireEvent.mouseEnter(hoveredDestination);
+
+    expect(screen.getByTestId("hover-preview")).not.toHaveTextContent("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo Last Step" }));
+
+    expect(screen.getByTestId("hover-preview")).toHaveTextContent("");
+  });
+
+  it("shows pending destination in breadcrumb while source is selected", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "1");
+    selectSourcePoint(8);
+    selectDestinationPoint(7);
+    selectSourcePoint(7);
+
+    expect(screen.getByTestId("selection-breadcrumb")).toHaveTextContent(
+      "Move: 8 -> 7 -> [select destination]"
+    );
+  });
 });
 
 describe("App turn transitions and reset behavior", () => {
@@ -430,7 +551,7 @@ describe("App turn transitions and reset behavior", () => {
 
     expect(screen.getByTestId("selection-breadcrumb")).toHaveTextContent("");
     expect(screen.getByTestId("hover-preview")).toHaveTextContent("");
-    expect(screen.queryByRole("button", { name: "Cancel Selection" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Undo Last Step" })).not.toBeInTheDocument();
   });
 
   it("allows pass on an unplayable opening turn and transitions to normal rolling", () => {
@@ -474,6 +595,6 @@ describe("App turn transitions and reset behavior", () => {
     expect(screen.getByTestId("hover-preview")).toHaveTextContent("");
     expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
     expect(screen.getByRole("button", { name: "Roll for Opening" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Cancel Selection" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Undo Last Step" })).not.toBeInTheDocument();
   });
 });

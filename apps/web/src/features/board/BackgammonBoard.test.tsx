@@ -275,7 +275,7 @@ describe("BackgammonBoard", () => {
     expect(onSelectDestination).toHaveBeenCalledWith("off");
   });
 
-  it("renders a cancel selection control when cancel handler is provided", () => {
+  it("renders an undo selection control when cancel handler is provided", () => {
     const onCancelSelection = vi.fn();
     render(
       <BackgammonBoard
@@ -284,7 +284,7 @@ describe("BackgammonBoard", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel Selection" }));
+    fireEvent.click(screen.getByRole("button", { name: "Undo Last Step" }));
 
     expect(onCancelSelection).toHaveBeenCalledTimes(1);
   });

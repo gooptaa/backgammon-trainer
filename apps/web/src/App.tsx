@@ -24,6 +24,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BackgammonBoard } from "./features/board/BackgammonBoard";
 import { EngineSandboxPanel } from "./features/sandbox/EngineSandboxPanel";
 import {
+  formatSelectablePoint,
   formatSelectedStep,
   formatSelectedStepsBreadcrumb,
   getSelectableDestinations,
@@ -79,6 +80,15 @@ const getInitialOpeningRollState = (initialGameState?: GameState): OpeningRollSt
 
 const getPlayerLabel = (player: Player): string => {
   return player === "white" ? "White" : "Black";
+};
+
+const formatMoveBreadcrumb = (move: Move): string => {
+  const selectedSteps: readonly SelectedStep[] = move.steps.map((step) => ({
+    fromPoint: step.fromPoint,
+    toPoint: step.toPoint
+  }));
+
+  return formatSelectedStepsBreadcrumb(selectedSteps);
 };
 
 const getSetDiceFailureMessage = (reason: SetDiceFailureReason): string => {
@@ -244,6 +254,23 @@ function App({
     setSelectedSteps([]);
     setSelectedSource(null);
     setHoveredDestination(null);
+  };
+
+  const onUndoLastStep = (): void => {
+    setMessage(null);
+    setHoveredDestination(null);
+
+    if (selectedSteps.length === 0) {
+      if (selectedSource !== null) {
+        setSelectedSource(null);
+      }
+
+      return;
+    }
+
+    const nextSelectedSteps = selectedSteps.slice(0, -1);
+    setSelectedSteps(nextSelectedSteps);
+    setSelectedSource(null);
   };
 
   const onSetDice = (): void => {
@@ -510,7 +537,74 @@ function App({
       ? []
       : getSelectableDestinations(hoveredCandidates, hoveredStepPrefix, singlePreviewSource);
 
-  const breadcrumb = formatSelectedStepsBreadcrumb(selectedSteps);
+  const continuationSummaryRows = useMemo(() => {
+    const continuationStepIndex = selectedSteps.length;
+    const continuationCounts = new Map<string, number>();
+
+    for (const move of candidateMoves) {
+      const continuationStep = move.steps[continuationStepIndex];
+
+      if (continuationStep === undefined) {
+        continue;
+      }
+
+      const key = formatSelectedStep({
+        fromPoint: continuationStep.fromPoint,
+        toPoint: continuationStep.toPoint
+      });
+      continuationCounts.set(key, (continuationCounts.get(key) ?? 0) + 1);
+    }
+
+    return [...continuationCounts.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([stepText, count]) => ({
+        stepText,
+        count
+      }));
+  }, [candidateMoves, selectedSteps.length]);
+
+  const completedMoveSummaryRows = useMemo(() => {
+    const completedMoves = candidateMoves.filter(
+      (move) => move.steps.length === selectedSteps.length
+    );
+    const completionCounts = new Map<string, number>();
+
+    for (const move of completedMoves) {
+      const key = formatMoveBreadcrumb(move);
+      completionCounts.set(key, (completionCounts.get(key) ?? 0) + 1);
+    }
+
+    return [...completionCounts.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([moveText, count]) => ({
+        moveText,
+        count
+      }));
+  }, [candidateMoves, selectedSteps.length]);
+
+  const breadcrumb = (() => {
+    if (selectedSource === null) {
+      return formatSelectedStepsBreadcrumb(selectedSteps);
+    }
+
+    const sourceLabel = formatSelectablePoint(selectedSource);
+
+    if (selectedSteps.length === 0) {
+      return `${sourceLabel} -> [select destination]`;
+    }
+
+    const lastSelectedStep = selectedSteps[selectedSteps.length - 1];
+
+    if (
+      lastSelectedStep !== undefined &&
+      formatSelectablePoint(lastSelectedStep.toPoint) === sourceLabel
+    ) {
+      return `${formatSelectedStepsBreadcrumb(selectedSteps)} -> [select destination]`;
+    }
+
+    return `${formatSelectedStepsBreadcrumb(selectedSteps)} | ${sourceLabel} -> [select destination]`;
+  })();
+
   const canRollDice =
     openingResolved &&
     !openingTurnPending &&
@@ -579,7 +673,7 @@ function App({
     setHoveredDestination(null);
   };
 
-  const shouldShowCancelSelection = selectedSteps.length > 0 || selectedSource !== null;
+  const shouldShowUndoSelection = selectedSteps.length > 0 || selectedSource !== null;
 
   return (
     <div className={styles.appFrame}>
@@ -613,7 +707,7 @@ function App({
             onSelectDestination={onSelectDestination}
             onHoverDestination={onHoverDestination}
             onClearHoveredDestination={onClearHoveredDestination}
-            {...(shouldShowCancelSelection ? { onCancelSelection: resetTransientState } : {})}
+            {...(shouldShowUndoSelection ? { onCancelSelection: onUndoLastStep } : {})}
           />
           <p className={styles.selectionMeta} data-testid="interaction-status" aria-live="polite">
             {interactionStatus}
@@ -624,6 +718,51 @@ function App({
           <p className={styles.selectionMeta} data-testid="hover-preview" aria-live="polite">
             {hoverPreviewText}
           </p>
+          <section className={styles.candidatePanel} aria-label="Remaining move candidates">
+            <h3>Remaining candidates</h3>
+            <p
+              className={styles.selectionMeta}
+              data-testid="continuations-count"
+              aria-live="polite"
+            >
+              Continuations: {continuationSummaryRows.length}
+            </p>
+            {continuationSummaryRows.length > 0 ? (
+              <ul className={styles.candidateList} data-testid="candidate-continuations">
+                {continuationSummaryRows.map((row) => (
+                  <li key={`continuation-${row.stepText}`}>
+                    {row.stepText}
+                    {row.count > 1 ? ` (${row.count} matches)` : ""}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.selectionMeta} data-testid="candidate-continuations">
+                No continuation steps remain.
+              </p>
+            )}
+            <p
+              className={styles.selectionMeta}
+              data-testid="completed-moves-count"
+              aria-live="polite"
+            >
+              Completed moves: {completedMoveSummaryRows.length}
+            </p>
+            {completedMoveSummaryRows.length > 0 ? (
+              <ul className={styles.candidateList} data-testid="candidate-completed-moves">
+                {completedMoveSummaryRows.map((row) => (
+                  <li key={`completed-${row.moveText}`}>
+                    {row.moveText}
+                    {row.count > 1 ? ` (${row.count} matches)` : ""}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.selectionMeta} data-testid="candidate-completed-moves">
+                No completed move candidates for the current prefix.
+              </p>
+            )}
+          </section>
           <div className={styles.controlsRow}>
             <button type="button" disabled>
               Hint

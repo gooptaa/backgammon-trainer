@@ -112,6 +112,31 @@ body {
   min-height: 1.1rem;
 }
 
+.candidatePanel {
+  margin-top: 0.7rem;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(17, 63, 90, 0.2);
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+}
+
+.candidatePanel h3 {
+  margin: 0;
+  font-size: 0.96rem;
+  color: #173346;
+}
+
+.candidateList {
+  margin: 0.25rem 0 0;
+  padding-left: 1.2rem;
+  color: #1f2f3b;
+  font-size: 0.9rem;
+}
+
+.candidateList li + li {
+  margin-top: 0.2rem;
+}
+
 button {
   border: 1px solid #113f5a;
   color: #113f5a;

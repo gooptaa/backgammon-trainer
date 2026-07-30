@@ -9,7 +9,7 @@ export interface SelectedStep {
   readonly toPoint: SelectableDestination;
 }
 
-const formatSelectablePoint = (point: SelectableSource | SelectableDestination): string => {
+export const formatSelectablePoint = (point: SelectableSource | SelectableDestination): string => {
   if (point === "bar") {
     return "Bar";
   }

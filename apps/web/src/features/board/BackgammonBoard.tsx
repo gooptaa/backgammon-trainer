@@ -403,7 +403,7 @@ export function BackgammonBoard({
             className={styles.cancelSelectionButton}
             onClick={onCancelSelection}
           >
-            Cancel Selection
+            Undo Last Step
           </button>
         </div>
       ) : null}
