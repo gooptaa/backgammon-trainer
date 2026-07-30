@@ -795,3 +795,227 @@ export const BLACK_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE: BoardPosition = cre
     black: 13
   }
 });
+
+/**
+ * White can make four ordinary moves on doubles.
+ */
+export const WHITE_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 4 }
+  },
+  borneOff: {
+    white: 11,
+    black: 15
+  }
+});
+
+/**
+ * White can make only three legal plays on doubles.
+ */
+export const WHITE_DOUBLE_THREE_PLAYS_FIXTURE: BoardPosition = createPosition({
+  points: {
+    4: { player: "white", checkerCount: 1 },
+    8: { player: "white", checkerCount: 1 },
+    7: { player: "black", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 13,
+    black: 13
+  }
+});
+
+/**
+ * White can make only two legal plays on doubles.
+ */
+export const WHITE_DOUBLE_TWO_PLAYS_FIXTURE: BoardPosition = createPosition({
+  points: {
+    3: { player: "white", checkerCount: 1 },
+    8: { player: "white", checkerCount: 1 },
+    7: { player: "black", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 13,
+    black: 13
+  }
+});
+
+/**
+ * White can make only one legal play on doubles.
+ */
+export const WHITE_DOUBLE_ONE_PLAY_FIXTURE: BoardPosition = createPosition({
+  points: {
+    2: { player: "white", checkerCount: 1 },
+    8: { player: "white", checkerCount: 1 },
+    7: { player: "black", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 13,
+    black: 13
+  }
+});
+
+/**
+ * White has no legal doubles play.
+ */
+export const WHITE_DOUBLE_NO_PLAY_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    7: { player: "black", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 14,
+    black: 13
+  }
+});
+
+/**
+ * A single checker can be moved four times on doubles.
+ */
+export const WHITE_DOUBLE_SAME_CHECKER_FOUR_PLAYS_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * Different checkers can be moved within one doubles sequence.
+ */
+export const WHITE_DOUBLE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 2 },
+    6: { player: "white", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 11,
+    black: 15
+  }
+});
+
+/**
+ * A later doubles step is blocked after an earlier legal step.
+ */
+export const WHITE_DOUBLE_LATER_STEP_BLOCKED_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    4: { player: "black", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 14,
+    black: 13
+  }
+});
+
+/**
+ * Two white checkers on bar can be entered across a doubles turn.
+ */
+export const WHITE_DOUBLE_MULTIPLE_BAR_ENTRIES_FIXTURE: BoardPosition = createPosition({
+  bar: {
+    white: 2
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
+
+/**
+ * White enters from bar first and then continues ordinary doubles movement.
+ */
+export const WHITE_DOUBLE_BAR_ENTRY_THEN_ORDINARY_FIXTURE: BoardPosition = createPosition({
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * White bar entry can hit, changing temporary state for later doubles steps.
+ */
+export const WHITE_DOUBLE_ENTRY_HIT_SEQUENCE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    24: { player: "black", checkerCount: 1 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 14,
+    black: 14
+  }
+});
+
+/**
+ * White ordinary move can hit, changing temporary state for later doubles steps.
+ */
+export const WHITE_DOUBLE_ORDINARY_HIT_SEQUENCE_FIXTURE: BoardPosition = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    7: { player: "black", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 14
+  }
+});
+
+/**
+ * White can bear off four times on doubles.
+ */
+export const WHITE_DOUBLE_BEAR_OFF_FOUR_PLAYS_FIXTURE: BoardPosition = createPosition({
+  points: {
+    4: { player: "white", checkerCount: 4 }
+  },
+  borneOff: {
+    white: 11,
+    black: 15
+  }
+});
+
+/**
+ * White can bear off fewer than four times on doubles.
+ */
+export const WHITE_DOUBLE_BEAR_OFF_FEWER_PLAYS_FIXTURE: BoardPosition = createPosition({
+  points: {
+    2: { player: "white", checkerCount: 2 }
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
+
+/**
+ * White oversized bearing-off legality changes after each doubles step.
+ */
+export const WHITE_DOUBLE_BEAR_OFF_OVERSIZED_SHIFT_FIXTURE: BoardPosition = createPosition({
+  points: {
+    6: { player: "white", checkerCount: 1 },
+    5: { player: "white", checkerCount: 1 },
+    4: { player: "white", checkerCount: 1 },
+    3: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 11,
+    black: 15
+  }
+});
+
+/**
+ * Black can make four ordinary moves on doubles.
+ */
+export const BLACK_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE: BoardPosition = createPosition({
+  points: {
+    17: { player: "black", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 15,
+    black: 14
+  }
+});

@@ -14,6 +14,7 @@ import {
   BLACK_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
   BLACK_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
   BLACK_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
+  BLACK_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
   BLACK_FORWARD_FIXTURE,
   WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
   WHITE_BAR_BOTH_DICE_SEQUENCE_FIXTURE,
@@ -50,6 +51,21 @@ import {
   WHITE_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
   WHITE_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
   WHITE_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
+  WHITE_DOUBLE_BEAR_OFF_FEWER_PLAYS_FIXTURE,
+  WHITE_DOUBLE_BEAR_OFF_FOUR_PLAYS_FIXTURE,
+  WHITE_DOUBLE_BEAR_OFF_OVERSIZED_SHIFT_FIXTURE,
+  WHITE_DOUBLE_BAR_ENTRY_THEN_ORDINARY_FIXTURE,
+  WHITE_DOUBLE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE,
+  WHITE_DOUBLE_ENTRY_HIT_SEQUENCE_FIXTURE,
+  WHITE_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
+  WHITE_DOUBLE_LATER_STEP_BLOCKED_FIXTURE,
+  WHITE_DOUBLE_MULTIPLE_BAR_ENTRIES_FIXTURE,
+  WHITE_DOUBLE_NO_PLAY_FIXTURE,
+  WHITE_DOUBLE_ONE_PLAY_FIXTURE,
+  WHITE_DOUBLE_ORDINARY_HIT_SEQUENCE_FIXTURE,
+  WHITE_DOUBLE_SAME_CHECKER_FOUR_PLAYS_FIXTURE,
+  WHITE_DOUBLE_THREE_PLAYS_FIXTURE,
+  WHITE_DOUBLE_TWO_PLAYS_FIXTURE,
   WHITE_OPEN_DESTINATION_FIXTURE,
   WHITE_ONE_ORDER_CONTINUES_OTHER_STOPS_FIXTURE,
   WHITE_ONE_DESTINATION_FIXTURE,
@@ -154,15 +170,16 @@ describe("getLegalMoves basic forward generation", () => {
       position: WHITE_SINGLE_HIT_DESTINATION_FIXTURE,
       player: "white",
       roll: {
-        dice: [1, 1]
+        dice: [1, 2]
       }
     };
 
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(2);
-    expect(result.moves[0]?.steps[0]?.hitsBlot).toBe(true);
-    expect(result.moves[0]?.steps[0]?.toPoint).toBe(23);
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(
+      result.moves.some((move) => move.steps[0]?.hitsBlot && move.steps[0]?.toPoint === 23)
+    ).toBe(true);
   });
 
   it("includes hit metadata on generated hit moves", () => {
@@ -200,22 +217,24 @@ describe("getLegalMoves basic forward generation", () => {
     expect(result.moves[0]?.steps[0]?.hitsBlot).toBe(true);
   });
 
-  it("preserves die association when duplicate dice generate hits", () => {
+  it("preserves die association across ordered non-double hit sequences", () => {
     const input: GetLegalMovesInput = {
-      position: WHITE_SINGLE_HIT_DESTINATION_FIXTURE,
+      position: WHITE_HIT_THEN_SECOND_MOVE_FIXTURE,
       player: "white",
       roll: {
-        dice: [1, 1]
+        dice: [1, 2]
       }
     };
 
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(2);
-    expect(result.moves[0]?.steps[0]?.dieIndex).toBe(0);
-    expect(result.moves[1]?.steps[0]?.dieIndex).toBe(1);
-    expect(result.moves[0]?.steps[0]?.hitsBlot).toBe(true);
-    expect(result.moves[1]?.steps[0]?.hitsBlot).toBe(true);
+    expect(result.moves.some((move) => move.steps[0]?.hitsBlot)).toBe(true);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps.length === 2 && move.steps[0]?.dieIndex === 0 && move.steps[1]?.dieIndex === 1
+      )
+    ).toBe(true);
   });
 
   it("generates multiple independent hit opportunities", () => {
@@ -319,21 +338,23 @@ describe("getLegalMoves basic forward generation", () => {
     ).toBe(true);
   });
 
-  it("preserves die association for duplicate die values", () => {
+  it("preserves die association for non-double two-die sequences", () => {
     const input: GetLegalMovesInput = {
-      position: WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
+      position: WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
       player: "white",
       roll: {
-        dice: [1, 1]
+        dice: [1, 2]
       }
     };
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(2);
-    expect(result.moves[0]?.steps[0]?.dieIndex).toBe(0);
-    expect(result.moves[1]?.steps[0]?.dieIndex).toBe(1);
-    expect(result.moves[0]?.steps[0]?.toPoint).toBe(23);
-    expect(result.moves[1]?.steps[0]?.toPoint).toBe(23);
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps.length === 2 && move.steps[0]?.dieIndex === 0 && move.steps[1]?.dieIndex === 1
+      )
+    ).toBe(true);
   });
 
   it("returns empty when no simple move exists", () => {
@@ -461,38 +482,42 @@ describe("getLegalMoves basic forward generation", () => {
       position: WHITE_BAR_HIT_ENTRY_FIXTURE,
       player: "white",
       roll: {
-        dice: [1, 1]
+        dice: [1, 2]
       }
     };
 
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(2);
-    expect(result.moves[0]?.steps[0]?.kind).toBe("enter-from-bar");
-    expect(result.moves[0]?.steps[0]?.hitsBlot).toBe(true);
-    expect(result.moves[0]?.steps[0]?.hit).toEqual({
-      player: "black",
-      point: 24
-    });
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.kind === "enter-from-bar" &&
+          move.steps[0]?.hitsBlot &&
+          move.steps[0]?.hit?.point === 24
+      )
+    ).toBe(true);
   });
 
-  it("preserves die association for duplicate dice on bar entry", () => {
+  it("preserves die association for non-double bar entry sequencing", () => {
     const input: GetLegalMovesInput = {
-      position: WHITE_BAR_DUPLICATE_DICE_FIXTURE,
+      position: WHITE_BAR_BOTH_DICE_SEQUENCE_FIXTURE,
       player: "white",
       roll: {
-        dice: [1, 1]
+        dice: [1, 2]
       }
     };
 
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(2);
-    expect(result.moves[0]?.steps[0]?.kind).toBe("enter-from-bar");
-    expect(result.moves[0]?.steps[0]?.dieIndex).toBe(0);
-    expect(result.moves[1]?.steps[0]?.dieIndex).toBe(1);
-    expect(result.moves[0]?.steps[0]?.toPoint).toBe(24);
-    expect(result.moves[1]?.steps[0]?.toPoint).toBe(24);
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps[0]?.kind === "enter-from-bar")).toBe(true);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps.length === 2 && move.steps[0]?.dieIndex === 0 && move.steps[1]?.dieIndex === 1
+      )
+    ).toBe(true);
   });
 
   it("keeps ordinary move generation unchanged when no bar checker exists", () => {
@@ -1148,9 +1173,9 @@ describe("getLegalMoves basic forward generation", () => {
     expect(result.moves.every((move) => move.steps[0]?.dieValue === 6)).toBe(true);
   });
 
-  it("keeps current doubles behavior unchanged", () => {
+  it("expands doubles to four ordered steps when four plays are legal", () => {
     const input: GetLegalMovesInput = {
-      position: WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
+      position: WHITE_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
       player: "white",
       roll: {
         dice: [1, 1]
@@ -1159,21 +1184,323 @@ describe("getLegalMoves basic forward generation", () => {
 
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(2);
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 4)).toBe(true);
+  });
+
+  it("assigns doubles die uses with ordered dieIndex values 0..3", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    for (const move of result.moves) {
+      expect(move.steps).toHaveLength(4);
+      expect(move.steps.map((step) => step.dieValue)).toEqual([1, 1, 1, 1]);
+      expect(move.steps.map((step) => step.dieIndex)).toEqual([0, 1, 2, 3]);
+    }
+  });
+
+  it("returns only three-step doubles candidates when four plays are impossible", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_THREE_PLAYS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 3)).toBe(true);
+  });
+
+  it("returns only two-step doubles candidates when three plays are impossible", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_TWO_PLAYS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 2)).toBe(true);
+  });
+
+  it("returns one-step doubles candidates when no second play exists", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_ONE_PLAY_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
     expect(result.moves.every((move) => move.steps.length === 1)).toBe(true);
+  });
+
+  it("returns no moves when doubles are fully blocked", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_NO_PLAY_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    expect(getLegalMoves(input).moves).toEqual([]);
+  });
+
+  it("allows moving the same checker repeatedly in a doubles sequence", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_SAME_CHECKER_FOUR_PLAYS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some((move) => {
+        if (move.steps.length !== 4) {
+          return false;
+        }
+
+        return move.steps.every((step, index) => {
+          if (index === 0) {
+            return step.fromPoint === 8 && step.toPoint === 7;
+          }
+
+          return step.fromPoint === move.steps[index - 1]?.toPoint;
+        });
+      })
+    ).toBe(true);
+  });
+
+  it("allows moving different checkers within one doubles sequence", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some((move) => {
+        const fromPoints = move.steps
+          .map((step) => step.fromPoint)
+          .filter((fromPoint) => fromPoint !== "bar");
+        return new Set(fromPoints).size > 1;
+      })
+    ).toBe(true);
+  });
+
+  it("recalculates legality after each doubles step", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_LATER_STEP_BLOCKED_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [2, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(1);
+    expect(result.moves[0]?.steps).toHaveLength(1);
+    expect(result.moves[0]?.steps[0]?.fromPoint).toBe(8);
+    expect(result.moves[0]?.steps[0]?.toPoint).toBe(6);
     expect(result.moves[0]?.steps[0]?.dieIndex).toBe(0);
-    expect(result.moves[1]?.steps[0]?.dieIndex).toBe(1);
+  });
+
+  it("enforces mandatory bar entry at each depth for doubles", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_MULTIPLE_BAR_ENTRIES_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length >= 2)).toBe(true);
+    expect(result.moves.every((move) => move.steps[0]?.kind === "enter-from-bar")).toBe(true);
+    expect(result.moves.every((move) => move.steps[1]?.kind === "enter-from-bar")).toBe(true);
+  });
+
+  it("supports bar entry followed by ordinary movement on doubles", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_BAR_ENTRY_THEN_ORDINARY_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps.length === 4 &&
+          move.steps[0]?.kind === "enter-from-bar" &&
+          move.steps.slice(1).some((step) => step.kind === "point-to-point")
+      )
+    ).toBe(true);
+  });
+
+  it("updates temporary position after entry hits in doubles sequences", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_ENTRY_HIT_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps.length === 4 &&
+          move.steps[0]?.kind === "enter-from-bar" &&
+          move.steps[0]?.hitsBlot &&
+          move.steps[0]?.hit?.point === 24 &&
+          move.steps[1]?.fromPoint === 24
+      )
+    ).toBe(true);
+  });
+
+  it("updates temporary position after ordinary hits in doubles sequences", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_ORDINARY_HIT_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps.length === 4 &&
+          move.steps[0]?.kind === "point-to-point" &&
+          move.steps[0]?.hitsBlot &&
+          move.steps[0]?.hit?.point === 7 &&
+          move.steps[1]?.fromPoint === 7
+      )
+    ).toBe(true);
+  });
+
+  it("supports four-step doubles bearing-off turns", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_BEAR_OFF_FOUR_PLAYS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [4, 4]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 4)).toBe(true);
+    expect(result.moves.every((move) => move.steps.every((step) => step.kind === "bear-off"))).toBe(
+      true
+    );
+  });
+
+  it("returns maximum playable doubles step count in bearing-off positions", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_BEAR_OFF_FEWER_PLAYS_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [2, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 2)).toBe(true);
+  });
+
+  it("recalculates exact and oversized bearing-off legality after each doubles step", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_BEAR_OFF_OVERSIZED_SHIFT_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [6, 6]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps.length === 4 &&
+          move.steps.every((step) => step.kind === "bear-off") &&
+          move.steps.map((step) => step.fromPoint).join(",") === "6,5,4,3"
+      )
+    ).toBe(true);
+  });
+
+  it("supports equivalent doubles expansion behavior for black movement direction", () => {
+    const input: GetLegalMovesInput = {
+      position: BLACK_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
+      player: "black",
+      roll: {
+        dice: [1, 1]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves.length).toBeGreaterThan(0);
+    expect(result.moves.every((move) => move.steps.length === 4)).toBe(true);
+    expect(
+      result.moves.some(
+        (move) =>
+          move.steps[0]?.fromPoint === 17 &&
+          move.steps[0]?.toPoint === 18 &&
+          move.steps[3]?.toPoint === 21
+      )
+    ).toBe(true);
   });
 
   it("does not mutate the original input position during candidate expansion", () => {
-    const original = WHITE_HIT_THEN_SECOND_MOVE_FIXTURE;
+    const original = WHITE_DOUBLE_ENTRY_HIT_SEQUENCE_FIXTURE;
     const snapshot = structuredClone(original);
 
     const input: GetLegalMovesInput = {
       position: original,
       player: "white",
       roll: {
-        dice: [1, 2]
+        dice: [1, 1]
       }
     };
 
@@ -1235,10 +1562,26 @@ describe("engine fixtures", () => {
       BLACK_BEAR_OFF_EXACT_FIXTURE,
       BLACK_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
       BLACK_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
-      BLACK_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE
+      BLACK_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
+      WHITE_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
+      WHITE_DOUBLE_THREE_PLAYS_FIXTURE,
+      WHITE_DOUBLE_TWO_PLAYS_FIXTURE,
+      WHITE_DOUBLE_ONE_PLAY_FIXTURE,
+      WHITE_DOUBLE_NO_PLAY_FIXTURE,
+      WHITE_DOUBLE_SAME_CHECKER_FOUR_PLAYS_FIXTURE,
+      WHITE_DOUBLE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE,
+      WHITE_DOUBLE_LATER_STEP_BLOCKED_FIXTURE,
+      WHITE_DOUBLE_MULTIPLE_BAR_ENTRIES_FIXTURE,
+      WHITE_DOUBLE_BAR_ENTRY_THEN_ORDINARY_FIXTURE,
+      WHITE_DOUBLE_ENTRY_HIT_SEQUENCE_FIXTURE,
+      WHITE_DOUBLE_ORDINARY_HIT_SEQUENCE_FIXTURE,
+      WHITE_DOUBLE_BEAR_OFF_FOUR_PLAYS_FIXTURE,
+      WHITE_DOUBLE_BEAR_OFF_FEWER_PLAYS_FIXTURE,
+      WHITE_DOUBLE_BEAR_OFF_OVERSIZED_SHIFT_FIXTURE,
+      BLACK_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE
     ];
 
-    expect(fixtures).toHaveLength(50);
+    expect(fixtures).toHaveLength(66);
   });
 
   it("produces complete point maps from helper", () => {
@@ -1299,6 +1642,22 @@ describe("engine fixtures", () => {
       BLACK_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
       BLACK_BEAR_OFF_OVERSIZED_BLOCKED_FIXTURE,
       BLACK_BEAR_OFF_SEQUENCE_LEGALITY_SHIFT_FIXTURE,
+      WHITE_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
+      WHITE_DOUBLE_THREE_PLAYS_FIXTURE,
+      WHITE_DOUBLE_TWO_PLAYS_FIXTURE,
+      WHITE_DOUBLE_ONE_PLAY_FIXTURE,
+      WHITE_DOUBLE_NO_PLAY_FIXTURE,
+      WHITE_DOUBLE_SAME_CHECKER_FOUR_PLAYS_FIXTURE,
+      WHITE_DOUBLE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE,
+      WHITE_DOUBLE_LATER_STEP_BLOCKED_FIXTURE,
+      WHITE_DOUBLE_MULTIPLE_BAR_ENTRIES_FIXTURE,
+      WHITE_DOUBLE_BAR_ENTRY_THEN_ORDINARY_FIXTURE,
+      WHITE_DOUBLE_ENTRY_HIT_SEQUENCE_FIXTURE,
+      WHITE_DOUBLE_ORDINARY_HIT_SEQUENCE_FIXTURE,
+      WHITE_DOUBLE_BEAR_OFF_FOUR_PLAYS_FIXTURE,
+      WHITE_DOUBLE_BEAR_OFF_FEWER_PLAYS_FIXTURE,
+      WHITE_DOUBLE_BEAR_OFF_OVERSIZED_SHIFT_FIXTURE,
+      BLACK_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
       createPosition({
         points: {
           6: { player: "white", checkerCount: 1 },

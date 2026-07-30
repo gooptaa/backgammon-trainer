@@ -15,14 +15,15 @@ export type MoveStepKind = "point-to-point" | "enter-from-bar" | "bear-off";
 
 /**
  * Atomic movement within a turn.
- * Future legality logic will emit one or more steps to describe full turns.
+ * One turn may contain multiple steps, including up to four on doubles.
+ * For doubles, dieIndex values 0,1,2,3 represent the ordered die uses.
  */
 export interface MoveStep {
   readonly kind: MoveStepKind;
   readonly fromPoint: PointIndex | "bar";
   readonly toPoint: PointIndex | "off";
   readonly dieValue: DieValue;
-  readonly dieIndex: 0 | 1;
+  readonly dieIndex: 0 | 1 | 2 | 3;
   readonly hitsBlot: boolean;
   readonly hit?: {
     readonly player: Player;
@@ -56,8 +57,6 @@ export interface GetLegalMovesInput {
 
 /**
  * Dice roll input consumed by move generation.
- *
- * For now, both dice are evaluated independently and not combined into turn sequences.
  */
 export interface DiceRoll {
   readonly dice: readonly [DieValue, DieValue];
@@ -189,7 +188,7 @@ interface CandidateMoveInput {
   readonly fromPoint: PointIndex | "bar";
   readonly toPoint: PointIndex;
   readonly dieValue: DieValue;
-  readonly dieIndex: 0 | 1;
+  readonly dieIndex: 0 | 1 | 2 | 3;
   readonly destinationOccupancy: PointOccupancy | null;
 }
 
@@ -234,6 +233,22 @@ const createCandidateMove = (input: CandidateMoveInput): Move | null => {
     };
   }
 
+  if (input.destinationOccupancy.player === input.player) {
+    return {
+      player: input.player,
+      steps: [
+        {
+          kind: input.kind,
+          fromPoint: input.fromPoint,
+          toPoint: input.toPoint,
+          dieValue: input.dieValue,
+          dieIndex: input.dieIndex,
+          hitsBlot: false
+        }
+      ]
+    };
+  }
+
   return null;
 };
 
@@ -241,7 +256,7 @@ interface SingleDieGenerationInput {
   readonly position: BoardPosition;
   readonly player: Player;
   readonly dieValue: DieValue;
-  readonly dieIndex: 0 | 1;
+  readonly dieIndex: 0 | 1 | 2 | 3;
 }
 
 const generateSingleDieMoves = (input: SingleDieGenerationInput): readonly Move[] => {
@@ -413,17 +428,97 @@ const applyMoveStepTemporarily = (
   };
 };
 
+interface DieUse {
+  readonly dieValue: DieValue;
+  readonly dieIndex: 0 | 1 | 2 | 3;
+}
+
+const buildTurnCandidatesRecursively = (
+  position: BoardPosition,
+  player: Player,
+  orderedDieUses: readonly DieUse[],
+  currentDepth: number,
+  accumulatedSteps: readonly MoveStep[]
+): readonly Move[] => {
+  if (currentDepth >= orderedDieUses.length) {
+    return accumulatedSteps.length === 0
+      ? []
+      : [
+          {
+            player,
+            steps: accumulatedSteps
+          }
+        ];
+  }
+
+  const dieUse = orderedDieUses[currentDepth];
+  if (dieUse === undefined) {
+    return accumulatedSteps.length === 0
+      ? []
+      : [
+          {
+            player,
+            steps: accumulatedSteps
+          }
+        ];
+  }
+
+  const nextSteps = generateSingleDieMoves({
+    position,
+    player,
+    dieValue: dieUse.dieValue,
+    dieIndex: dieUse.dieIndex
+  });
+
+  if (nextSteps.length === 0) {
+    return accumulatedSteps.length === 0
+      ? []
+      : [
+          {
+            player,
+            steps: accumulatedSteps
+          }
+        ];
+  }
+
+  const candidates: Move[] = [];
+
+  for (const nextMove of nextSteps) {
+    const nextStep = nextMove.steps[0];
+    if (nextStep === undefined) {
+      continue;
+    }
+
+    const temporaryPosition = applyMoveStepTemporarily(position, player, nextStep);
+    const continuation = buildTurnCandidatesRecursively(
+      temporaryPosition,
+      player,
+      orderedDieUses,
+      currentDepth + 1,
+      [...accumulatedSteps, nextStep]
+    );
+
+    candidates.push(...continuation);
+  }
+
+  return candidates;
+};
+
 const assembleTurnCandidates = (input: GetLegalMovesInput): readonly Move[] => {
   const [firstDie, secondDie] = input.roll.dice;
 
   if (firstDie === secondDie) {
-    return input.roll.dice.flatMap((dieValue, dieIndex) =>
-      generateSingleDieMoves({
-        position: input.position,
-        player: input.player,
-        dieValue,
-        dieIndex: dieIndex as 0 | 1
-      })
+    return buildTurnCandidatesRecursively(
+      input.position,
+      input.player,
+      [
+        { dieValue: firstDie, dieIndex: 0 },
+        { dieValue: firstDie, dieIndex: 1 },
+        { dieValue: firstDie, dieIndex: 2 },
+        { dieValue: firstDie, dieIndex: 3 }
+      ],
+      0,
+      []
     );
   }
 
@@ -431,50 +526,19 @@ const assembleTurnCandidates = (input: GetLegalMovesInput): readonly Move[] => {
     [0, 1],
     [1, 0]
   ];
-  const moves: Move[] = [];
 
-  for (const [firstDieIndex, secondDieIndex] of orders) {
-    const firstSteps = generateSingleDieMoves({
-      position: input.position,
-      player: input.player,
-      dieValue: input.roll.dice[firstDieIndex],
-      dieIndex: firstDieIndex
-    });
-
-    for (const firstMove of firstSteps) {
-      const firstStep = firstMove.steps[0];
-      if (firstStep === undefined) {
-        continue;
-      }
-
-      const temporaryPosition = applyMoveStepTemporarily(input.position, input.player, firstStep);
-      const secondSteps = generateSingleDieMoves({
-        position: temporaryPosition,
-        player: input.player,
-        dieValue: input.roll.dice[secondDieIndex],
-        dieIndex: secondDieIndex
-      });
-
-      if (secondSteps.length === 0) {
-        moves.push(firstMove);
-        continue;
-      }
-
-      for (const secondMove of secondSteps) {
-        const secondStep = secondMove.steps[0];
-        if (secondStep === undefined) {
-          continue;
-        }
-
-        moves.push({
-          player: input.player,
-          steps: [firstStep, secondStep]
-        });
-      }
-    }
-  }
-
-  return moves;
+  return orders.flatMap(([firstDieIndex, secondDieIndex]) =>
+    buildTurnCandidatesRecursively(
+      input.position,
+      input.player,
+      [
+        { dieValue: input.roll.dice[firstDieIndex], dieIndex: firstDieIndex },
+        { dieValue: input.roll.dice[secondDieIndex], dieIndex: secondDieIndex }
+      ],
+      0,
+      []
+    )
+  );
 };
 
 const filterTurnCandidatesByDiceUsage = (
@@ -484,7 +548,12 @@ const filterTurnCandidatesByDiceUsage = (
   const [firstDie, secondDie] = roll.dice;
 
   if (firstDie === secondDie) {
-    return candidates;
+    if (candidates.length === 0) {
+      return [];
+    }
+
+    const maxPlayableSteps = Math.max(...candidates.map((move) => move.steps.length));
+    return candidates.filter((move) => move.steps.length === maxPlayableSteps);
   }
 
   const completedTurns = candidates.filter((move) => move.steps.length === 2);
