@@ -100,8 +100,12 @@ const getEntryDestinationPoint = (dieValue: DieValue, player: Player): PointInde
   return destination;
 };
 
-const canGenerateSimpleMoves = (): boolean => {
-  return true;
+const requiresBarEntry = (position: BoardPosition, player: Player): boolean => {
+  return position.bar[player] > 0;
+};
+
+const canGenerateSimpleMoves = (position: BoardPosition, player: Player): boolean => {
+  return !requiresBarEntry(position, player);
 };
 
 const getPlayerOccupiedPoints = (
@@ -185,12 +189,13 @@ const createCandidateMove = (input: CandidateMoveInput): Move | null => {
  */
 export const getLegalMoves = (input: GetLegalMovesInput): LegalMoveResult => {
   const moves: Move[] = [];
+  const mustEnterFromBar = requiresBarEntry(input.position, input.player);
   const diceWithIndexes = input.roll.dice.map((dieValue, dieIndex) => ({
     dieValue,
     dieIndex: dieIndex as 0 | 1
   }));
 
-  if (canGenerateSimpleMoves()) {
+  if (canGenerateSimpleMoves(input.position, input.player)) {
     const fromPoints = getPlayerOccupiedPoints(input.position, input.player);
 
     for (const fromPoint of fromPoints) {
@@ -217,7 +222,7 @@ export const getLegalMoves = (input: GetLegalMovesInput): LegalMoveResult => {
     }
   }
 
-  if (input.position.bar[input.player] > 0) {
+  if (mustEnterFromBar) {
     for (const { dieValue, dieIndex } of diceWithIndexes) {
       const destinationPoint = getEntryDestinationPoint(dieValue, input.player);
 

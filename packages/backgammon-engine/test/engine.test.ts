@@ -17,10 +17,12 @@ import {
   WHITE_BAR_HIT_ENTRY_FIXTURE,
   WHITE_BAR_SINGLE_CHECKER_FIXTURE,
   WHITE_BAR_TWO_DICE_DIFFERENT_DESTINATIONS_FIXTURE,
+  WHITE_BLOCKED_BAR_WITH_ORDINARY_OPPORTUNITY_FIXTURE,
   BAR_ENTRY_EXAMPLE_FIXTURE,
   BEARING_OFF_EXAMPLE_FIXTURE,
   EMPTY_BOARD_FIXTURE,
   INITIAL_POSITION_FIXTURE,
+  WHITE_ORDINARY_ONLY_MANDATORY_ENTRY_FIXTURE,
   SINGLE_CHECKER_FIXTURE,
   WHITE_BLOCKED_DESTINATION_FIXTURE,
   WHITE_HIT_AND_BLOCKED_DESTINATIONS_FIXTURE,
@@ -469,7 +471,7 @@ describe("getLegalMoves basic forward generation", () => {
 
   it("keeps ordinary move generation unchanged when no bar checker exists", () => {
     const input: GetLegalMovesInput = {
-      position: WHITE_TWO_DICE_INDEPENDENT_FIXTURE,
+      position: WHITE_ORDINARY_ONLY_MANDATORY_ENTRY_FIXTURE,
       player: "white",
       roll: {
         dice: [1, 2]
@@ -482,7 +484,7 @@ describe("getLegalMoves basic forward generation", () => {
     expect(result.moves.every((move) => move.steps[0]?.kind === "point-to-point")).toBe(true);
   });
 
-  it("supports mixed ordinary and bar-entry opportunities", () => {
+  it("suppresses ordinary moves when bar checkers exist", () => {
     const input: GetLegalMovesInput = {
       position: WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
       player: "white",
@@ -493,17 +495,56 @@ describe("getLegalMoves basic forward generation", () => {
 
     const result = getLegalMoves(input);
 
-    expect(result.moves).toHaveLength(4);
+    expect(result.moves).toHaveLength(2);
+    expect(result.moves.every((move) => move.steps[0]?.kind === "enter-from-bar")).toBe(true);
+  });
+
+  it("returns only entry moves while checkers remain on the bar", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_SINGLE_CHECKER_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toHaveLength(2);
+    expect(result.moves.every((move) => move.steps[0]?.kind === "enter-from-bar")).toBe(true);
+  });
+
+  it("returns no moves when bar entry is blocked even if ordinary moves exist", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BLOCKED_BAR_WITH_ORDINARY_OPPORTUNITY_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
+    expect(result.moves).toEqual([]);
+  });
+
+  it("supports mixed ordinary and bar-entry positions by returning only legal entries", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
+      player: "white",
+      roll: {
+        dice: [1, 2]
+      }
+    };
+
+    const result = getLegalMoves(input);
+
     expect(
       result.moves.some(
         (move) => move.steps[0]?.kind === "enter-from-bar" && move.steps[0]?.toPoint === 24
       )
     ).toBe(true);
-    expect(
-      result.moves.some(
-        (move) => move.steps[0]?.kind === "point-to-point" && move.steps[0]?.fromPoint === 13
-      )
-    ).toBe(true);
+    expect(result.moves.some((move) => move.steps[0]?.kind === "point-to-point")).toBe(false);
   });
 
   it("supports both dice producing different bar-entry destinations", () => {
@@ -555,10 +596,12 @@ describe("engine fixtures", () => {
       WHITE_BAR_HIT_ENTRY_FIXTURE,
       WHITE_BAR_TWO_DICE_DIFFERENT_DESTINATIONS_FIXTURE,
       WHITE_BAR_DUPLICATE_DICE_FIXTURE,
-      WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE
+      WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
+      WHITE_ORDINARY_ONLY_MANDATORY_ENTRY_FIXTURE,
+      WHITE_BLOCKED_BAR_WITH_ORDINARY_OPPORTUNITY_FIXTURE
     ];
 
-    expect(fixtures).toHaveLength(22);
+    expect(fixtures).toHaveLength(24);
   });
 
   it("produces complete point maps from helper", () => {
@@ -591,6 +634,8 @@ describe("engine fixtures", () => {
       WHITE_BAR_TWO_DICE_DIFFERENT_DESTINATIONS_FIXTURE,
       WHITE_BAR_DUPLICATE_DICE_FIXTURE,
       WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE,
+      WHITE_ORDINARY_ONLY_MANDATORY_ENTRY_FIXTURE,
+      WHITE_BLOCKED_BAR_WITH_ORDINARY_OPPORTUNITY_FIXTURE,
       createPosition({
         points: {
           6: { player: "white", checkerCount: 1 },

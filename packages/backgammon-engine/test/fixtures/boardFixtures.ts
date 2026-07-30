@@ -377,3 +377,34 @@ export const WHITE_BAR_AND_ORDINARY_MIXED_FIXTURE: BoardPosition = createPositio
     black: 15
   }
 });
+
+/**
+ * White has ordinary point-to-point opportunities with no bar checkers.
+ */
+export const WHITE_ORDINARY_ONLY_MANDATORY_ENTRY_FIXTURE: BoardPosition = createPosition({
+  points: {
+    13: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 15
+  }
+});
+
+/**
+ * White has bar checkers with blocked entry points while an ordinary move exists.
+ */
+export const WHITE_BLOCKED_BAR_WITH_ORDINARY_OPPORTUNITY_FIXTURE: BoardPosition = createPosition({
+  points: {
+    13: { player: "white", checkerCount: 1 },
+    24: { player: "black", checkerCount: 2 },
+    23: { player: "black", checkerCount: 2 }
+  },
+  bar: {
+    white: 1
+  },
+  borneOff: {
+    white: 13,
+    black: 11
+  }
+});
