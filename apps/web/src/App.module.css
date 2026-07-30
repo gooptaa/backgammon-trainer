@@ -105,6 +105,13 @@ body {
   gap: 0.55rem;
 }
 
+.selectionMeta {
+  margin: 0.4rem 0 0;
+  font-size: 0.92rem;
+  color: #213441;
+  min-height: 1.1rem;
+}
+
 button {
   border: 1px solid #113f5a;
   color: #113f5a;

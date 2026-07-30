@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type BoardPosition } from "@backgammon-trainer/backgammon-domain";
+import { POINT_INDEXES, type BoardPosition } from "@backgammon-trainer/backgammon-domain";
 
 import { BackgammonBoard } from "./BackgammonBoard";
 import {
@@ -87,6 +87,53 @@ describe("BackgammonBoard", () => {
         name: "Point 12 (bottom left) has 5 black checkers"
       })
     ).toBeInTheDocument();
+  });
+
+  it("renders every occupied starting point with exact checker counts", () => {
+    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
+
+    const expectedOccupiedPoints = [
+      { point: 24, player: "white", checkerCount: 2 },
+      { point: 13, player: "white", checkerCount: 5 },
+      { point: 8, player: "white", checkerCount: 3 },
+      { point: 6, player: "white", checkerCount: 5 },
+      { point: 1, player: "black", checkerCount: 2 },
+      { point: 12, player: "black", checkerCount: 5 },
+      { point: 17, player: "black", checkerCount: 3 },
+      { point: 19, player: "black", checkerCount: 5 }
+    ] as const;
+
+    for (const occupiedPoint of expectedOccupiedPoints) {
+      expect(
+        screen.getByRole("group", {
+          name: new RegExp(
+            `Point ${occupiedPoint.point} \\(.+\\) has ${occupiedPoint.checkerCount} ${occupiedPoint.player} checkers`
+          )
+        })
+      ).toBeInTheDocument();
+
+      expect(
+        container.querySelectorAll(
+          `[data-testid='point-stack-${occupiedPoint.point}'] [data-checker-kind='point']`
+        )
+      ).toHaveLength(occupiedPoint.checkerCount);
+    }
+  });
+
+  it("renders each engine point exactly once with no duplicates or omissions", () => {
+    const { container } = render(<BackgammonBoard position={STANDARD_STARTING_POSITION} />);
+
+    const renderedPointIndexes = Array.from(
+      container.querySelectorAll("[data-point-index]"),
+      (node) => Number(node.getAttribute("data-point-index"))
+    ).filter((value): value is number => Number.isInteger(value));
+
+    expect(renderedPointIndexes).toHaveLength(24);
+    expect(new Set(renderedPointIndexes).size).toBe(24);
+
+    for (const pointIndex of POINT_INDEXES) {
+      expect(renderedPointIndexes).toContain(pointIndex);
+    }
   });
 
   it("distinguishes white and black checkers by labels and attributes", () => {

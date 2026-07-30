@@ -125,6 +125,31 @@ const applyFirstInteractiveMove = (): void => {
   }
 };
 
+const selectFirstSource = (): void => {
+  const sourceButtons = screen.getAllByRole("button", {
+    name: /Select source (point|bar)/i
+  });
+
+  fireEvent.click(sourceButtons[0] as HTMLElement);
+};
+
+const selectFirstDestination = (): void => {
+  const offDestination = screen.queryByRole("button", {
+    name: /Select destination off/i
+  });
+
+  if (offDestination !== null) {
+    fireEvent.click(offDestination);
+    return;
+  }
+
+  const destinationButtons = screen.getAllByRole("button", {
+    name: /Select destination point/i
+  });
+
+  fireEvent.click(destinationButtons[0] as HTMLElement);
+};
+
 afterEach(() => {
   cleanup();
 });
@@ -258,5 +283,66 @@ describe("App engine game sandbox", () => {
     expect(screen.getByRole("heading", { name: "Backgammon Trainer" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Board Workspace" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Graphical backgammon board" })).toBeInTheDocument();
+  });
+
+  it("updates breadcrumb after each selected step", () => {
+    renderApp();
+
+    setDice("1", "1");
+    selectFirstSource();
+    selectFirstDestination();
+
+    const firstBreadcrumb = screen.getByTestId("selection-breadcrumb").textContent ?? "";
+    expect(firstBreadcrumb).toContain("Move:");
+    expect(firstBreadcrumb).toContain("->");
+
+    selectFirstSource();
+    selectFirstDestination();
+
+    const secondBreadcrumb = screen.getByTestId("selection-breadcrumb").textContent ?? "";
+    expect(secondBreadcrumb).toContain("Move:");
+    expect(secondBreadcrumb).toContain("->");
+    expect(secondBreadcrumb).not.toEqual(firstBreadcrumb);
+  });
+
+  it("clears breadcrumb after move application", () => {
+    renderApp();
+
+    setDice("1", "2");
+    applyFirstInteractiveMove();
+
+    expect(screen.getByTestId("selection-breadcrumb")).toHaveTextContent("");
+  });
+
+  it("clears breadcrumb after cancellation", () => {
+    renderApp();
+
+    setDice("1", "1");
+    selectFirstSource();
+    selectFirstDestination();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Selection" }));
+
+    expect(screen.getByTestId("selection-breadcrumb")).toHaveTextContent("");
+  });
+
+  it("shows and clears hover preview without mutating selection", () => {
+    renderApp();
+
+    setDice("1", "2");
+    selectFirstSource();
+
+    const destinationButton = screen.getAllByRole("button", {
+      name: /Select destination point/i
+    })[0] as HTMLElement;
+
+    fireEvent.mouseEnter(destinationButton);
+
+    expect(screen.getByTestId("hover-preview").textContent?.trim().length).toBeGreaterThan(0);
+
+    const breadcrumbBeforeLeave = screen.getByTestId("selection-breadcrumb").textContent;
+    fireEvent.mouseLeave(destinationButton);
+
+    expect(screen.getByTestId("hover-preview")).toHaveTextContent("");
+    expect(screen.getByTestId("selection-breadcrumb").textContent).toEqual(breadcrumbBeforeLeave);
   });
 });

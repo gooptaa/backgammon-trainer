@@ -9,6 +9,18 @@ export interface SelectedStep {
   readonly toPoint: SelectableDestination;
 }
 
+const formatSelectablePoint = (point: SelectableSource | SelectableDestination): string => {
+  if (point === "bar") {
+    return "Bar";
+  }
+
+  if (point === "off") {
+    return "Off";
+  }
+
+  return String(point);
+};
+
 const matchesSelectedStep = (moveStep: MoveStep, selectedStep: SelectedStep): boolean => {
   return moveStep.fromPoint === selectedStep.fromPoint && moveStep.toPoint === selectedStep.toPoint;
 };
@@ -85,4 +97,24 @@ export const getSingleCompletedMove = (
   const hasLongerAlternative = candidates.some((move) => move.steps.length > selectedSteps.length);
 
   return hasLongerAlternative ? null : (completedMoves[0] ?? null);
+};
+
+export const formatSelectedStepsBreadcrumb = (selectedSteps: readonly SelectedStep[]): string => {
+  const firstStep = selectedSteps[0];
+
+  if (firstStep === undefined) {
+    return "";
+  }
+
+  const labels: string[] = [formatSelectablePoint(firstStep.fromPoint)];
+
+  for (const step of selectedSteps) {
+    labels.push(formatSelectablePoint(step.toPoint));
+  }
+
+  return labels.join(" -> ");
+};
+
+export const formatSelectedStep = (step: SelectedStep): string => {
+  return `${formatSelectablePoint(step.fromPoint)} -> ${formatSelectablePoint(step.toPoint)}`;
 };

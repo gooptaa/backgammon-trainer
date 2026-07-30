@@ -8,6 +8,7 @@ import {
   setDice,
   type ApplyGameMoveFailureReason,
   type GameState,
+  type MoveStep,
   type PassTurnFailureReason,
   type SetDiceFailureReason,
   type Move
@@ -19,6 +20,8 @@ import { BackgammonBoard } from "./features/board/BackgammonBoard";
 import { EngineSandboxPanel } from "./features/sandbox/EngineSandboxPanel";
 import {
   filterCandidateMoves,
+  formatSelectedStep,
+  formatSelectedStepsBreadcrumb,
   getSelectableDestinations,
   getSelectableSources,
   getSingleCompletedMove,
@@ -81,6 +84,7 @@ function App({ initialGameState }: AppProps): JSX.Element {
   const [message, setMessage] = useState<string | null>(null);
   const [selectedSteps, setSelectedSteps] = useState<readonly SelectedStep[]>([]);
   const [selectedSource, setSelectedSource] = useState<SelectableSource | null>(null);
+  const [hoveredDestination, setHoveredDestination] = useState<SelectableDestination | null>(null);
   const gameStatus = useMemo(() => getGameStatus(gameState.position), [gameState]);
   const legalMovesResult = useMemo(() => getLegalMovesForState(gameState), [gameState]);
   const legalMoves = legalMovesResult.ok ? legalMovesResult.moves : [];
@@ -102,6 +106,10 @@ function App({ initialGameState }: AppProps): JSX.Element {
         setSelectedSource(null);
       }
 
+      if (hoveredDestination !== null) {
+        setHoveredDestination(null);
+      }
+
       return;
     }
 
@@ -109,14 +117,23 @@ function App({ initialGameState }: AppProps): JSX.Element {
       if (selectedSteps.length > 0 || selectedSource !== null) {
         setSelectedSteps([]);
         setSelectedSource(null);
+        setHoveredDestination(null);
         setMessage("Move selection reset because legal options changed.");
       }
     }
-  }, [gameState.dice, gameStatus.state, legalMovesResult, selectedSource, selectedSteps]);
+  }, [
+    gameState.dice,
+    gameStatus.state,
+    hoveredDestination,
+    legalMovesResult,
+    selectedSource,
+    selectedSteps
+  ]);
 
   const resetMoveSelection = (): void => {
     setSelectedSteps([]);
     setSelectedSource(null);
+    setHoveredDestination(null);
   };
 
   const onSetDice = (): void => {
@@ -167,6 +184,7 @@ function App({ initialGameState }: AppProps): JSX.Element {
 
   const onSelectSource = (source: SelectableSource): void => {
     setSelectedSource(source);
+    setHoveredDestination(null);
     setMessage(null);
   };
 
@@ -174,6 +192,8 @@ function App({ initialGameState }: AppProps): JSX.Element {
     if (selectedSource === null) {
       return;
     }
+
+    setHoveredDestination(null);
 
     const nextSelectedSteps: readonly SelectedStep[] = [
       ...selectedSteps,
@@ -215,6 +235,118 @@ function App({ initialGameState }: AppProps): JSX.Element {
     legalMovesResult.ok
       ? getSelectableDestinations(candidateMoves, selectedSteps, selectedSource)
       : [];
+
+  const getUniqueContinuationStep = (
+    moves: readonly Move[],
+    stepIndex: number
+  ): SelectedStep | null => {
+    let candidateStep: MoveStep | null = null;
+
+    for (const move of moves) {
+      const step = move.steps[stepIndex];
+
+      if (step === undefined) {
+        continue;
+      }
+
+      if (candidateStep === null) {
+        candidateStep = step;
+        continue;
+      }
+
+      if (candidateStep.fromPoint !== step.fromPoint || candidateStep.toPoint !== step.toPoint) {
+        return null;
+      }
+    }
+
+    if (candidateStep === null) {
+      return null;
+    }
+
+    return {
+      fromPoint: candidateStep.fromPoint,
+      toPoint: candidateStep.toPoint
+    };
+  };
+
+  const hoveredStep: SelectedStep | null =
+    selectedSource !== null && hoveredDestination !== null
+      ? {
+          fromPoint: selectedSource,
+          toPoint: hoveredDestination
+        }
+      : null;
+  const hoveredStepPrefix: readonly SelectedStep[] =
+    hoveredStep === null ? selectedSteps : [...selectedSteps, hoveredStep];
+  const hoveredCandidates: readonly Move[] =
+    hoveredStep === null ? [] : filterCandidateMoves(candidateMoves, hoveredStepPrefix);
+  const hoverCompletesAutomatically =
+    hoveredStep !== null && getSingleCompletedMove(hoveredCandidates, hoveredStepPrefix) !== null;
+  const uniquePreviewStep =
+    hoveredStep === null
+      ? null
+      : getUniqueContinuationStep(hoveredCandidates, hoveredStepPrefix.length);
+  const previewSources: readonly SelectableSource[] =
+    hoveredStep === null ? [] : getSelectableSources(hoveredCandidates, hoveredStepPrefix);
+  const singlePreviewSource = previewSources.length === 1 ? (previewSources[0] ?? null) : null;
+  const previewDestinations: readonly SelectableDestination[] =
+    hoveredStep === null || singlePreviewSource === null
+      ? []
+      : getSelectableDestinations(hoveredCandidates, hoveredStepPrefix, singlePreviewSource);
+
+  const breadcrumb = formatSelectedStepsBreadcrumb(selectedSteps);
+  const interactionStatus = (() => {
+    if (gameStatus.state === "complete") {
+      return "Game complete";
+    }
+
+    if (gameState.dice === null) {
+      return "Set dice to start move selection";
+    }
+
+    if (!legalMovesResult.ok) {
+      return "Set dice to start move selection";
+    }
+
+    if (selectedSource !== null) {
+      return "Select a destination";
+    }
+
+    if (selectedSteps.length === 0) {
+      return "Select a checker";
+    }
+
+    if (candidateMoves.length === 1) {
+      return "Move will complete automatically";
+    }
+
+    return `${candidateMoves.length} legal continuations remain`;
+  })();
+
+  const hoverPreviewText = (() => {
+    if (hoveredStep === null) {
+      return "";
+    }
+
+    if (hoverCompletesAutomatically) {
+      return "Move will complete automatically";
+    }
+
+    if (uniquePreviewStep !== null) {
+      return `Preview next step: ${formatSelectedStep(uniquePreviewStep)}`;
+    }
+
+    return `${hoveredCandidates.length} legal continuations remain`;
+  })();
+
+  const onHoverDestination = (destination: SelectableDestination): void => {
+    setHoveredDestination(destination);
+  };
+
+  const onClearHoveredDestination = (): void => {
+    setHoveredDestination(null);
+  };
+
   const shouldShowCancelSelection = selectedSteps.length > 0 || selectedSource !== null;
 
   return (
@@ -240,11 +372,25 @@ function App({ initialGameState }: AppProps): JSX.Element {
             activePlayer={gameState.activePlayer}
             selectableSources={selectableSources}
             selectableDestinations={selectableDestinations}
+            previewSources={previewSources}
+            previewDestinations={previewDestinations}
+            hoveredDestination={hoveredDestination}
             selectedSource={selectedSource}
             onSelectSource={onSelectSource}
             onSelectDestination={onSelectDestination}
+            onHoverDestination={onHoverDestination}
+            onClearHoveredDestination={onClearHoveredDestination}
             {...(shouldShowCancelSelection ? { onCancelSelection: resetMoveSelection } : {})}
           />
+          <p className={styles.selectionMeta} data-testid="interaction-status" aria-live="polite">
+            {interactionStatus}
+          </p>
+          <p className={styles.selectionMeta} data-testid="selection-breadcrumb" aria-live="polite">
+            {breadcrumb === "" ? "" : `Move: ${breadcrumb}`}
+          </p>
+          <p className={styles.selectionMeta} data-testid="hover-preview" aria-live="polite">
+            {hoverPreviewText}
+          </p>
           <div className={styles.controlsRow}>
             <button type="button" disabled>
               Hint

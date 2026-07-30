@@ -3,6 +3,8 @@ import type { Move } from "@backgammon-trainer/backgammon-engine";
 
 import {
   filterCandidateMoves,
+  formatSelectedStep,
+  formatSelectedStepsBreadcrumb,
   getSelectableDestinations,
   getSelectableSources,
   getSingleCompletedMove,
@@ -138,5 +140,19 @@ describe("moveSelection helper", () => {
     const selectedSteps: readonly SelectedStep[] = [{ fromPoint: 13, toPoint: 8 }];
 
     expect(getSingleCompletedMove(syntheticCandidates, selectedSteps)).toBeNull();
+  });
+
+  it("formats breadcrumb preserving selected step order", () => {
+    const selectedSteps: readonly SelectedStep[] = [
+      { fromPoint: 13, toPoint: 8 },
+      { fromPoint: 8, toPoint: 6 }
+    ];
+
+    expect(formatSelectedStepsBreadcrumb(selectedSteps)).toBe("13 -> 8 -> 6");
+  });
+
+  it("formats bar and off labels for breadcrumb step text", () => {
+    expect(formatSelectedStepsBreadcrumb([{ fromPoint: "bar", toPoint: 22 }])).toBe("Bar -> 22");
+    expect(formatSelectedStep({ fromPoint: 6, toPoint: "off" })).toBe("6 -> Off");
   });
 });

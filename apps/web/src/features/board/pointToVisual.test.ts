@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { POINT_INDEXES } from "@backgammon-trainer/backgammon-domain";
 
 import {
   BOTTOM_LEFT_POINTS,
@@ -21,5 +22,16 @@ describe("pointToVisual", () => {
     expect(getVisualPointSlot(13)).toMatchObject({ row: "top", side: "left" });
     expect(getVisualPointSlot(12)).toMatchObject({ row: "bottom", side: "left" });
     expect(getVisualPointSlot(1)).toMatchObject({ row: "bottom", side: "right" });
+  });
+
+  it("maps every engine point to exactly one unique row/slot location", () => {
+    const locationKeys = POINT_INDEXES.map((pointIndex) => {
+      const mapping = getVisualPointSlot(pointIndex);
+
+      return `${mapping.row}-${mapping.slot}`;
+    });
+
+    expect(locationKeys).toHaveLength(24);
+    expect(new Set(locationKeys).size).toBe(24);
   });
 });

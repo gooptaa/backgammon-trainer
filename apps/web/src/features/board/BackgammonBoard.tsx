@@ -20,9 +20,14 @@ export interface BackgammonBoardProps {
   activePlayer?: Player;
   selectableSources?: readonly SelectableSource[];
   selectableDestinations?: readonly SelectableDestination[];
+  previewSources?: readonly SelectableSource[];
+  previewDestinations?: readonly SelectableDestination[];
+  hoveredDestination?: SelectableDestination | null;
   selectedSource?: SelectableSource | null;
   onSelectSource?: (source: SelectableSource) => void;
   onSelectDestination?: (destination: SelectableDestination) => void;
+  onHoverDestination?: (destination: SelectableDestination) => void;
+  onClearHoveredDestination?: () => void;
   onCancelSelection?: () => void;
 }
 
@@ -45,9 +50,14 @@ interface PointColumnProps {
   row: BoardVisualRow;
   isSourceSelectable: boolean;
   isDestinationSelectable: boolean;
+  isPreviewSource: boolean;
+  isPreviewDestination: boolean;
+  isHoveredDestination: boolean;
   isSelectedSource: boolean;
   onSelectSource?: (source: SelectableSource) => void;
   onSelectDestination?: (destination: SelectableDestination) => void;
+  onHoverDestination?: (destination: SelectableDestination) => void;
+  onClearHoveredDestination?: () => void;
 }
 
 function PointColumn({
@@ -56,9 +66,14 @@ function PointColumn({
   row,
   isSourceSelectable,
   isDestinationSelectable,
+  isPreviewSource,
+  isPreviewDestination,
+  isHoveredDestination,
   isSelectedSource,
   onSelectSource,
-  onSelectDestination
+  onSelectDestination,
+  onHoverDestination,
+  onClearHoveredDestination
 }: PointColumnProps): JSX.Element {
   const occupancy = position.points[pointIndex];
   const isEven = pointIndex % 2 === 0;
@@ -76,8 +91,10 @@ function PointColumn({
       className={`${styles.pointColumn} ${
         isSourceSelectable ? styles.selectableSourcePoint : ""
       } ${isDestinationSelectable ? styles.selectableDestinationPoint : ""} ${
-        isSelectedSource ? styles.selectedSourcePoint : ""
-      }`}
+        isPreviewSource ? styles.previewSourcePoint : ""
+      } ${isPreviewDestination ? styles.previewDestinationPoint : ""} ${
+        isHoveredDestination ? styles.hoveredDestinationPoint : ""
+      } ${isSelectedSource ? styles.selectedSourcePoint : ""}`}
       data-point-index={pointIndex}
       data-testid={`board-point-${pointIndex}`}
       aria-label={getPointLabel(pointIndex, position)}
@@ -135,6 +152,8 @@ function PointColumn({
           aria-label={destinationLabel}
           aria-selected="false"
           onClick={() => onSelectDestination?.(pointIndex)}
+          onMouseEnter={() => onHoverDestination?.(pointIndex)}
+          onMouseLeave={() => onClearHoveredDestination?.()}
         />
       ) : null}
     </div>
@@ -149,9 +168,14 @@ function PointRow({
   showBarCounts,
   selectableSources,
   selectableDestinations,
+  previewSources,
+  previewDestinations,
+  hoveredDestination,
   selectedSource,
   onSelectSource,
   onSelectDestination,
+  onHoverDestination,
+  onClearHoveredDestination,
   activePlayer
 }: {
   leftPoints: readonly PointIndex[];
@@ -161,9 +185,14 @@ function PointRow({
   showBarCounts: boolean;
   selectableSources: ReadonlySet<SelectableSource>;
   selectableDestinations: ReadonlySet<SelectableDestination>;
+  previewSources: ReadonlySet<SelectableSource>;
+  previewDestinations: ReadonlySet<SelectableDestination>;
+  hoveredDestination: SelectableDestination | null;
   selectedSource: SelectableSource | null;
   onSelectSource?: (source: SelectableSource) => void;
   onSelectDestination?: (destination: SelectableDestination) => void;
+  onHoverDestination?: (destination: SelectableDestination) => void;
+  onClearHoveredDestination?: () => void;
   activePlayer: Player;
 }): JSX.Element {
   const barSourceSelectable = selectableSources.has("bar");
@@ -179,13 +208,22 @@ function PointRow({
             row={row}
             isSourceSelectable={selectableSources.has(pointIndex)}
             isDestinationSelectable={selectableDestinations.has(pointIndex)}
+            isPreviewSource={previewSources.has(pointIndex)}
+            isPreviewDestination={previewDestinations.has(pointIndex)}
+            isHoveredDestination={hoveredDestination === pointIndex}
             isSelectedSource={selectedSource === pointIndex}
             {...(onSelectSource === undefined ? {} : { onSelectSource })}
             {...(onSelectDestination === undefined ? {} : { onSelectDestination })}
+            {...(onHoverDestination === undefined ? {} : { onHoverDestination })}
+            {...(onClearHoveredDestination === undefined ? {} : { onClearHoveredDestination })}
           />
         ))}
       </div>
-      <div className={`${styles.bar} ${barSourceSelectable ? styles.selectableBar : ""}`}>
+      <div
+        className={`${styles.bar} ${barSourceSelectable ? styles.selectableBar : ""} ${
+          previewSources.has("bar") ? styles.previewSourcePoint : ""
+        }`}
+      >
         {showBarCounts ? (
           <>
             <p className={styles.barLabel}>Bar</p>
@@ -222,9 +260,14 @@ function PointRow({
             row={row}
             isSourceSelectable={selectableSources.has(pointIndex)}
             isDestinationSelectable={selectableDestinations.has(pointIndex)}
+            isPreviewSource={previewSources.has(pointIndex)}
+            isPreviewDestination={previewDestinations.has(pointIndex)}
+            isHoveredDestination={hoveredDestination === pointIndex}
             isSelectedSource={selectedSource === pointIndex}
             {...(onSelectSource === undefined ? {} : { onSelectSource })}
             {...(onSelectDestination === undefined ? {} : { onSelectDestination })}
+            {...(onHoverDestination === undefined ? {} : { onHoverDestination })}
+            {...(onClearHoveredDestination === undefined ? {} : { onClearHoveredDestination })}
           />
         ))}
       </div>
@@ -237,13 +280,20 @@ export function BackgammonBoard({
   activePlayer = "white",
   selectableSources = [],
   selectableDestinations = [],
+  previewSources = [],
+  previewDestinations = [],
+  hoveredDestination = null,
   selectedSource = null,
   onSelectSource,
   onSelectDestination,
+  onHoverDestination,
+  onClearHoveredDestination,
   onCancelSelection
 }: BackgammonBoardProps): JSX.Element {
   const selectableSourceSet = new Set<SelectableSource>(selectableSources);
   const selectableDestinationSet = new Set<SelectableDestination>(selectableDestinations);
+  const previewSourceSet = new Set<SelectableSource>(previewSources);
+  const previewDestinationSet = new Set<SelectableDestination>(previewDestinations);
   const offDestinationSelectable = selectableDestinationSet.has("off");
 
   return (
@@ -264,9 +314,14 @@ export function BackgammonBoard({
           showBarCounts
           selectableSources={selectableSourceSet}
           selectableDestinations={selectableDestinationSet}
+          previewSources={previewSourceSet}
+          previewDestinations={previewDestinationSet}
+          hoveredDestination={hoveredDestination}
           selectedSource={selectedSource}
           {...(onSelectSource === undefined ? {} : { onSelectSource })}
           {...(onSelectDestination === undefined ? {} : { onSelectDestination })}
+          {...(onHoverDestination === undefined ? {} : { onHoverDestination })}
+          {...(onClearHoveredDestination === undefined ? {} : { onClearHoveredDestination })}
           activePlayer={activePlayer}
         />
         <PointRow
@@ -277,9 +332,14 @@ export function BackgammonBoard({
           showBarCounts={false}
           selectableSources={selectableSourceSet}
           selectableDestinations={selectableDestinationSet}
+          previewSources={previewSourceSet}
+          previewDestinations={previewDestinationSet}
+          hoveredDestination={hoveredDestination}
           selectedSource={selectedSource}
           {...(onSelectSource === undefined ? {} : { onSelectSource })}
           {...(onSelectDestination === undefined ? {} : { onSelectDestination })}
+          {...(onHoverDestination === undefined ? {} : { onHoverDestination })}
+          {...(onClearHoveredDestination === undefined ? {} : { onClearHoveredDestination })}
           activePlayer={activePlayer}
         />
       </div>
@@ -298,6 +358,8 @@ export function BackgammonBoard({
               className={styles.offButton}
               aria-label="Select destination off for white"
               onClick={() => onSelectDestination?.("off")}
+              onMouseEnter={() => onHoverDestination?.("off")}
+              onMouseLeave={() => onClearHoveredDestination?.()}
             >
               Select Off
             </button>
@@ -316,6 +378,8 @@ export function BackgammonBoard({
               className={styles.offButton}
               aria-label="Select destination off for black"
               onClick={() => onSelectDestination?.("off")}
+              onMouseEnter={() => onHoverDestination?.("off")}
+              onMouseLeave={() => onClearHoveredDestination?.()}
             >
               Select Off
             </button>
