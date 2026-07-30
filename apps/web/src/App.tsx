@@ -216,7 +216,11 @@ function App({
         setSelectedSteps([]);
         setSelectedSource(null);
         setHoveredDestination(null);
-        setMessage("Move selection reset because legal options changed.");
+        setMessage(
+          stagedPrefixResult.reason === "ambiguous-prefix"
+            ? "Move selection reset because staged projection was ambiguous."
+            : "Move selection reset because legal options changed."
+        );
       }
     }
   }, [
@@ -403,7 +407,11 @@ function App({
     );
 
     if (!nextPreview.ok) {
-      setMessage("That step is not part of any legal move sequence.");
+      setMessage(
+        nextPreview.reason === "ambiguous-prefix"
+          ? "That step is ambiguous for staged projection. Choose a different step."
+          : "That step is not part of any legal move sequence."
+      );
       setSelectedSource(null);
       return;
     }

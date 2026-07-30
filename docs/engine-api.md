@@ -117,6 +117,7 @@ Failure:
 
 - `{ ok: false, reason: "illegal-prefix" }` when the selected prefix matches no complete legal move
 - `{ ok: false, reason: "invalid-step-sequence" }` when prefix shape or projection is invalid
+- `{ ok: false, reason: "ambiguous-prefix" }` when coordinate-matching candidates would project different staged positions
 
 Contract notes:
 
@@ -124,6 +125,7 @@ Contract notes:
 - This API does not widen `applyMove(...)` semantics.
 - Move legality still originates from complete legal move generation.
 - Prefix projection reuses existing immutable engine checker-transition behavior.
+- Prefix projection applies canonical `MoveStep` values from matching legal moves; missing execution metadata is never fabricated.
 
 ## passTurn
 

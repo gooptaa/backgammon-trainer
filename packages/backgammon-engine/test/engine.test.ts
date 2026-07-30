@@ -2240,6 +2240,24 @@ describe("applyMove public API", () => {
 });
 
 describe("previewMovePrefix", () => {
+  it("preserves coordinate-equivalent candidates when staged projection is unambiguous", () => {
+    const result = previewMovePrefix(
+      WHITE_TWO_DICE_DIFFERENT_CHECKERS_SEQUENCE_FIXTURE,
+      "white",
+      { dice: [1, 2] },
+      [{ fromPoint: 8, toPoint: 7 }]
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.candidateMoves.length).toBeGreaterThan(1);
+      expect(result.candidateMoves.every((move) => move.steps[0]?.fromPoint === 8)).toBe(true);
+      expect(result.candidateMoves.every((move) => move.steps[0]?.toPoint === 7)).toBe(true);
+      expect(result.position.points[8]).toBeNull();
+      expect(result.position.points[7]).toEqual({ player: "white", checkerCount: 1 });
+    }
+  });
+
   it("projects staged position for the first step of a same-checker two-step sequence", () => {
     const result = previewMovePrefix(
       WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,

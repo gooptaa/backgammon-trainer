@@ -44,11 +44,21 @@ Staged-prefix validation and projection implementation location:
 - Validation path:
   1. Generate complete legal moves with existing `getLegalMoves(...)`.
   2. Match selected from/to prefix against complete move prefixes.
-  3. Apply only matched prefix steps via existing immutable step-transition logic.
-  4. Return staged position plus remaining matching complete candidates.
+  3. Preserve all complete legal candidate moves matching the selected coordinate prefix.
+  4. Project staged position by applying canonical `MoveStep` values (including metadata) from matching candidates.
+  5. If projected staged positions diverge across matching candidates, fail with explicit ambiguity instead of selecting an unsafe projection.
+  6. Return staged position plus remaining matching complete candidates when projection is unambiguous.
 - Failure contract:
   - `illegal-prefix`
   - `invalid-step-sequence`
+  - `ambiguous-prefix`
+
+Board source/destination input to canonical engine steps:
+
+- UI selection state continues to capture coordinate-only steps (`fromPoint`, `toPoint`).
+- Engine prefix projection maps those coordinates to canonical legal `MoveStep` values from `getLegalMoves(...)`.
+- Canonical fields (`dieValue`, `dieIndex`, `kind`, hit metadata) are sourced from legal candidates, not fabricated in UI code.
+- Coordinate-equivalent prefix candidates are preserved in `candidateMoves`; staged projection proceeds only when all candidates yield the same staged board.
 
 Hit, bar-entry, and bear-off staged preview behavior:
 
@@ -92,7 +102,7 @@ Starting-player resolution and opening-dice transfer into GameState:
 - First engine turn is created by:
   1. creating a fresh game state at standard starting position for resolved starter
   2. assigning opening dice through existing `setDice(...)`
-- Dice ordering preserves white and black rolled values as shown in UI.
+- Dice ordering convention is explicit: opening dice are passed as `[whiteDie, blackDie]` and are not sorted by winner.
 
 Transition to normal rolling:
 
@@ -119,6 +129,7 @@ Public engine API changes:
 
 - Added `previewMovePrefix(...)` and associated result/failure types.
 - Existing `applyMove(...)`, `getLegalMoves(...)`, and game-state wrappers are unchanged in behavior.
+- `applyMove(...)` exact move equivalence remains strict, including exact `dieIndex` matching.
 
 Legal move generation impact:
 
@@ -147,10 +158,15 @@ Validation performed:
 
 - CI=1 pnpm --filter @backgammon-trainer/backgammon-engine test
 - CI=1 pnpm --filter @backgammon-trainer/web test
+- CI=1 pnpm --filter @backgammon-trainer/web build
+- CI=1 pnpm check
+- git diff --check
+- git status
 
 Deviations from plan:
 
 - Added test-only App initialization props for opening-phase state injection to cover opening-turn pass edge behavior deterministically.
+- Added explicit ambiguity failure handling in `previewMovePrefix(...)` after final semantics review to prevent unsafe first-candidate projection in future rule expansions.
 
 Notes for future contributors:
 

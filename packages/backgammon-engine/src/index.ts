@@ -122,7 +122,8 @@ export type PassTurnResult =
 
 export type ApplyMoveFailureReason = "illegal-move" | "invalid-step-sequence";
 
-export type PreviewMovePrefixFailureReason = "illegal-prefix" | "invalid-step-sequence";
+export type PreviewMovePrefixFailureReason =
+  "illegal-prefix" | "invalid-step-sequence" | "ambiguous-prefix";
 
 export type PreviewMovePrefixResult =
   | {
@@ -576,6 +577,52 @@ const moveStartsWithPrefixSteps = (move: Move, prefixSteps: readonly MovePrefixS
   });
 };
 
+const arePositionsEquivalent = (first: BoardPosition, second: BoardPosition): boolean => {
+  if (
+    first.bar.white !== second.bar.white ||
+    first.bar.black !== second.bar.black ||
+    first.borneOff.white !== second.borneOff.white ||
+    first.borneOff.black !== second.borneOff.black
+  ) {
+    return false;
+  }
+
+  return POINT_INDEXES.every((pointIndex) => {
+    const firstOccupancy = first.points[pointIndex];
+    const secondOccupancy = second.points[pointIndex];
+
+    if (firstOccupancy === null || secondOccupancy === null) {
+      return firstOccupancy === secondOccupancy;
+    }
+
+    return (
+      firstOccupancy.player === secondOccupancy.player &&
+      firstOccupancy.checkerCount === secondOccupancy.checkerCount
+    );
+  });
+};
+
+const projectMovePrefixPosition = (
+  position: BoardPosition,
+  player: Player,
+  move: Move,
+  prefixLength: number
+): BoardPosition | null => {
+  let stagedPosition = position;
+
+  for (let stepIndex = 0; stepIndex < prefixLength; stepIndex += 1) {
+    const step = move.steps[stepIndex];
+
+    if (step === undefined) {
+      return null;
+    }
+
+    stagedPosition = applyMoveStepUnchecked(stagedPosition, player, step);
+  }
+
+  return stagedPosition;
+};
+
 export const areMovesEquivalent = (expected: Move, supplied: Move): boolean => {
   if (expected.player !== supplied.player || expected.steps.length !== supplied.steps.length) {
     return false;
@@ -810,42 +857,46 @@ export const previewMovePrefix = (
     };
   }
 
-  let stagedPosition = position;
-
   try {
-    const firstCandidate = candidateMoves[0];
+    const projectedPositions = candidateMoves.map((candidateMove) =>
+      projectMovePrefixPosition(position, player, candidateMove, selectedSteps.length)
+    );
+    const firstProjectedPosition = projectedPositions[0];
 
-    if (firstCandidate === undefined) {
+    if (firstProjectedPosition === undefined || firstProjectedPosition === null) {
       return {
         ok: false,
-        reason: "illegal-prefix"
+        reason: "invalid-step-sequence"
       };
     }
 
-    for (let stepIndex = 0; stepIndex < selectedSteps.length; stepIndex += 1) {
-      const step = firstCandidate.steps[stepIndex];
-
-      if (step === undefined) {
+    for (const projectedPosition of projectedPositions) {
+      if (projectedPosition === null) {
         return {
           ok: false,
           reason: "invalid-step-sequence"
         };
       }
 
-      stagedPosition = applyMoveStepUnchecked(stagedPosition, player, step);
+      if (!arePositionsEquivalent(firstProjectedPosition, projectedPosition)) {
+        return {
+          ok: false,
+          reason: "ambiguous-prefix"
+        };
+      }
     }
+
+    return {
+      ok: true,
+      position: firstProjectedPosition,
+      candidateMoves
+    };
   } catch {
     return {
       ok: false,
       reason: "invalid-step-sequence"
     };
   }
-
-  return {
-    ok: true,
-    position: stagedPosition,
-    candidateMoves
-  };
 };
 
 export const applyMove = (

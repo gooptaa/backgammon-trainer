@@ -33,6 +33,8 @@ Progressive move construction in the UI uses a staged-position model. The staged
 
 Standard opening-roll orchestration also remains in the web layer: White and Black opening dice are rolled in UI state, ties are rerolled explicitly, and the resolved opening dice are injected into the first engine `GameState` turn through `setDice(...)`.
 
+Opening-roll dice ordering convention is explicit and stable: the dice tuple passed to engine turn state is `[whiteDie, blackDie]`. This ordering is preserved even when Black wins the opening roll; no sorting or winner-first reordering is applied.
+
 ## Why credentials require a server boundary
 
 Any variable bundled by Vite into client code is public. Provider keys and model credentials must therefore remain server-only. The server mediates model calls, applies timeouts/retries later, and shields secrets from the browser.
