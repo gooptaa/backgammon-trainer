@@ -49,6 +49,18 @@ export interface LegalMoveResult {
   readonly warnings?: readonly string[];
 }
 
+export type ApplyMoveFailureReason = "illegal-move" | "invalid-step-sequence";
+
+export type ApplyMoveResult =
+  | {
+      readonly ok: true;
+      readonly position: BoardPosition;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: ApplyMoveFailureReason;
+    };
+
 export interface GetLegalMovesInput {
   readonly position: BoardPosition;
   readonly player: Player;
@@ -371,7 +383,7 @@ const addCheckerToPoint = (
   };
 };
 
-const applyMoveStepTemporarily = (
+const applyMoveStepUnchecked = (
   position: BoardPosition,
   player: Player,
   step: MoveStep
@@ -426,6 +438,66 @@ const applyMoveStepTemporarily = (
     bar: nextBar,
     borneOff: nextBorneOff
   };
+};
+
+const areStepsEquivalent = (expected: MoveStep, supplied: MoveStep): boolean => {
+  if (
+    expected.kind !== supplied.kind ||
+    expected.fromPoint !== supplied.fromPoint ||
+    expected.toPoint !== supplied.toPoint ||
+    expected.dieValue !== supplied.dieValue ||
+    expected.dieIndex !== supplied.dieIndex ||
+    expected.hitsBlot !== supplied.hitsBlot
+  ) {
+    return false;
+  }
+
+  if (expected.hit === undefined && supplied.hit === undefined) {
+    return true;
+  }
+
+  if (expected.hit === undefined || supplied.hit === undefined) {
+    return false;
+  }
+
+  return expected.hit.player === supplied.hit.player && expected.hit.point === supplied.hit.point;
+};
+
+export const areMovesEquivalent = (expected: Move, supplied: Move): boolean => {
+  if (expected.player !== supplied.player || expected.steps.length !== supplied.steps.length) {
+    return false;
+  }
+
+  return expected.steps.every((step, stepIndex) => {
+    const suppliedStep = supplied.steps[stepIndex];
+    return suppliedStep !== undefined && areStepsEquivalent(step, suppliedStep);
+  });
+};
+
+const isMoveStepSequenceWellFormed = (move: Move): boolean => {
+  if (move.steps.length === 0) {
+    return false;
+  }
+
+  return move.steps.every((step) => {
+    if (step.hitsBlot !== (step.hit !== undefined)) {
+      return false;
+    }
+
+    if (step.kind === "point-to-point") {
+      return step.fromPoint !== "bar" && step.toPoint !== "off";
+    }
+
+    if (step.kind === "enter-from-bar") {
+      return step.fromPoint === "bar" && step.toPoint !== "off";
+    }
+
+    if (step.kind === "bear-off") {
+      return step.fromPoint !== "bar" && step.toPoint === "off";
+    }
+
+    return false;
+  });
 };
 
 interface DieUse {
@@ -489,7 +561,7 @@ const buildTurnCandidatesRecursively = (
       continue;
     }
 
-    const temporaryPosition = applyMoveStepTemporarily(position, player, nextStep);
+    const temporaryPosition = applyMoveStepUnchecked(position, player, nextStep);
     const continuation = buildTurnCandidatesRecursively(
       temporaryPosition,
       player,
@@ -592,5 +664,51 @@ export const getLegalMoves = (input: GetLegalMovesInput): LegalMoveResult => {
 
   return {
     moves: filterTurnCandidatesByDiceUsage(input.roll, assembledTurns)
+  };
+};
+
+export const applyMove = (
+  position: BoardPosition,
+  player: Player,
+  dice: DiceRoll,
+  move: Move
+): ApplyMoveResult => {
+  if (!isMoveStepSequenceWellFormed(move)) {
+    return {
+      ok: false,
+      reason: "invalid-step-sequence"
+    };
+  }
+
+  const legalMoves = getLegalMoves({
+    position,
+    player,
+    roll: dice
+  }).moves;
+  const matchedLegalMove = legalMoves.find((legalMove) => areMovesEquivalent(legalMove, move));
+
+  if (matchedLegalMove === undefined) {
+    return {
+      ok: false,
+      reason: "illegal-move"
+    };
+  }
+
+  let nextPosition = position;
+
+  try {
+    for (const step of matchedLegalMove.steps) {
+      nextPosition = applyMoveStepUnchecked(nextPosition, player, step);
+    }
+  } catch {
+    return {
+      ok: false,
+      reason: "invalid-step-sequence"
+    };
+  }
+
+  return {
+    ok: true,
+    position: nextPosition
   };
 };

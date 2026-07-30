@@ -2,7 +2,31 @@
 
 ## Scope
 
-This document describes the observable output contract of `getLegalMoves(...)` as currently implemented in `packages/backgammon-engine/src/index.ts`.
+This document describes the observable output contract of `getLegalMoves(...)` and `applyMove(...)` as currently implemented in `packages/backgammon-engine/src/index.ts`.
+
+## Public Move Application API
+
+`applyMove(position, player, dice, move)` returns:
+
+- `{ ok: true, position }` when the supplied move matches the current legal-move set.
+- `{ ok: false, reason }` when the move is invalid.
+
+Failure reasons are intentionally small:
+
+- `illegal-move`: the supplied move is not currently legal for that position/player/dice.
+- `invalid-step-sequence`: the supplied move shape is malformed (for example, empty or internally inconsistent step sequence).
+
+Validation behavior:
+
+- Supplied moves are validated against current legal moves from `getLegalMoves(...)`.
+- Matching is explicit on ordered steps, step kinds, from/to points, die values, hit metadata, bear-off shape, and `dieIndex`.
+- Final-board-only validation is not used.
+
+Immutability behavior:
+
+- On success, a new position is returned.
+- On failure, no position is returned.
+- Input position and supplied move are not mutated on success or failure.
 
 ## Move Meaning
 
@@ -31,6 +55,7 @@ Contract decision for this milestone:
 
 - `dieIndex` is execution metadata for die-use identity, not checker-identity semantics.
 - Semantic duplicate analysis in tests treats ordered checker movements and hit/bear-off effects as primary identity and ignores `dieIndex`.
+- For `applyMove(...)`, `dieIndex` must match exactly against a currently legal move.
 
 ## Duplicate Behavior (Current)
 

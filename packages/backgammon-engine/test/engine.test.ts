@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { validateBoardPosition } from "@backgammon-trainer/backgammon-domain";
 
 import {
+  applyMove,
+  type ApplyMoveFailureReason,
   type DiceRoll,
   getLegalMoves,
   type GetLegalMovesInput,
@@ -101,9 +103,38 @@ const hasSemanticDuplicates = (moves: readonly Move[], includeDieIndex: boolean)
   return new Set(keys).size !== keys.length;
 };
 
+const requireLegalMove = (
+  input: GetLegalMovesInput,
+  predicate: (move: Move) => boolean,
+  label: string
+): Move => {
+  const legalMoves = getLegalMoves(input).moves;
+  const selectedMove = legalMoves.find(predicate);
+
+  if (selectedMove === undefined) {
+    throw new Error(`Expected legal move for ${label}`);
+  }
+
+  return selectedMove;
+};
+
+const expectApplyFailureReason = (
+  result: ReturnType<typeof applyMove>,
+  reason: ApplyMoveFailureReason
+): void => {
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.reason).toBe(reason);
+  }
+};
+
 describe("backgammon engine exports", () => {
   it("exports getLegalMoves", () => {
     expect(getLegalMoves).toBeTypeOf("function");
+  });
+
+  it("exports applyMove", () => {
+    expect(applyMove).toBeTypeOf("function");
   });
 
   it("exposes move model types", () => {
@@ -1528,6 +1559,666 @@ describe("getLegalMoves basic forward generation", () => {
     getLegalMoves(input);
 
     expect(original).toEqual(snapshot);
+  });
+});
+
+describe("applyMove public API", () => {
+  it("applies an ordinary one-checker movement", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_NO_SECOND_STEP_AFTER_VALID_FIRST_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) =>
+        candidate.steps.length === 1 &&
+        candidate.steps[0]?.fromPoint === 2 &&
+        candidate.steps[0]?.toPoint === 1,
+      "ordinary one-checker move"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.points[2]).toBeNull();
+      expect(result.position.points[1]).toEqual({ player: "white", checkerCount: 1 });
+    }
+  });
+
+  it("applies movement onto an own occupied point", () => {
+    const input: GetLegalMovesInput = {
+      position: createPosition({
+        points: {
+          8: { player: "white", checkerCount: 1 },
+          7: { player: "white", checkerCount: 1 },
+          6: { player: "black", checkerCount: 2 },
+          5: { player: "black", checkerCount: 2 }
+        },
+        borneOff: {
+          white: 13,
+          black: 11
+        }
+      }),
+      player: "white",
+      roll: { dice: [2, 1] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) =>
+        candidate.steps.length === 1 &&
+        candidate.steps[0]?.fromPoint === 8 &&
+        candidate.steps[0]?.toPoint === 7,
+      "stack onto one own checker"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.points[8]).toBeNull();
+      expect(result.position.points[7]).toEqual({ player: "white", checkerCount: 2 });
+    }
+  });
+
+  it("applies a two-step non-double turn", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_TWO_DICE_SAME_CHECKER_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps.length === 2,
+      "two-step turn"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.points[8]).toBeNull();
+      expect(result.position.points[5]).toEqual({ player: "white", checkerCount: 1 });
+    }
+  });
+
+  it("applies both legal die orders according to each move step order", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BOTH_DICE_BOTH_ORDERS_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const firstOrderMove = requireLegalMove(
+      input,
+      (candidate) =>
+        candidate.steps.length === 2 &&
+        candidate.steps[0]?.dieIndex === 0 &&
+        candidate.steps[1]?.dieIndex === 1,
+      "die order 0->1"
+    );
+    const secondOrderMove = requireLegalMove(
+      input,
+      (candidate) =>
+        candidate.steps.length === 2 &&
+        candidate.steps[0]?.dieIndex === 1 &&
+        candidate.steps[1]?.dieIndex === 0,
+      "die order 1->0"
+    );
+
+    const firstOrderResult = applyMove(input.position, input.player, input.roll, firstOrderMove);
+    const secondOrderResult = applyMove(input.position, input.player, input.roll, secondOrderMove);
+
+    expect(firstOrderResult.ok).toBe(true);
+    expect(secondOrderResult.ok).toBe(true);
+  });
+
+  it("applies an ordinary hit and transfers the opposing checker to bar", () => {
+    const input: GetLegalMovesInput = {
+      position: createPosition({
+        points: {
+          8: { player: "white", checkerCount: 1 },
+          7: { player: "black", checkerCount: 1 },
+          6: { player: "black", checkerCount: 2 },
+          5: { player: "black", checkerCount: 2 }
+        },
+        borneOff: {
+          white: 14,
+          black: 10
+        }
+      }),
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps[0]?.hitsBlot === true,
+      "ordinary hit sequence"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.bar.black).toBe(1);
+      expect(result.position.points[7]).toEqual({ player: "white", checkerCount: 1 });
+    }
+  });
+
+  it("applies bar entry and removes a checker from the active player's bar", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_SINGLE_CHECKER_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps[0]?.kind === "enter-from-bar",
+      "bar entry"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.bar.white).toBe(0);
+    }
+  });
+
+  it("applies entry hit and transfers the opposing checker to bar", () => {
+    const input: GetLegalMovesInput = {
+      position: createPosition({
+        points: {
+          24: { player: "black", checkerCount: 1 },
+          23: { player: "black", checkerCount: 2 },
+          22: { player: "black", checkerCount: 2 }
+        },
+        bar: {
+          white: 1
+        },
+        borneOff: {
+          white: 14,
+          black: 10
+        }
+      }),
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps[0]?.kind === "enter-from-bar" && candidate.steps[0]?.hitsBlot,
+      "entry hit"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.bar.white).toBe(0);
+      expect(result.position.bar.black).toBe(1);
+      expect(result.position.points[24]).toEqual({ player: "white", checkerCount: 1 });
+    }
+  });
+
+  it("applies exact bearing off and increments borne-off count", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_EXACT_FIXTURE,
+      player: "white",
+      roll: { dice: [6, 1] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps[0]?.kind === "bear-off" && candidate.steps[0]?.fromPoint === 6,
+      "exact bear-off"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.borneOff.white).toBe(input.position.borneOff.white + 1);
+      expect(result.position.points[6]).toBeNull();
+    }
+  });
+
+  it("applies oversized bearing off correctly", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BEAR_OFF_OVERSIZED_ALLOWED_FIXTURE,
+      player: "white",
+      roll: { dice: [6, 1] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps[0]?.kind === "bear-off" && candidate.steps[0]?.fromPoint === 5,
+      "oversized bear-off"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.borneOff.white).toBe(input.position.borneOff.white + 1);
+      expect(result.position.points[5]).toBeNull();
+    }
+  });
+
+  it("applies a four-step doubles turn", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 1] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps.length === 4,
+      "four-step doubles turn"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.borneOff.white).toBe(input.position.borneOff.white);
+      expect(result.position.bar.white).toBe(input.position.bar.white);
+      expect(result.position.bar.black).toBe(input.position.bar.black);
+    }
+  });
+
+  it("applies doubles turns with fewer than four mandatory plays", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_TWO_PLAYS_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 1] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps.length === 2,
+      "short mandatory doubles turn"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.borneOff.white).toBe(input.position.borneOff.white);
+    }
+  });
+
+  it("applies black-direction movement", () => {
+    const input: GetLegalMovesInput = {
+      position: createPosition({
+        points: {
+          1: { player: "black", checkerCount: 1 },
+          7: { player: "white", checkerCount: 2 },
+          8: { player: "white", checkerCount: 2 }
+        },
+        borneOff: {
+          white: 11,
+          black: 14
+        }
+      }),
+      player: "black",
+      roll: { dice: [6, 1] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps[0]?.fromPoint === 1 && candidate.steps[0]?.toPoint === 2,
+      "black forward movement"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.position.points[1]).toBeNull();
+      expect(result.position.points[2]).toEqual({ player: "black", checkerCount: 1 });
+    }
+  });
+
+  it("does not mutate input position on successful apply", () => {
+    const original = structuredClone(WHITE_HIT_THEN_SECOND_MOVE_FIXTURE);
+    const snapshot = structuredClone(original);
+    const input: GetLegalMovesInput = {
+      position: original,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const move = requireLegalMove(
+      input,
+      (candidate) => candidate.steps.length === 2,
+      "immutability"
+    );
+
+    const result = applyMove(input.position, input.player, input.roll, move);
+
+    expect(result.ok).toBe(true);
+    expect(original).toEqual(snapshot);
+  });
+
+  it("rejects a fabricated illegal move", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_OPEN_DESTINATION_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const fabricatedMove: Move = {
+      player: "white",
+      steps: [
+        {
+          kind: "point-to-point",
+          fromPoint: 24,
+          toPoint: 20,
+          dieValue: 4,
+          dieIndex: 0,
+          hitsBlot: false
+        }
+      ]
+    };
+
+    const result = applyMove(input.position, input.player, input.roll, fabricatedMove);
+
+    expectApplyFailureReason(result, "illegal-move");
+  });
+
+  it("rejects a move generated from a different position", () => {
+    const sourceInput: GetLegalMovesInput = {
+      position: WHITE_OPEN_DESTINATION_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const targetInput: GetLegalMovesInput = {
+      position: EMPTY_BOARD_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const sourceMove = requireLegalMove(
+      sourceInput,
+      (candidate) => candidate.steps[0]?.toPoint === 23,
+      "source move"
+    );
+
+    const result = applyMove(
+      targetInput.position,
+      targetInput.player,
+      targetInput.roll,
+      sourceMove
+    );
+
+    expectApplyFailureReason(result, "illegal-move");
+  });
+
+  it("rejects a legal move when provided dice are wrong", () => {
+    const sourceInput: GetLegalMovesInput = {
+      position: WHITE_OPEN_DESTINATION_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const sourceMove = requireLegalMove(
+      sourceInput,
+      (candidate) => candidate.steps[0]?.toPoint === 23,
+      "wrong dice move"
+    );
+
+    const result = applyMove(
+      sourceInput.position,
+      sourceInput.player,
+      { dice: [6, 5] },
+      sourceMove
+    );
+
+    expectApplyFailureReason(result, "illegal-move");
+  });
+
+  it("rejects a legal move when provided player is wrong", () => {
+    const sourceInput: GetLegalMovesInput = {
+      position: WHITE_OPEN_DESTINATION_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const sourceMove = requireLegalMove(
+      sourceInput,
+      (candidate) => candidate.steps[0]?.toPoint === 23,
+      "wrong player move"
+    );
+
+    const result = applyMove(sourceInput.position, "black", sourceInput.roll, sourceMove);
+
+    expectApplyFailureReason(result, "illegal-move");
+  });
+
+  it("rejects reordered steps", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BOTH_DICE_ONE_ORDER_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const orderedMove = requireLegalMove(
+      input,
+      (candidate) => candidate.steps.length === 2,
+      "ordered two-step move"
+    );
+    const reorderedMove: Move = {
+      player: orderedMove.player,
+      steps: [orderedMove.steps[1] as MoveStep, orderedMove.steps[0] as MoveStep]
+    };
+
+    const result = applyMove(input.position, input.player, input.roll, reorderedMove);
+
+    expectApplyFailureReason(result, "illegal-move");
+  });
+
+  it("rejects truncated one-step move when both dice are required", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BOTH_DICE_ONE_ORDER_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const completeMove = requireLegalMove(
+      input,
+      (candidate) => candidate.steps.length === 2,
+      "complete two-step move"
+    );
+    const truncatedMove: Move = {
+      player: completeMove.player,
+      steps: [completeMove.steps[0] as MoveStep]
+    };
+
+    const result = applyMove(input.position, input.player, input.roll, truncatedMove);
+
+    expectApplyFailureReason(result, "illegal-move");
+  });
+
+  it("rejects smaller-die move when larger-die rule applies", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BOTH_DICE_INDIVIDUAL_ONLY_FIXTURE,
+      player: "white",
+      roll: { dice: [6, 3] }
+    };
+    const smallerDieMove: Move = {
+      player: "white",
+      steps: [
+        {
+          kind: "point-to-point",
+          fromPoint: 8,
+          toPoint: 5,
+          dieValue: 3,
+          dieIndex: 1,
+          hitsBlot: false
+        }
+      ]
+    };
+
+    const result = applyMove(input.position, input.player, input.roll, smallerDieMove);
+
+    expectApplyFailureReason(result, "illegal-move");
+  });
+
+  it("rejects short doubles move when longer sequence is available", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_DOUBLE_FOUR_ORDINARY_PLAYS_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 1] }
+    };
+    const fullMove = requireLegalMove(
+      input,
+      (candidate) => candidate.steps.length === 4,
+      "full doubles move"
+    );
+    const shortenedMove: Move = {
+      player: fullMove.player,
+      steps: [
+        fullMove.steps[0] as MoveStep,
+        fullMove.steps[1] as MoveStep,
+        fullMove.steps[2] as MoveStep
+      ]
+    };
+
+    const result = applyMove(input.position, input.player, input.roll, shortenedMove);
+
+    expectApplyFailureReason(result, "illegal-move");
+  });
+
+  it("rejects ordinary move while bar entry is mandatory", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BAR_SINGLE_CHECKER_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const ordinaryMove: Move = {
+      player: "white",
+      steps: [
+        {
+          kind: "point-to-point",
+          fromPoint: 13,
+          toPoint: 12,
+          dieValue: 1,
+          dieIndex: 0,
+          hitsBlot: false
+        }
+      ]
+    };
+
+    const result = applyMove(input.position, input.player, input.roll, ordinaryMove);
+
+    expectApplyFailureReason(result, "illegal-move");
+  });
+
+  it("rejects fabricated hit metadata", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_OPEN_DESTINATION_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const legalMove = requireLegalMove(
+      input,
+      (candidate) => candidate.steps[0]?.toPoint === 23,
+      "non-hit move"
+    );
+    const forgedHitMove: Move = {
+      player: legalMove.player,
+      steps: [
+        {
+          ...(legalMove.steps[0] as MoveStep),
+          hitsBlot: true,
+          hit: {
+            player: "black",
+            point: 23
+          }
+        }
+      ]
+    };
+
+    const result = applyMove(input.position, input.player, input.roll, forgedHitMove);
+
+    expectApplyFailureReason(result, "illegal-move");
+  });
+
+  it("rejects fabricated bearing-off step", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_OPEN_DESTINATION_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const fabricatedBearOffMove: Move = {
+      player: "white",
+      steps: [
+        {
+          kind: "bear-off",
+          fromPoint: 24,
+          toPoint: "off",
+          dieValue: 1,
+          dieIndex: 0,
+          hitsBlot: false
+        }
+      ]
+    };
+
+    const result = applyMove(input.position, input.player, input.roll, fabricatedBearOffMove);
+
+    expectApplyFailureReason(result, "illegal-move");
+  });
+
+  it("rejects malformed step sequences", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_OPEN_DESTINATION_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const malformedMove = {
+      player: "white",
+      steps: []
+    } as Move;
+
+    const result = applyMove(input.position, input.player, input.roll, malformedMove);
+
+    expectApplyFailureReason(result, "invalid-step-sequence");
+  });
+
+  it("does not mutate input position on failure", () => {
+    const original = structuredClone(WHITE_OPEN_DESTINATION_FIXTURE);
+    const snapshot = structuredClone(original);
+    const illegalMove: Move = {
+      player: "white",
+      steps: [
+        {
+          kind: "point-to-point",
+          fromPoint: 24,
+          toPoint: 20,
+          dieValue: 4,
+          dieIndex: 0,
+          hitsBlot: false
+        }
+      ]
+    };
+
+    const result = applyMove(original, "white", { dice: [1, 2] }, illegalMove);
+
+    expectApplyFailureReason(result, "illegal-move");
+    expect(original).toEqual(snapshot);
+  });
+
+  it("requires exact dieIndex match when validating supplied moves", () => {
+    const input: GetLegalMovesInput = {
+      position: WHITE_BOTH_DICE_BOTH_ORDERS_SEQUENCE_FIXTURE,
+      player: "white",
+      roll: { dice: [1, 2] }
+    };
+    const legalMove = requireLegalMove(
+      input,
+      (candidate) => candidate.steps.length === 2 && candidate.steps[0]?.dieIndex === 0,
+      "dieIndex strictness"
+    );
+    const wrongDieIndexMove: Move = {
+      player: legalMove.player,
+      steps: legalMove.steps.map((step) => ({
+        ...step,
+        dieIndex: step.dieIndex === 0 ? 1 : 0
+      }))
+    };
+
+    const result = applyMove(input.position, input.player, input.roll, wrongDieIndexMove);
+
+    expectApplyFailureReason(result, "illegal-move");
   });
 });
 
