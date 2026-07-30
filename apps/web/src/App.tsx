@@ -133,7 +133,7 @@ function App({ initialGameState }: AppProps): JSX.Element {
       <main className={styles.mainLayout}>
         <section aria-labelledby="board-workspace-title" className={styles.boardSection}>
           <h2 id="board-workspace-title">Board Workspace</h2>
-          <BackgammonBoard position={gameState.position} />
+          <BackgammonBoard position={gameState.position} activePlayer={gameState.activePlayer} />
           <div className={styles.controlsRow}>
             <button type="button" disabled>
               Hint

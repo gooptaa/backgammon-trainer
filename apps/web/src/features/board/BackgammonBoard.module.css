@@ -1,4 +1,4 @@
-:root {
+.boardRoot {
   --board-surface: #b57f55;
   --point-tone-a: #e8cfa5;
   --point-tone-b: #7f3728;
@@ -9,169 +9,212 @@
   --board-frame: #664022;
   --board-inset: #845934;
   --bar-surface: #4f2d1b;
-  --bar-divider: #3e2213;
-  --bearoff-surface: #9f6a41;
-  --dice-surface: #f5f2ea;
-  --dice-outline: #3a342f;
-  --dice-pip: #27231f;
-  --coord-label: rgba(33, 26, 20, 0.5);
-}
+  --bar-text: #f5eee5;
 
-.boardRoot {
   width: 100%;
-  max-width: 100%;
-}
-
-.boardSvg {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-width: 100%;
   border-radius: 12px;
+  background: #f5ebdf;
+  border: 1px solid rgba(17, 63, 90, 0.12);
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.6rem;
 }
 
-.boardFrame {
-  fill: var(--board-frame);
+.boardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6rem;
 }
 
-.boardInset {
-  fill: none;
-  stroke: var(--board-inset);
-  stroke-width: 10;
+.activePlayer {
+  margin: 0;
+  color: #173346;
+  font-weight: 700;
+}
+
+.orientationNote {
+  margin: 0;
+  color: #3d4c59;
+  font-size: 0.88rem;
 }
 
 .boardSurface {
-  fill: var(--board-surface);
-  stroke: rgba(56, 30, 15, 0.55);
-  stroke-width: 2.5;
+  background: var(--board-frame);
+  border-radius: 12px;
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.45rem;
 }
 
-.barSurface {
-  fill: var(--bar-surface);
+.row {
+  background: var(--board-surface);
+  border: 6px solid var(--board-inset);
+  border-radius: 10px;
+  min-height: 185px;
+  display: grid;
+  grid-template-columns: 1fr 72px 1fr;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.35rem;
 }
 
-.barDivider {
-  stroke: var(--bar-divider);
-  stroke-width: 3;
+.rowBottom {
+  direction: rtl;
 }
 
-.bearOffSurface {
-  fill: var(--bearoff-surface);
-  stroke: rgba(56, 30, 15, 0.42);
-  stroke-width: 1.5;
+.rowBottom .pointColumn {
+  direction: ltr;
+}
+
+.halfRow {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.28rem;
+}
+
+.bar {
+  background: var(--bar-surface);
+  border-radius: 8px;
+  padding: 0.45rem 0.35rem;
+  color: var(--bar-text);
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.22rem;
+}
+
+.barLabel {
+  margin: 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.barCount {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.pointColumn {
+  position: relative;
+  min-height: 166px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pointTriangle {
+  position: absolute;
+  inset: 0;
+}
+
+.pointTop {
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+}
+
+.pointBottom {
+  clip-path: polygon(50% 0, 0 100%, 100% 100%);
 }
 
 .pointToneA {
-  fill: var(--point-tone-a);
-  stroke: rgba(42, 24, 13, 0.48);
-  stroke-width: 1;
+  background: var(--point-tone-a);
 }
 
 .pointToneB {
-  fill: var(--point-tone-b);
-  stroke: rgba(42, 24, 13, 0.48);
-  stroke-width: 1;
+  background: var(--point-tone-b);
 }
 
-.destinationHitArea {
-  fill: rgba(255, 255, 255, 0.02);
-  stroke: transparent;
-  stroke-width: 12;
-  pointer-events: all;
+.stackArea {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.12rem;
+  pointer-events: none;
 }
 
-.destinationSelectedOverlay {
-  fill: rgba(255, 250, 224, 0.22);
-  stroke: #0f6f8f;
-  stroke-width: 4;
-  stroke-dasharray: 8 4;
+.stackTop {
+  top: 0;
+  padding-top: 0.2rem;
+  flex-direction: column;
+}
+
+.stackBottom {
+  bottom: 0;
+  padding-bottom: 0.2rem;
+  flex-direction: column-reverse;
+}
+
+.checker {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border-width: 2px;
+  border-style: solid;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.14);
 }
 
 .checkerWhite {
-  fill: var(--checker-light);
-  stroke: var(--checker-white-outline);
+  background: var(--checker-light);
+  border-color: var(--checker-white-outline);
+  color: #2f2b25;
 }
 
 .checkerBlack {
-  fill: var(--checker-dark);
-  stroke: var(--checker-black-outline);
+  background: var(--checker-dark);
+  border-color: var(--checker-black-outline);
+  color: #f0eee8;
 }
 
-.selectedCheckerRing {
-  fill: none;
-  stroke: #0b9ac7;
-  stroke-width: 4;
-  stroke-linecap: round;
-  stroke-dasharray: 7 4;
+.checkerGlyph {
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
-.selectedCheckerMarker {
-  fill: #ffe89a;
-  stroke: #2f2618;
-  stroke-width: 2;
+.stackCountBadge {
+  margin-top: 0.15rem;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(15, 33, 48, 0.82);
+  color: #fff9ed;
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
-.dieBody {
-  fill: var(--dice-surface);
-  stroke: var(--dice-outline);
-  stroke-width: 2.2;
+.borneOffPanel {
+  display: flex;
+  gap: 0.7rem;
+  justify-content: space-between;
+  flex-wrap: wrap;
 }
 
-.diePip {
-  fill: var(--dice-pip);
-}
-
-.pointLabel {
-  fill: var(--coord-label);
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
-}
-
-.selectionControls {
-  margin-top: 0.55rem;
-  display: grid;
-  gap: 0.45rem;
-  justify-items: end;
-}
-
-.proposalStatus {
+.borneOffPanel p {
   margin: 0;
-  width: 100%;
-  color: #1f3f52;
-  font-size: 0.93rem;
-  font-weight: 650;
-  text-align: right;
-}
-
-.cancelSelectionButton {
-  min-height: 36px;
-  border: 1px solid #215b79;
-  border-radius: 999px;
-  padding: 0.35rem 0.75rem;
-  background: #f4fbff;
-  color: #113f5a;
-  font-size: 0.86rem;
   font-weight: 700;
+  color: #1d2d3a;
 }
 
-.clearDestinationButton {
-  min-height: 36px;
-  border: 1px solid #9a6f14;
-  border-radius: 999px;
-  padding: 0.35rem 0.75rem;
-  background: #fff8e8;
-  color: #664714;
-  font-size: 0.86rem;
-  font-weight: 700;
-}
+@media (max-width: 900px) {
+  .row {
+    grid-template-columns: 1fr 58px 1fr;
+    min-height: 148px;
+  }
 
-.cancelSelectionButton:focus-visible {
-  outline: 3px solid #e88f2a;
-  outline-offset: 2px;
-}
+  .pointColumn {
+    min-height: 130px;
+  }
 
-.clearDestinationButton:focus-visible {
-  outline: 3px solid #e88f2a;
-  outline-offset: 2px;
+  .checker {
+    width: 21px;
+    height: 21px;
+    border-width: 1.5px;
+  }
 }

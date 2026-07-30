@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { createGameState, type GameState } from "@backgammon-trainer/backgammon-engine";
 import { type BoardPosition } from "@backgammon-trainer/backgammon-domain";
@@ -106,7 +106,8 @@ describe("App engine game sandbox", () => {
   it("displays active player", () => {
     renderApp();
 
-    expect(screen.getByText("Active player: white")).toBeInTheDocument();
+    const boardRegion = screen.getByRole("region", { name: "Graphical backgammon board" });
+    expect(within(boardRegion).getByText("Active player: white")).toBeInTheDocument();
   });
 
   it("sets dice through user controls", () => {
@@ -128,13 +129,22 @@ describe("App engine game sandbox", () => {
   it("applying a legal move updates position", () => {
     renderApp();
 
-    const before = screen.getByTestId("occupied-points").textContent;
+    const beforePointLabels = screen
+      .getAllByRole("group")
+      .map((element) => element.getAttribute("aria-label"))
+      .filter((value): value is string => value !== null)
+      .filter((value) => value.startsWith("Point "));
 
     setDice("1", "2");
     fireEvent.click(screen.getAllByRole("button", { name: /Apply:/i })[0] as HTMLElement);
 
-    const after = screen.getByTestId("occupied-points").textContent;
-    expect(after).not.toEqual(before);
+    const afterPointLabels = screen
+      .getAllByRole("group")
+      .map((element) => element.getAttribute("aria-label"))
+      .filter((value): value is string => value !== null)
+      .filter((value) => value.startsWith("Point "));
+
+    expect(afterPointLabels).not.toEqual(beforePointLabels);
   });
 
   it("applying a move switches active player", () => {
@@ -143,7 +153,8 @@ describe("App engine game sandbox", () => {
     setDice("1", "2");
     fireEvent.click(screen.getAllByRole("button", { name: /Apply:/i })[0] as HTMLElement);
 
-    expect(screen.getByText("Active player: black")).toBeInTheDocument();
+    const boardRegion = screen.getByRole("region", { name: "Graphical backgammon board" });
+    expect(within(boardRegion).getByText("Active player: black")).toBeInTheDocument();
   });
 
   it("dice and legal moves clear after completed turn", () => {
@@ -182,7 +193,8 @@ describe("App engine game sandbox", () => {
     setDice("1", "1");
     fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
 
-    expect(screen.getByText("Active player: black")).toBeInTheDocument();
+    const boardRegion = screen.getByRole("region", { name: "Graphical backgammon board" });
+    expect(within(boardRegion).getByText("Active player: black")).toBeInTheDocument();
     expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
   });
 
@@ -204,6 +216,6 @@ describe("App engine game sandbox", () => {
 
     expect(screen.getByRole("heading", { name: "Backgammon Trainer" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Board Workspace" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Backgammon board" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Graphical backgammon board" })).toBeInTheDocument();
   });
 });
