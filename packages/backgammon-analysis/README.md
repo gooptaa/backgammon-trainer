@@ -17,7 +17,7 @@ What this package does not do:
 
 - strategic recommendation labels
 - built-in production evaluator strategy
-- GNU Backgammon process integration
+- GNU Backgammon process integration (provided separately by `@backgammon-trainer/backgammon-evaluator-gnubg`)
 - coaching prose or AI integration
 - legality, move generation, or checker-transition rules
 

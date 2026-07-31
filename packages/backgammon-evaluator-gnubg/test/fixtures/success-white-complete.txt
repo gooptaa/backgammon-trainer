@@ -1,0 +1,10 @@
+GNU Backgammon 1.08.003
+format: checker-play-v1
+coverage: complete
+perspective: player-on-roll
+score-scale: equity-points
+setting depth: 2
+setting noise: off
+info: deterministic static evaluation
+1. 8/7 7/5 | equity +0.125 | rank 1
+2. 8/6 6/5 | equity +0.100 | rank 2

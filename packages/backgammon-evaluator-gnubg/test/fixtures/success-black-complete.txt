@@ -1,0 +1,9 @@
+GNU Backgammon 1.08.003
+format: checker-play-v1
+coverage: complete
+perspective: player-on-roll
+score-scale: equity-points
+setting depth: 2
+setting noise: off
+1. 24/22 22/21 | equity +0.125 | rank 1
+2. 24/23 23/21 | equity +0.100 | rank 2

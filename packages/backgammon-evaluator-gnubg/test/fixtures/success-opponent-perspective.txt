@@ -1,0 +1,6 @@
+GNU Backgammon 1.08.003
+format: checker-play-v1
+coverage: complete
+perspective: opponent-of-player-on-roll
+score-scale: equity-points
+1. 8/7 7/5 | equity +0.125 | rank 1

@@ -131,6 +131,15 @@ importers:
         specifier: workspace:*
         version: link:../backgammon-domain
 
+  packages/backgammon-evaluator-gnubg:
+    dependencies:
+      "@backgammon-trainer/backgammon-analysis":
+        specifier: workspace:*
+        version: link:../backgammon-analysis
+      "@backgammon-trainer/backgammon-engine":
+        specifier: workspace:*
+        version: link:../backgammon-engine
+
   packages/shared: {}
 
 packages:

@@ -241,7 +241,22 @@ They are not stored in:
 
 ## Future Adapter Boundary
 
-A future GNU Backgammon adapter should map provider-specific output into this normalized contract.
+A dedicated GNU Backgammon adapter spike now lives in `packages/backgammon-evaluator-gnubg`.
+
+Current status of that package:
+
+- Node-only runtime boundary
+- capability detection and direct process-runner abstraction implemented
+- position translation, move-notation parsing, canonical matching, and transcript parsing implemented
+- transcript-driven tests cover normalized contract mapping without requiring GNU Backgammon installation
+- live checker-play command invocation remains explicitly unverified in this repository milestone
+
+The analysis package remains the sole owner of:
+
+- canonical move fingerprints
+- provider-result validation
+- deterministic ranking
+- loss-from-best calculation
 
 Provider-specific raw data remains adapter-isolated.
 

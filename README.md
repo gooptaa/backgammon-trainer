@@ -74,6 +74,7 @@ pnpm check
 - `apps/web`: PWA shell, React UI, Vitest/RTL tests, Playwright smoke test
 - `apps/server`: Fastify server, health + mock coaching endpoints
 - `packages/backgammon-domain`: deterministic domain types and small pure helper
+- `packages/backgammon-evaluator-gnubg`: Node-only GNU Backgammon adapter spike, capability detection, transcript parsing, smoke command
 - `packages/ai-contracts`: provider-neutral coaching and adapter interfaces
 - `packages/shared`: narrowly scoped shared envelope/result types
 - `docs/architecture`: architecture overview + ADRs

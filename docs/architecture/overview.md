@@ -22,13 +22,14 @@ Intended dependency direction:
 - `apps/web` -> `packages/backgammon-domain`, `packages/ai-contracts`, `packages/shared`
 - `apps/server` -> `packages/ai-contracts`, `packages/shared`, optionally `packages/backgammon-domain`
 - `packages/backgammon-analysis` -> `packages/backgammon-engine`
+- `packages/backgammon-evaluator-gnubg` -> `packages/backgammon-analysis`, `packages/backgammon-engine`, Node standard library
 - `packages/ai-contracts` -> `packages/backgammon-domain` (for typed board/move context)
 - `packages/backgammon-domain` -> no app, UI, or provider code
 - `packages/shared` -> no app, UI, or provider code
 
 Core deterministic pipeline direction is now:
 
-- `packages/backgammon-engine` -> `packages/backgammon-analysis` -> host layers (`apps/web`, future backend/coach adapters)
+- `packages/backgammon-engine` -> `packages/backgammon-analysis` -> `packages/backgammon-evaluator-gnubg` -> Node host layers
 
 Move-outcome analysis pipeline boundary is:
 
@@ -39,6 +40,12 @@ Move-outcome analysis pipeline boundary is:
 - future coaching layer (pedagogy/prose, deferred)
 
 No package under `packages/` depends on React, Fastify, browser APIs, or vendor SDKs.
+
+GNU Backgammon process execution is a stricter runtime boundary:
+
+- `packages/backgammon-evaluator-gnubg` is Node-only
+- browser bundles must not import that package or its `node:child_process` runner
+- `apps/web` remains limited to no evaluator or explicit synthetic fixture evaluators
 
 The factual analysis APIs intentionally remain machine-readable and non-prescriptive. Ranked outputs are isolated behind the evaluator contract boundary and require explicit evaluator provenance. Coaching prose generation remains out of scope.
 
