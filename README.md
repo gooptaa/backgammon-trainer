@@ -77,7 +77,9 @@ pnpm check
 - `packages/backgammon-evaluator-gnubg`: Node-only GNU Backgammon adapter spike, capability detection, transcript parsing, smoke command
 - `packages/ai-contracts`: provider-neutral coaching and adapter interfaces
 - `packages/shared`: narrowly scoped shared envelope/result types
-- `docs/architecture`: architecture overview + ADRs
+- `docs/README.md`: documentation index across architecture, analysis, ADRs, and roadmap
+- `docs/architecture`: architecture overview, dependency guardrails, and API audit
+- `docs/adr`: architecture decision records for established repository boundaries
 - `docs/roadmap.md`: ordered milestones
 
 ## Turn flow and staged interaction

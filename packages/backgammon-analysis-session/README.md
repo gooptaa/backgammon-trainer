@@ -1,132 +1,48 @@
 # Backgammon Analysis Session
 
-Versioned analysis-session domain model plus deterministic builder/orchestration APIs for durable analysis records.
-
 ## Purpose
 
-This package exists so callers do not manually assemble nested analysis-session records.
+Provide a versioned interpretation boundary that links committed deterministic turns to ranked analysis records through immutable, fail-closed orchestration APIs.
 
-It links three canonical facts safely:
+## Responsibilities
 
-- committed deterministic turn history from engine (`GameSnapshot` + `TurnRecord`)
-- ranked factual/evaluated move analysis
-- immutable durable `AnalysisSession` records
+- Define `AnalysisSession`/`AnalysisRecord` contracts and versioned envelope parsing.
+- Create new sessions with deterministic game-reference linkage.
+- Build analysis records from committed turn facts plus ranked analysis payloads.
+- Append records immutably with idempotent duplicate handling.
+- Reconcile stored analysis sessions against later deterministic snapshots.
 
-## What This Package Owns
+## Allowed Dependencies
 
-- immutable `AnalysisSession` / `AnalysisRecord` / metadata contracts
-- strict parse/serialize envelope validation
-- deterministic game-reference and decision-position fingerprinting
-- fail-closed record construction from committed turns
-- immutable append workflow with idempotent retry behavior
-- reconciliation against later deterministic snapshots
+- `@backgammon-trainer/backgammon-analysis`
+- `@backgammon-trainer/backgammon-engine`
 
-## What This Package Does Not Own
+## Forbidden Dependencies
 
-- evaluator invocation orchestration
-- GNU process execution
-- browser storage or local persistence wiring
-- backend/database/HTTP persistence adapters
-- coaching prose, mistake labels, lesson generation
+- `@backgammon-trainer/web`
+- `@backgammon-trainer/backgammon-evaluator-gnubg`
+- Browser storage, network/database adapters, and UI frameworks
 
-## Dependency Direction
+## Public API
 
-- depends on `@backgammon-trainer/backgammon-analysis`
-- depends on `@backgammon-trainer/backgammon-engine`
-- no React/DOM/browser storage/network/process API imports
+- Session envelope/version constants and parse/serialize/encode/decode helpers.
+- Builder/orchestration APIs (`createAnalysisSession`, `createAnalysisRecord`, `appendAnalysisRecord`, `reconcileAnalysisSession`).
+- Deterministic identity helpers (`getAnalysisSessionGameReference`, `getDecisionPositionFingerprint`).
+- Read-only summary helper (`summarizeAnalysisSession`).
 
-## Public APIs
+Why these exports are public:
 
-Serialization and summary:
+- They define the only supported host-layer integration surface for safe analysis-session creation, update, and validation.
 
-- `serializeAnalysisSession(session)`
-- `parseAnalysisSession(input)`
-- `encodeAnalysisSession(session)`
-- `decodeAnalysisSession(text)`
-- `summarizeAnalysisSession(session)`
+## Non-goals
 
-Builder/orchestration:
+- Evaluator process invocation.
+- GNU integration and process management.
+- Browser/local/backend persistence adapters.
+- Coaching labels, recommendations, and lesson planning.
 
-- `createAnalysisSession(input)`
-- `createAnalysisRecord(input)`
-- `appendAnalysisRecord(input)`
-- `reconcileAnalysisSession(input)`
+## Future Roadmap
 
-Deterministic identity helpers:
-
-- `getAnalysisSessionGameReference(snapshot, explicitGameReference?)`
-- `getDecisionPositionFingerprint({ position, player, dice })`
-
-All orchestration APIs return discriminated result contracts (`ok: true|false`) for expected domain failures.
-
-## Session Creation Rules
-
-- explicit session id and timestamp input
-- strict snapshot and metadata validation
-- deterministic game reference derivation (or explicit caller override)
-- initial empty records
-- `createdAt === updatedAt`
-
-## Record Construction Rules
-
-`createAnalysisRecord(...)` verifies:
-
-- snapshots and session refer to same game reference
-- committed turn exists in snapshot-after history
-- pre-turn and post-turn positions match committed history
-- ranked analysis matches committed player and dice
-- chosen move is derived from committed canonical move identity
-- chosen move exists in factual outcomes
-- chosen resulting position matches committed post-turn position
-- evaluator consistency with session metadata
-
-Pass/no-legal-move mapping is supported with strict invariants:
-
-- pass turn -> `rankedAnalysis.kind = no-legal-moves`
-- chosen move must be `null`
-- fake pass moves are not synthesized
-
-## Turn Numbering Policy
-
-Sparse sessions are supported:
-
-- turn numbers must be strictly ascending
-- turn numbers must be unique
-- gaps are allowed for intentionally partial analysis coverage
-
-## Append and Idempotency
-
-`appendAnalysisRecord(...)` is immutable and fail-closed.
-
-- exact duplicate append for the same turn returns successful no-op (`idempotent: true`)
-- conflicting duplicate append fails with `conflicting-record`
-- decreasing or out-of-order appends fail
-
-## Reconciliation
-
-`reconcileAnalysisSession(...)` validates a stored session against a supplied snapshot.
-
-Success statuses:
-
-- `current`
-- `game-advanced`
-
-Failures include game mismatch, missing committed turns, move mismatch, and pre/post position mismatch.
-
-The API never mutates or repairs session content.
-
-## Annotation and Tag Policy
-
-- trim strings
-- reject empty values
-- preserve first-seen order
-- deduplicate exact duplicates
-
-## Serialization
-
-Envelope constants:
-
-- `ANALYSIS_SESSION_FORMAT = backgammon-trainer-analysis-session`
-- `ANALYSIS_SESSION_VERSION = 1`
-
-Builder-created sessions are parse-compatible and deterministic through encode/decode round trips.
+- Persistence adapter integration in host layers.
+- Migration guidance for future analysis-session schema versions.
+- Additional reconciliation diagnostics where needed.

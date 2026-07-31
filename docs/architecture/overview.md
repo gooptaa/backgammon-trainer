@@ -20,7 +20,7 @@ A narrow `packages/shared` package holds only small cross-cutting transport type
 
 Intended dependency direction:
 
-- `apps/web` -> `packages/backgammon-domain`, `packages/ai-contracts`, `packages/shared`
+- `apps/web` -> `packages/backgammon-domain`, `packages/backgammon-engine`, `packages/backgammon-analysis`, `packages/backgammon-analysis-session`, `packages/ai-contracts`, `packages/shared`
 - `apps/server` -> `packages/ai-contracts`, `packages/shared`, optionally `packages/backgammon-domain`
 - `packages/backgammon-analysis-session` -> `packages/backgammon-analysis`, `packages/backgammon-engine`
 - `packages/backgammon-analysis` -> `packages/backgammon-engine`
@@ -51,6 +51,39 @@ GNU Backgammon process execution is a stricter runtime boundary:
 - `apps/web` remains limited to no evaluator or explicit synthetic fixture evaluators
 
 The factual analysis APIs intentionally remain machine-readable and non-prescriptive. Ranked outputs are isolated behind the evaluator contract boundary and require explicit evaluator provenance. Coaching prose generation remains out of scope.
+
+## Architectural flow diagrams
+
+High-level analysis flow:
+
+```mermaid
+flowchart TD
+	Engine[Engine]
+	Analysis[Analysis]
+	Evaluator[Evaluator]
+	AnalysisSession[Analysis Session]
+	Web[Web]
+
+	Engine --> Analysis
+	Analysis --> Evaluator
+	Evaluator --> AnalysisSession
+	AnalysisSession --> Web
+```
+
+Persistence and interpretation boundaries:
+
+```mermaid
+flowchart LR
+	subgraph DeterministicState[Deterministic State]
+		Snapshot[GameSnapshot]
+	end
+
+	subgraph VersionedInterpretation[Versioned Interpretation]
+		Session[AnalysisSession]
+	end
+
+	Snapshot -->|committed turns| Session
+```
 
 Analysis session persistence modeling is also intentionally separated from game-state persistence:
 
@@ -91,6 +124,15 @@ Persistence boundaries remain intentionally separate:
 GameSnapshot persistence ─────── independent
 AnalysisSession persistence ──── not implemented
 ```
+
+## Repository guardrails
+
+Architecture boundaries are enforced by lightweight repository checks:
+
+- `pnpm architecture:check` validates forbidden workspace dependency edges and detects cycles.
+- ESLint `no-restricted-imports` rules enforce package import boundaries and browser Node API restrictions.
+
+See `docs/architecture/dependency-guardrails.md` for current rules.
 
 Current web policy notes:
 

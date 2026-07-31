@@ -1,97 +1,47 @@
 # Backgammon Analysis
 
-Deterministic factual position-feature extraction for backgammon engine positions.
+## Purpose
 
-What this package does:
+Provide deterministic factual analysis over engine-authoritative legal moves and position state, plus a provider-neutral evaluator contract for ranked move interpretation.
 
-- computes structured, JSON-safe position facts
-- compares two positions with factual `after - before` deltas
-- classifies coarse contact status (`contact` or `race`)
-- analyzes complete legal move outcomes for a position/player/dice turn
-- defines provider-neutral evaluator request/result contracts
-- validates evaluator output against canonical legal outcomes
-- produces deterministic dense-ranked move analysis with loss-from-best
-- provides canonical deterministic move fingerprinting
+## Responsibilities
 
-What this package does not do:
+- Compute factual position features and deltas.
+- Analyze complete legal move outcomes for a specific player/dice decision.
+- Define and validate provider-neutral evaluator request/response contracts.
+- Produce deterministic ranked legal-move analysis from validated evaluator data.
+- Provide canonical move fingerprinting for cross-layer identity matching.
 
-- strategic recommendation labels
-- built-in production evaluator strategy
-- GNU Backgammon process integration (provided separately by `@backgammon-trainer/backgammon-evaluator-gnubg`)
-- coaching prose or AI integration
-- legality, move generation, or checker-transition rules
-- durable analysis session persistence modeling (provided by `@backgammon-trainer/backgammon-analysis-session`)
+## Allowed Dependencies
 
-Dependency direction:
+- `@backgammon-trainer/backgammon-domain`
+- `@backgammon-trainer/backgammon-engine`
 
-- depends on `@backgammon-trainer/backgammon-engine`
-- no React, DOM, browser storage, or network dependencies
+## Forbidden Dependencies
 
-Persistence boundary:
+- `@backgammon-trainer/web`
+- `@backgammon-trainer/backgammon-analysis-session`
+- React, DOM/browser APIs, storage adapters, and Node process adapters
 
-- deterministic game snapshots remain owned by `@backgammon-trainer/backgammon-engine`
-- versioned analysis sessions remain owned by `@backgammon-trainer/backgammon-analysis-session`
+## Public API
 
-Minimal usage:
+- Root export (`@backgammon-trainer/backgammon-analysis`): factual analysis, evaluator contracts, ranking APIs, and canonical move fingerprinting.
+- Fixture subpath (`@backgammon-trainer/backgammon-analysis/fixture`): deterministic synthetic evaluator for tests and development-only preview.
 
-```ts
-import {
-  analyzeLegalMoveOutcomes,
-  evaluateLegalMoves,
-  getMoveFingerprint,
-  analyzePosition,
-  comparePositions
-} from "@backgammon-trainer/backgammon-analysis";
+Why these exports are public:
 
-const analysis = analyzePosition(position);
-const delta = comparePositions(beforePosition, afterPosition);
+- Root APIs are the stable factual/evaluator boundary consumed by web and adapter layers.
+- Fixture APIs are explicitly public to enable deterministic testing without leaking production evaluator assumptions.
 
-const outcomesResult = analyzeLegalMoveOutcomes(position, player, dice);
+## Non-goals
 
-if (outcomesResult.ok) {
-  for (const outcome of outcomesResult.analysis.outcomes) {
-    // Canonical move from engine legal-move output.
-    console.log(outcome.move);
-    // Engine-applied resulting position.
-    console.log(outcome.positionAfter);
-    // Deterministic factual features and after-before deltas.
-    console.log(outcome.analysisAfter, outcome.featureDelta);
-  }
-} else {
-  // Indicates an engine invariant disagreement between getLegalMoves and applyMove.
-  console.error(outcomesResult.message);
-}
+- Legality or move-application authority (owned by engine).
+- Strategic labels, coaching prose, or lesson generation.
+- GNU process execution (owned by GNU adapter package).
+- Analysis session persistence modeling (owned by analysis-session package).
 
-const ranked = await evaluateLegalMoves(
-  {
-    position,
-    player,
-    dice,
-    context: { gameMode: "money" }
-  },
-  evaluator
-);
+## Future Roadmap
 
-if (ranked.ok && ranked.analysis.kind === "evaluated") {
-  for (const row of ranked.analysis.rankedMoves) {
-    console.log(
-      row.rank,
-      row.normalizedScore,
-      row.lossFromBest,
-      getMoveFingerprint(row.outcome.move)
-    );
-  }
-}
-```
-
-Results are deterministic factual features, not strategic judgments.
-
-Fixture helper for tests/development preview:
-
-```ts
-import { createFixturePositionEvaluator } from "@backgammon-trainer/backgammon-analysis/fixture";
-
-const evaluator = createFixturePositionEvaluator({ mode: "complete" });
-```
-
-Fixture scores are synthetic contract data and are not strategic analysis.
+- Additional evaluator adapters behind the same contract.
+- Broader score-scale and coverage diagnostics where justified.
+- Richer factual feature sets that remain deterministic and non-prescriptive.

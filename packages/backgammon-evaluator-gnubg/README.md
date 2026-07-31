@@ -1,98 +1,50 @@
 # GNU Backgammon Evaluator Adapter
 
-Node-only GNU Backgammon evaluator adapter spike for Backgammon Trainer.
+## Purpose
 
-What this package does:
+Provide a Node-only adapter that translates GNU Backgammon capability/evaluation outputs into the shared `PositionEvaluator` contract.
 
-- detects whether `gnubg` is available and advertises required CLI options
-- defines an injectable process-runner boundary
-- translates canonical engine positions into a deterministic GNU-oriented board model
-- parses narrow transcript fixtures into normalized evaluator scores
-- matches GNU-style move notation back to canonical legal moves
-- returns results through the existing `PositionEvaluator` contract
-- provides an unavailable-safe local smoke command
+## Responsibilities
 
-What this package does not do:
+- Detect GNU executable capability and CLI support.
+- Encapsulate process-runner invocation and timeout handling.
+- Translate/match GNU-oriented move data to canonical engine move identity.
+- Parse supported transcript output into normalized evaluator responses.
+- Expose smoke validation for local adapter availability checks.
 
-- run in the browser
-- modify engine legality or move identity
-- provide heuristic fallback scores
-- generate coaching prose
-- claim live checker-play automation is verified in this milestone
+## Allowed Dependencies
 
-## Node-only warning
+- `@backgammon-trainer/backgammon-analysis`
+- `@backgammon-trainer/backgammon-engine`
+- Node standard library runtime APIs
 
-This package is Node-only. Do not import it into `apps/web` or any browser bundle.
+## Forbidden Dependencies
 
-## Installation boundary
+- `@backgammon-trainer/web`
+- Browser runtime APIs and React UI concerns
+- Engine rule mutations or legality overrides
 
-This repository uses pnpm workspaces. The package is available internally as:
+## Public API
 
-- `@backgammon-trainer/backgammon-evaluator-gnubg`
-- `@backgammon-trainer/backgammon-evaluator-gnubg/node`
-- `@backgammon-trainer/backgammon-evaluator-gnubg/testing`
+- Root export (`@backgammon-trainer/backgammon-evaluator-gnubg`): evaluator creation, capability detection, transcript parsing contracts.
+- Node subpath (`@backgammon-trainer/backgammon-evaluator-gnubg/node`): Node process-runner implementation.
+- Testing subpath (`@backgammon-trainer/backgammon-evaluator-gnubg/testing`): deterministic fake runners for tests.
 
-## Minimal capability detection example
+Why these exports are public:
 
-```ts
-import { detectGnuBg } from "@backgammon-trainer/backgammon-evaluator-gnubg";
-import { createNodeGnuBgProcessRunner } from "@backgammon-trainer/backgammon-evaluator-gnubg/node";
+- Root APIs define adapter behavior used by host orchestration.
+- Node subpath isolates runtime-specific process code from browser-safe surfaces.
+- Testing subpath supports deterministic contract tests without real GNU installation.
 
-const capability = await detectGnuBg({
-  processRunner: createNodeGnuBgProcessRunner()
-});
+## Non-goals
 
-if (!capability.ok) {
-  console.log(capability.status, capability.message);
-} else {
-  console.log(capability.parsedVersion, capability.analysisInvocation.message);
-}
-```
+- Browser execution.
+- Strategic recommendation generation.
+- Heuristic fallback scoring.
+- Verified default live checker-play command automation in this repository milestone.
 
-## Minimal evaluator example
+## Future Roadmap
 
-```ts
-import { createGnuBgPositionEvaluator } from "@backgammon-trainer/backgammon-evaluator-gnubg";
-import { createNodeGnuBgProcessRunner } from "@backgammon-trainer/backgammon-evaluator-gnubg/node";
-
-const evaluator = createGnuBgPositionEvaluator({
-  processRunner: createNodeGnuBgProcessRunner(),
-  analysisRequestFactory: ({ executable, timeoutMs }) => ({
-    ok: true,
-    processRequest: {
-      executable,
-      args: ["-t", "-q", "-r", "--commands=/path/to/verified-commands-file"],
-      stdin: "",
-      timeoutMs
-    },
-    settings: {
-      invocationMode: "host-verified",
-      analysisCommandVerified: true
-    }
-  })
-});
-```
-
-Important truth boundary:
-
-- this milestone does not ship a verified default live checker-play command builder
-- the default evaluator fails closed until a host supplies one
-
-## Smoke command
-
-```bash
-pnpm --filter @backgammon-trainer/backgammon-evaluator-gnubg smoke
-```
-
-Current smoke behavior:
-
-- prints unavailable status if `gnubg` is not installed
-- prints skipped or unverified status when live checker-play automation is not verified
-- never writes repository files
-
-## Current limitations
-
-- transcript parser shape is spike-specific
-- checker-play command invocation remains unverified in this repository milestone
-- no rollout, cube, or match-score support
-- no browser integration
+- Verified live command transcript capture against installed GNU versions.
+- Expanded parser support for additional output variants.
+- Optional host-level rollout/cube/match-context integration.

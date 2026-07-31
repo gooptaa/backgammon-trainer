@@ -1,22 +1,45 @@
-# Backgammon Domain Model
+# Backgammon Domain
 
-## Canonical board-position convention
+## Purpose
 
-This package uses one permanent absolute point-numbering system:
+Define canonical, deterministic backgammon domain types and validation primitives shared across engine and analysis layers.
 
-- points are always numbered 1 through 24
-- white moves from point 24 toward point 1, then bears off
-- black moves from point 1 toward point 24, then bears off
+## Responsibilities
 
-Point numbers do not rotate based on viewer orientation or UI layout. Any board rotation is a presentation-layer concern and must not change the domain representation.
+- Provide canonical board-point and player type contracts.
+- Define deterministic starting-position constants.
+- Validate board-position invariants.
+- Provide small pure helpers for point occupancy and checker totals.
 
-## Position invariants
+## Allowed Dependencies
 
-A valid `BoardPosition` must satisfy:
+- No workspace package dependencies.
 
-- all 24 points are present
-- each occupied point has exactly one owner (`white` or `black`)
-- occupied-point checker counts are positive integers
-- `bar` counts are non-negative integers
-- `borneOff` counts are non-negative integers
-- each player has exactly 15 total checkers across points, bar, and borne-off
+## Forbidden Dependencies
+
+- `@backgammon-trainer/web`
+- `@backgammon-trainer/backgammon-analysis`
+- `@backgammon-trainer/backgammon-analysis-session`
+- `@backgammon-trainer/backgammon-evaluator-gnubg`
+- Runtime frameworks, process adapters, and persistence adapters
+
+## Public API
+
+- Domain type contracts (`Player`, `PointIndex`, `BoardPosition`, and related structural types).
+- Canonical constants (`POINT_INDEXES`, `STANDARD_STARTING_POSITION`).
+- Validation and helper functions (`validateBoardPosition`, `getPointOccupancy`, `countPlayerCheckers`).
+
+Why these exports are public:
+
+- They are the shared deterministic vocabulary required by engine and analysis packages.
+
+## Non-goals
+
+- Move legality and move application logic.
+- Turn orchestration and snapshot persistence envelopes.
+- Any UI, evaluator, or transport concerns.
+
+## Future Roadmap
+
+- Extend domain-level validation helpers as needed by deterministic rule evolution.
+- Keep the canonical representation stable while adding compatibility helpers where required.

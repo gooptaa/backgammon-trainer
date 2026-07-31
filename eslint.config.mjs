@@ -53,5 +53,80 @@ export default tseslint.config(
         ...globals.vitest
       }
     }
+  },
+  {
+    files: ["packages/backgammon-engine/src/**/*.ts", "packages/backgammon-engine/test/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@backgammon-trainer/backgammon-analysis-session",
+              message:
+                "Engine must remain independent from analysis-session orchestration concerns."
+            },
+            {
+              name: "@backgammon-trainer/web",
+              message: "Engine must not depend on web application code."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: [
+      "packages/backgammon-analysis/src/**/*.ts",
+      "packages/backgammon-analysis/test/**/*.ts"
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@backgammon-trainer/backgammon-analysis-session",
+              message:
+                "Analysis must remain independent from analysis-session persistence orchestration."
+            },
+            {
+              name: "@backgammon-trainer/web",
+              message: "Analysis must not depend on web application code."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: ["apps/web/src/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@backgammon-trainer/backgammon-evaluator-gnubg",
+              message: "Browser bundles must not import the Node-only GNU adapter package."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-evaluator-gnubg/node",
+              message: "Browser bundles must not import Node-only GNU adapter process runners."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-evaluator-gnubg/testing",
+              message: "Browser bundles must not import GNU adapter testing helpers."
+            }
+          ],
+          patterns: [
+            {
+              group: ["node:*"],
+              message: "Browser source must not import Node built-in modules."
+            }
+          ]
+        }
+      ]
+    }
   }
 );
