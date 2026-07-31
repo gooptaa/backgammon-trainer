@@ -20,11 +20,17 @@ What this package does not do:
 - GNU Backgammon process integration (provided separately by `@backgammon-trainer/backgammon-evaluator-gnubg`)
 - coaching prose or AI integration
 - legality, move generation, or checker-transition rules
+- durable analysis session persistence modeling (provided by `@backgammon-trainer/backgammon-analysis-session`)
 
 Dependency direction:
 
 - depends on `@backgammon-trainer/backgammon-engine`
 - no React, DOM, browser storage, or network dependencies
+
+Persistence boundary:
+
+- deterministic game snapshots remain owned by `@backgammon-trainer/backgammon-engine`
+- versioned analysis sessions remain owned by `@backgammon-trainer/backgammon-analysis-session`
 
 Minimal usage:
 

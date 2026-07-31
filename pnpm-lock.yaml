@@ -123,6 +123,15 @@ importers:
         specifier: workspace:*
         version: link:../backgammon-engine
 
+  packages/backgammon-analysis-session:
+    dependencies:
+      "@backgammon-trainer/backgammon-analysis":
+        specifier: workspace:*
+        version: link:../backgammon-analysis
+      "@backgammon-trainer/backgammon-engine":
+        specifier: workspace:*
+        version: link:../backgammon-engine
+
   packages/backgammon-domain: {}
 
   packages/backgammon-engine:

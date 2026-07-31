@@ -12,6 +12,7 @@ Backgammon Trainer starts as a pnpm workspace with four major boundaries:
 Structured deterministic analysis is now a dedicated package boundary:
 
 5. **Position analysis layer** (`packages/backgammon-analysis`)
+6. **Analysis session layer** (`packages/backgammon-analysis-session`)
 
 A narrow `packages/shared` package holds only small cross-cutting transport types.
 
@@ -21,6 +22,7 @@ Intended dependency direction:
 
 - `apps/web` -> `packages/backgammon-domain`, `packages/ai-contracts`, `packages/shared`
 - `apps/server` -> `packages/ai-contracts`, `packages/shared`, optionally `packages/backgammon-domain`
+- `packages/backgammon-analysis-session` -> `packages/backgammon-analysis`, `packages/backgammon-engine`
 - `packages/backgammon-analysis` -> `packages/backgammon-engine`
 - `packages/backgammon-evaluator-gnubg` -> `packages/backgammon-analysis`, `packages/backgammon-engine`, Node standard library
 - `packages/ai-contracts` -> `packages/backgammon-domain` (for typed board/move context)
@@ -29,7 +31,8 @@ Intended dependency direction:
 
 Core deterministic pipeline direction is now:
 
-- `packages/backgammon-engine` -> `packages/backgammon-analysis` -> `packages/backgammon-evaluator-gnubg` -> Node host layers
+- `packages/backgammon-engine` -> `packages/backgammon-analysis` -> `packages/backgammon-analysis-session` -> future backend persistence -> future web persistence
+- `packages/backgammon-analysis` -> `packages/backgammon-evaluator-gnubg` -> Node host layers
 
 Move-outcome analysis pipeline boundary is:
 
@@ -48,6 +51,13 @@ GNU Backgammon process execution is a stricter runtime boundary:
 - `apps/web` remains limited to no evaluator or explicit synthetic fixture evaluators
 
 The factual analysis APIs intentionally remain machine-readable and non-prescriptive. Ranked outputs are isolated behind the evaluator contract boundary and require explicit evaluator provenance. Coaching prose generation remains out of scope.
+
+Analysis session persistence modeling is also intentionally separated from game-state persistence:
+
+- `GameSnapshot` = deterministic engine game state and committed turn history
+- `AnalysisSession` = versioned interpretation and evaluator-attributed analysis records
+
+This separation allows analysis data to evolve independently from deterministic game rules and snapshot schemas.
 
 ## Deterministic legal move requirement
 
