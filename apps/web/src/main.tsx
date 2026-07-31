@@ -17,8 +17,29 @@ const devFixtureEvaluator =
       })
     : undefined;
 
+const devAnalysisCaptureRuntime = {
+  createSessionId: () => crypto.randomUUID(),
+  now: () => new Date().toISOString()
+};
+
+const devAnalysisCaptureMetadata = {
+  analysisFormat: "ranked-legal-move-analysis",
+  analysisVersion: 1,
+  generatorVersion: "web-analysis-capture/1.0.0",
+  evaluatorProvider: "fixture-position-evaluator",
+  evaluatorVersion: "0.1.0",
+  scoreScale: {
+    kind: "relative"
+  } as const
+};
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App {...(devFixtureEvaluator === undefined ? {} : { moveEvaluator: devFixtureEvaluator })} />
+    <App
+      analysisCaptureEnabled={import.meta.env.DEV}
+      analysisCaptureRuntime={devAnalysisCaptureRuntime}
+      analysisCaptureMetadata={devAnalysisCaptureMetadata}
+      {...(devFixtureEvaluator === undefined ? {} : { moveEvaluator: devFixtureEvaluator })}
+    />
   </React.StrictMode>
 );

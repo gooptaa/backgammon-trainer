@@ -15,6 +15,9 @@ export default defineConfig({
       "@backgammon-trainer/backgammon-analysis": fileURLToPath(
         new URL("../../packages/backgammon-analysis/src/index.ts", import.meta.url)
       ),
+      "@backgammon-trainer/backgammon-analysis-session": fileURLToPath(
+        new URL("../../packages/backgammon-analysis-session/src/index.ts", import.meta.url)
+      ),
       "@backgammon-trainer/backgammon-engine": fileURLToPath(
         new URL("../../packages/backgammon-engine/src/index.ts", import.meta.url)
       )

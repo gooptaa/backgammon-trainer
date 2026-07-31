@@ -73,6 +73,33 @@ flowchart TD
 	C --> D[Future Persistence Adapter]
 ```
 
+Web capture orchestration now wires ranked fixture analysis to committed turns through an explicit pending-decision boundary:
+
+```mermaid
+flowchart TD
+	A[Current Game Decision] --> B[Fixture Ranked Analysis]
+	B --> C[Pending Decision Analysis]
+	C --> D[Canonical Committed Turn]
+	D --> E[Analysis Session Builder]
+	E --> F[In-memory AnalysisSession]
+	F --> G[Read-only Session Inspection]
+```
+
+Persistence boundaries remain intentionally separate:
+
+```text
+GameSnapshot persistence ─────── independent
+AnalysisSession persistence ──── not implemented
+```
+
+Current web policy notes:
+
+- analysis capture is development-only and fixture-backed
+- committed turn history remains authoritative for chosen-move linkage
+- capture failures never roll back committed game moves
+- evaluator failures never block gameplay
+- GNU adapter is not imported into the browser sandbox
+
 Session policy notes:
 
 - analysis sessions support sparse analyzed-turn sets (strictly ascending unique turn numbers with allowed gaps)

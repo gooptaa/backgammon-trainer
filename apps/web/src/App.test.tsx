@@ -23,6 +23,10 @@ import {
   type PositionEvaluator
 } from "@backgammon-trainer/backgammon-analysis";
 import { createFixturePositionEvaluator } from "@backgammon-trainer/backgammon-analysis/fixture";
+import {
+  type AnalysisCaptureRuntime,
+  type FixtureAnalysisSessionMetadataConfig
+} from "./features/analysis-session/analysisCapture";
 import { type GameStorage } from "./features/sandbox/gameStorage";
 
 import App from "./App";
@@ -323,6 +327,9 @@ const renderApp = (options?: {
   initialOpeningTurnPending?: boolean;
   gameStorage?: GameStorage;
   moveEvaluator?: PositionEvaluator;
+  analysisCaptureEnabled?: boolean;
+  analysisCaptureRuntime?: AnalysisCaptureRuntime;
+  analysisCaptureMetadata?: FixtureAnalysisSessionMetadataConfig;
 }): void => {
   const storage = options?.gameStorage ?? createMemoryGameStorage();
 
@@ -339,6 +346,15 @@ const renderApp = (options?: {
         ? {}
         : { initialOpeningTurnPending: options.initialOpeningTurnPending })}
       {...(options?.moveEvaluator === undefined ? {} : { moveEvaluator: options.moveEvaluator })}
+      {...(options?.analysisCaptureEnabled === undefined
+        ? {}
+        : { analysisCaptureEnabled: options.analysisCaptureEnabled })}
+      {...(options?.analysisCaptureRuntime === undefined
+        ? {}
+        : { analysisCaptureRuntime: options.analysisCaptureRuntime })}
+      {...(options?.analysisCaptureMetadata === undefined
+        ? {}
+        : { analysisCaptureMetadata: options.analysisCaptureMetadata })}
       gameStorage={storage}
     />
   );

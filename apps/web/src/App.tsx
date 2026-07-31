@@ -4,8 +4,14 @@ import {
   evaluateLegalMoves,
   type AnalyzeLegalMoveOutcomesResult,
   type EvaluateLegalMovesResult,
+  type EvaluationScoreScale,
   type PositionEvaluator
 } from "@backgammon-trainer/backgammon-analysis";
+import {
+  createAnalysisSession,
+  getAnalysisSessionGameReference,
+  type AnalysisSession
+} from "@backgammon-trainer/backgammon-analysis-session";
 import {
   applyGameMove,
   decodeGameSnapshot,
@@ -39,6 +45,18 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BackgammonBoard } from "./features/board/BackgammonBoard";
+import { AnalysisSessionPanel } from "./features/analysis-session/AnalysisSessionPanel";
+import {
+  captureCommittedTurnAnalysis,
+  createFixtureAnalysisSessionMetadata,
+  createPendingDecisionAnalysis,
+  getAnalysisDecisionKey,
+  type AnalysisCaptureFailure,
+  type AnalysisCaptureRuntime,
+  type AnalysisEvaluatorStatus,
+  type FixtureAnalysisSessionMetadataConfig,
+  type PendingDecisionAnalysis
+} from "./features/analysis-session/analysisCapture";
 import { EngineSandboxPanel } from "./features/sandbox/EngineSandboxPanel";
 import { LegalMoveOutcomesPanel } from "./features/sandbox/LegalMoveOutcomesPanel";
 import { TurnHistoryPanel } from "./features/sandbox/TurnHistoryPanel";
@@ -87,6 +105,30 @@ type OpeningRollState =
 
 const DEFAULT_TEST_OPENING_DIE: DieValue = 1;
 const SECOND_TEST_OPENING_DIE: DieValue = 2;
+let fallbackAnalysisSessionCounter = 0;
+
+const DEFAULT_ANALYSIS_CAPTURE_RUNTIME: AnalysisCaptureRuntime = {
+  createSessionId: () => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+
+    fallbackAnalysisSessionCounter += 1;
+    return `analysis-session-${fallbackAnalysisSessionCounter}`;
+  },
+  now: () => new Date().toISOString()
+};
+
+const DEFAULT_ANALYSIS_CAPTURE_METADATA: FixtureAnalysisSessionMetadataConfig = {
+  analysisFormat: "ranked-legal-move-analysis",
+  analysisVersion: 1,
+  generatorVersion: "web-analysis-capture/1.0.0",
+  evaluatorProvider: "fixture-position-evaluator",
+  evaluatorVersion: "0.1.0",
+  scoreScale: {
+    kind: "relative"
+  } satisfies EvaluationScoreScale
+};
 
 const getInitialOpeningRollState = (initialGameState?: GameState): OpeningRollState => {
   if (initialGameState === undefined) {
@@ -359,6 +401,9 @@ interface AppProps {
   initialOpeningTurnPending?: boolean;
   gameStorage?: GameStorage;
   moveEvaluator?: PositionEvaluator;
+  analysisCaptureEnabled?: boolean;
+  analysisCaptureRuntime?: AnalysisCaptureRuntime;
+  analysisCaptureMetadata?: FixtureAnalysisSessionMetadataConfig;
 }
 
 type InspectionView = "before" | "after";
@@ -388,7 +433,10 @@ function App({
   initialOpeningRollState,
   initialOpeningTurnPending,
   gameStorage,
-  moveEvaluator
+  moveEvaluator,
+  analysisCaptureEnabled = false,
+  analysisCaptureRuntime,
+  analysisCaptureMetadata
 }: AppProps): JSX.Element {
   const snapshotStorage = useMemo(
     () => gameStorage ?? createLocalGameStorage(DEFAULT_GAME_STORAGE_KEY),
@@ -404,6 +452,8 @@ function App({
       ),
     [initialGameState, initialOpeningRollState, initialOpeningTurnPending, snapshotStorage]
   );
+  const captureRuntime = analysisCaptureRuntime ?? DEFAULT_ANALYSIS_CAPTURE_RUNTIME;
+  const captureMetadata = analysisCaptureMetadata ?? DEFAULT_ANALYSIS_CAPTURE_METADATA;
 
   const [gameState, setGameState] = useState<GameState>(() => initialDurableState.gameState);
   const [openingRollState, setOpeningRollState] = useState<OpeningRollState>(
@@ -427,9 +477,26 @@ function App({
     null
   );
   const [moveEvaluationPending, setMoveEvaluationPending] = useState(false);
+  const [analysisSession, setAnalysisSession] = useState<AnalysisSession | null>(null);
+  const [pendingDecisionAnalysis, setPendingDecisionAnalysis] =
+    useState<PendingDecisionAnalysis | null>(null);
+  const [analysisEvaluatorStatus, setAnalysisEvaluatorStatus] = useState<AnalysisEvaluatorStatus>(
+    moveEvaluator === undefined ? "not-configured" : "idle"
+  );
+  const [lastCaptureFailure, setLastCaptureFailure] = useState<AnalysisCaptureFailure | null>(null);
   const [importText, setImportText] = useState<string>("");
   const skipInitialPersistRef = useRef(true);
   const moveEvaluationRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    if (moveEvaluator === undefined) {
+      setAnalysisEvaluatorStatus("not-configured");
+      return;
+    }
+
+    setAnalysisEvaluatorStatus((current) => (current === "not-configured" ? "idle" : current));
+  }, [moveEvaluator]);
+
   const gameStatus = useMemo(() => getGameStatus(gameState.position), [gameState]);
   const legalMovesResult = useMemo(() => getLegalMovesForState(gameState), [gameState]);
   const openingResolved = openingRollState.phase === "resolved";
@@ -462,6 +529,123 @@ function App({
     openingRollState.phase
   ]);
 
+  const activeSnapshot = useMemo<GameSnapshot>(() => {
+    return buildGameSnapshot(gameState, turnHistory, openingRollState, openingTurnPending);
+  }, [gameState, openingRollState, openingTurnPending, turnHistory]);
+
+  const activeGameReference = useMemo(() => {
+    const reference = getAnalysisSessionGameReference(activeSnapshot);
+    return reference.ok ? reference.gameReference : null;
+  }, [activeSnapshot]);
+
+  useEffect(() => {
+    if (
+      !analysisCaptureEnabled ||
+      activeGameReference === null ||
+      openingRollState.phase !== "resolved"
+    ) {
+      setAnalysisSession(null);
+      setPendingDecisionAnalysis(null);
+      setLastCaptureFailure(null);
+      return;
+    }
+
+    if (
+      analysisSession !== null &&
+      analysisSession.gameSnapshotReference.gameReference === activeGameReference
+    ) {
+      return;
+    }
+
+    const createdAt = captureRuntime.now();
+    const created = createAnalysisSession({
+      sessionId: captureRuntime.createSessionId(),
+      gameSnapshot: activeSnapshot,
+      metadata: createFixtureAnalysisSessionMetadata(captureMetadata, createdAt),
+      createdAt,
+      gameReference: activeGameReference
+    });
+
+    if (!created.ok) {
+      setAnalysisSession(null);
+      setPendingDecisionAnalysis(null);
+      setLastCaptureFailure({
+        reason: "session-not-initialized",
+        message: created.message
+      });
+      return;
+    }
+
+    setAnalysisSession(created.session);
+    setPendingDecisionAnalysis(null);
+    setLastCaptureFailure(null);
+  }, [
+    activeGameReference,
+    activeSnapshot,
+    analysisCaptureEnabled,
+    analysisSession,
+    captureMetadata,
+    captureRuntime,
+    openingRollState.phase
+  ]);
+
+  const liveDecisionContext = useMemo(() => {
+    if (
+      analysisSession === null ||
+      gameState.dice === null ||
+      isInspectingHistory ||
+      openingRollState.phase !== "resolved" ||
+      gameStatus.state === "complete"
+    ) {
+      return null;
+    }
+
+    const turnNumber = turnHistory.length + 1;
+    const gameReference = analysisSession.gameSnapshotReference.gameReference;
+    const decisionKey = getAnalysisDecisionKey({
+      gameReference,
+      turnNumber,
+      position: gameState.position,
+      player: gameState.activePlayer,
+      dice: gameState.dice
+    });
+
+    return {
+      decisionKey,
+      gameReference,
+      turnNumber,
+      player: gameState.activePlayer,
+      dice: gameState.dice,
+      snapshotBeforeTurn: activeSnapshot
+    };
+  }, [
+    activeSnapshot,
+    analysisSession,
+    gameState.activePlayer,
+    gameState.dice,
+    gameState.position,
+    gameStatus.state,
+    isInspectingHistory,
+    openingRollState.phase,
+    turnHistory.length
+  ]);
+
+  useEffect(() => {
+    if (liveDecisionContext === null) {
+      setPendingDecisionAnalysis(null);
+      return;
+    }
+
+    if (
+      pendingDecisionAnalysis !== null &&
+      pendingDecisionAnalysis.decisionKey === liveDecisionContext.decisionKey
+    ) {
+      return;
+    }
+
+    setPendingDecisionAnalysis(null);
+  }, [liveDecisionContext, pendingDecisionAnalysis]);
+
   useEffect(() => {
     const canEvaluate =
       moveEvaluator !== undefined &&
@@ -473,6 +657,7 @@ function App({
     if (!canEvaluate) {
       setMoveEvaluationPending(false);
       setMoveEvaluationResult(null);
+      setAnalysisEvaluatorStatus(moveEvaluator === undefined ? "not-configured" : "idle");
       return;
     }
 
@@ -480,6 +665,7 @@ function App({
     moveEvaluationRequestIdRef.current += 1;
     const requestId = moveEvaluationRequestIdRef.current;
     setMoveEvaluationPending(true);
+    setAnalysisEvaluatorStatus("evaluating");
 
     void evaluateLegalMoves(
       {
@@ -498,6 +684,33 @@ function App({
         }
 
         setMoveEvaluationResult(result);
+        if (result.ok && liveDecisionContext !== null) {
+          setPendingDecisionAnalysis(
+            createPendingDecisionAnalysis({
+              decisionKey: liveDecisionContext.decisionKey,
+              gameReference: liveDecisionContext.gameReference,
+              turnNumber: liveDecisionContext.turnNumber,
+              snapshotBeforeTurn: liveDecisionContext.snapshotBeforeTurn,
+              player: liveDecisionContext.player,
+              dice: liveDecisionContext.dice,
+              rankedAnalysis: result.analysis,
+              evaluatorRequestId: requestId
+            })
+          );
+          setAnalysisEvaluatorStatus("ready");
+        } else if (result.ok) {
+          setPendingDecisionAnalysis(null);
+          setAnalysisEvaluatorStatus("idle");
+        } else {
+          setPendingDecisionAnalysis(null);
+          setAnalysisEvaluatorStatus(
+            result.reason === "unavailable"
+              ? "unavailable"
+              : result.reason === "invalid-provider-result"
+                ? "invalid"
+                : "failed"
+          );
+        }
         setMoveEvaluationPending(false);
       })
       .catch(() => {
@@ -515,6 +728,8 @@ function App({
         } else {
           setMoveEvaluationResult(null);
         }
+        setPendingDecisionAnalysis(null);
+        setAnalysisEvaluatorStatus("failed");
         setMoveEvaluationPending(false);
       });
 
@@ -528,6 +743,7 @@ function App({
     gameStatus.state,
     isInspectingHistory,
     legalMoveOutcomesResult,
+    liveDecisionContext,
     moveEvaluator,
     openingRollState.phase
   ]);
@@ -622,9 +838,7 @@ function App({
     stagedPrefixResult
   ]);
 
-  const durableSnapshot = useMemo<GameSnapshot>(() => {
-    return buildGameSnapshot(gameState, turnHistory, openingRollState, openingTurnPending);
-  }, [gameState, openingRollState, openingTurnPending, turnHistory]);
+  const durableSnapshot = activeSnapshot;
 
   const exportSnapshotText = useMemo(() => {
     return encodeGameSnapshot(durableSnapshot);
@@ -662,18 +876,22 @@ function App({
     setHoveredDestination(null);
   };
 
-  const appendTurnRecord = (input: Omit<CreateTurnRecordInput, "turnNumber">): void => {
-    setTurnHistory((previousHistory) => {
-      const nextTurnNumber = previousHistory.length + 1;
-
-      return [
-        ...previousHistory,
-        createTurnRecord({
-          ...input,
-          turnNumber: nextTurnNumber
-        })
-      ];
+  const createCommittedTurnRecord = (
+    input: Omit<CreateTurnRecordInput, "turnNumber">
+  ): {
+    committedTurn: TurnRecord;
+    nextTurnHistory: readonly TurnRecord[];
+  } => {
+    const nextTurnNumber = turnHistory.length + 1;
+    const committedTurn = createTurnRecord({
+      ...input,
+      turnNumber: nextTurnNumber
     });
+
+    return {
+      committedTurn,
+      nextTurnHistory: [...turnHistory, committedTurn]
+    };
   };
 
   const onUndoLastStep = (): void => {
@@ -732,10 +950,12 @@ function App({
   };
 
   const onApplyMove = (move: Parameters<typeof applyGameMove>[1]): void => {
+    moveEvaluationRequestIdRef.current += 1;
     const playerBefore = gameState.activePlayer;
     const diceBefore = gameState.dice;
     const positionBefore = gameState.position;
     const phaseBefore = openingTurnPending ? "opening" : "normal";
+    const snapshotBeforeTurn = durableSnapshot;
     const result = applyGameMove(gameState, move);
 
     if (!result.ok) {
@@ -744,7 +964,7 @@ function App({
     }
 
     if (diceBefore !== null) {
-      appendTurnRecord({
+      const { committedTurn, nextTurnHistory } = createCommittedTurnRecord({
         player: playerBefore,
         dice: diceBefore,
         outcome: {
@@ -756,6 +976,38 @@ function App({
         gameStatusAfter: result.status,
         phase: phaseBefore
       });
+
+      setTurnHistory(nextTurnHistory);
+
+      if (analysisCaptureEnabled) {
+        const snapshotAfterTurn = buildGameSnapshot(
+          result.state,
+          nextTurnHistory,
+          openingRollState,
+          false
+        );
+        const captureResult = captureCommittedTurnAnalysis({
+          session: analysisSession,
+          pendingDecision: pendingDecisionAnalysis,
+          snapshotBeforeTurn,
+          snapshotAfterTurn,
+          committedTurn,
+          updatedAt: captureRuntime.now()
+        });
+
+        if (captureResult.ok) {
+          setAnalysisSession(captureResult.session);
+          setLastCaptureFailure(null);
+        } else {
+          setLastCaptureFailure({
+            reason: captureResult.reason,
+            message: captureResult.message
+          });
+          console.error(captureResult.message);
+        }
+
+        setPendingDecisionAnalysis(null);
+      }
     }
 
     setGameState(result.state);
@@ -775,10 +1027,12 @@ function App({
   };
 
   const onPassTurn = (): void => {
+    moveEvaluationRequestIdRef.current += 1;
     const playerBefore = gameState.activePlayer;
     const diceBefore = gameState.dice;
     const positionBefore = gameState.position;
     const phaseBefore = openingTurnPending ? "opening" : "normal";
+    const snapshotBeforeTurn = durableSnapshot;
     const result = passTurn(gameState);
 
     if (!result.ok) {
@@ -787,7 +1041,8 @@ function App({
     }
 
     if (diceBefore !== null) {
-      appendTurnRecord({
+      const gameStatusAfter = getGameStatus(result.state.position);
+      const { committedTurn, nextTurnHistory } = createCommittedTurnRecord({
         player: playerBefore,
         dice: diceBefore,
         outcome: {
@@ -795,9 +1050,41 @@ function App({
         },
         positionBefore,
         positionAfter: result.state.position,
-        gameStatusAfter: getGameStatus(result.state.position),
+        gameStatusAfter,
         phase: phaseBefore
       });
+
+      setTurnHistory(nextTurnHistory);
+
+      if (analysisCaptureEnabled) {
+        const snapshotAfterTurn = buildGameSnapshot(
+          result.state,
+          nextTurnHistory,
+          openingRollState,
+          false
+        );
+        const captureResult = captureCommittedTurnAnalysis({
+          session: analysisSession,
+          pendingDecision: pendingDecisionAnalysis,
+          snapshotBeforeTurn,
+          snapshotAfterTurn,
+          committedTurn,
+          updatedAt: captureRuntime.now()
+        });
+
+        if (captureResult.ok) {
+          setAnalysisSession(captureResult.session);
+          setLastCaptureFailure(null);
+        } else {
+          setLastCaptureFailure({
+            reason: captureResult.reason,
+            message: captureResult.message
+          });
+          console.error(captureResult.message);
+        }
+
+        setPendingDecisionAnalysis(null);
+      }
     }
 
     setGameState(result.state);
@@ -812,6 +1099,8 @@ function App({
   };
 
   const onRollForOpening = (): void => {
+    moveEvaluationRequestIdRef.current += 1;
+    setPendingDecisionAnalysis(null);
     const openingResult = rollOpeningDice(randomSource);
 
     if (openingResult.outcome === "tie") {
@@ -850,6 +1139,7 @@ function App({
   };
 
   const onNewGame = (): void => {
+    moveEvaluationRequestIdRef.current += 1;
     const nextGameState = createInitialGameState();
     const nextOpeningRollState: OpeningRollState = {
       phase: "waiting"
@@ -881,6 +1171,11 @@ function App({
     setTurnHistory(nextTurnHistory);
     setHistoryInspection(null);
     setSelectedOutcomeKey(null);
+    setPendingDecisionAnalysis(null);
+    setLastCaptureFailure(null);
+    setMoveEvaluationResult(null);
+    setMoveEvaluationPending(false);
+    setAnalysisEvaluatorStatus(moveEvaluator === undefined ? "not-configured" : "idle");
     resetTransientState();
 
     if (saveFailed) {
@@ -907,6 +1202,7 @@ function App({
   };
 
   const onValidateAndImportSnapshot = (): void => {
+    moveEvaluationRequestIdRef.current += 1;
     const parsed = decodeGameSnapshot(importText);
 
     if (!parsed.ok) {
@@ -932,6 +1228,11 @@ function App({
     setOpeningTurnPending(restoredOpening.openingTurnPending);
     setHistoryInspection(null);
     setSelectedOutcomeKey(null);
+    setPendingDecisionAnalysis(null);
+    setLastCaptureFailure(null);
+    setMoveEvaluationResult(null);
+    setMoveEvaluationPending(false);
+    setAnalysisEvaluatorStatus(moveEvaluator === undefined ? "not-configured" : "idle");
     setImportText("");
     resetTransientState();
     setMessage("Snapshot imported.");
@@ -1476,6 +1777,12 @@ function App({
             previewActive={isPreviewingOutcome}
             onSelectOutcome={onSelectOutcome}
             onReturnToCurrentGame={onReturnFromOutcomePreview}
+          />
+
+          <AnalysisSessionPanel
+            session={analysisSession}
+            evaluatorStatus={analysisEvaluatorStatus}
+            lastCaptureFailure={lastCaptureFailure}
           />
         </section>
 

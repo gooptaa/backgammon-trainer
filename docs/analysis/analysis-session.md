@@ -241,3 +241,53 @@ Host layers can now safely orchestrate:
 5. durable storage in a future persistence boundary
 
 without manually assembling nested session records.
+
+## Web In-Memory Capture (Current Milestone)
+
+The web sandbox now orchestrates an in-memory `AnalysisSession` lifecycle for development fixture analysis.
+
+Lifecycle summary:
+
+1. derive a deterministic decision key for the live committed pre-turn state
+2. request fixture-ranked analysis for that exact live decision
+3. retain completed ranked analysis as pending decision state
+4. wait for canonical committed `TurnRecord` from engine-authoritative commit paths
+5. build record through `createAnalysisRecord(...)`
+6. append through `appendAnalysisRecord(...)`
+7. expose factual read-only inspection through the Analysis Session panel
+
+Race policy (current):
+
+- capture only when analysis completed before the turn was committed
+- if commit happens first, gameplay continues and no late capture is appended
+- no historical retry is started for prior turns in this milestone
+
+Stale-result protection:
+
+- evaluator responses are accepted only when request identity and live decision key still match
+- stale responses are ignored and cannot create analysis records
+
+Session lifecycle in web:
+
+- one in-memory session per active game lineage
+- new lineage (new game or imported different snapshot) creates a new empty session
+- restored startup snapshots create a new empty in-memory session referencing restored lineage
+- restored historical committed turns are not backfilled as analyzed records
+- sparse record turn numbers are expected and valid
+
+Pass and final-turn behavior:
+
+- canonical pass records are captured only when pending analysis kind is `no-legal-moves`
+- terminal winning turns are captured with pre-terminal and terminal snapshots when pending analysis exists
+
+Fixture provenance and UI language:
+
+- fixture provider metadata remains explicit in session metadata and records
+- UI labels remain factual (`Fixture Rank`, `Fixture Score`, `Fixture Loss`)
+- fixture warning is explicit: `Development fixture scores - not strategic evaluation.`
+
+Persistence boundary:
+
+- analysis sessions remain memory-only in this milestone
+- sessions are not added to `GameSnapshot`, local storage, import/export payloads, or startup restore payloads
+- pending decision state, evaluator status, and capture failures are transient and not serialized

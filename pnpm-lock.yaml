@@ -71,6 +71,9 @@ importers:
       "@backgammon-trainer/backgammon-analysis":
         specifier: workspace:*
         version: link:../../packages/backgammon-analysis
+      "@backgammon-trainer/backgammon-analysis-session":
+        specifier: workspace:*
+        version: link:../../packages/backgammon-analysis-session
       "@backgammon-trainer/backgammon-domain":
         specifier: workspace:*
         version: link:../../packages/backgammon-domain

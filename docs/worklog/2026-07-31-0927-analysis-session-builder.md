@@ -242,9 +242,6 @@ Tests added/updated:
 Validation performed:
 
 - CI=1 pnpm --filter @backgammon-trainer/backgammon-analysis-session test
-
-Validation pending for full milestone matrix (to be executed after final documentation/update pass):
-
 - CI=1 pnpm --filter @backgammon-trainer/backgammon-engine test
 - CI=1 pnpm --filter @backgammon-trainer/backgammon-analysis test
 - CI=1 pnpm --filter @backgammon-trainer/backgammon-analysis-session test
