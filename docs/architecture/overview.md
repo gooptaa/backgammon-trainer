@@ -57,7 +57,27 @@ Analysis session persistence modeling is also intentionally separated from game-
 - `GameSnapshot` = deterministic engine game state and committed turn history
 - `AnalysisSession` = versioned interpretation and evaluator-attributed analysis records
 
+Analysis session construction now has an explicit domain builder boundary:
+
+- `GameSnapshot` + canonical `TurnRecord` + ranked move analysis
+- analysis-session builder orchestration (`createAnalysisSession`, `createAnalysisRecord`, `appendAnalysisRecord`, `reconcileAnalysisSession`)
+- validated immutable `AnalysisSession`
+- future persistence adapters (not yet implemented)
+
 This separation allows analysis data to evolve independently from deterministic game rules and snapshot schemas.
+
+```mermaid
+flowchart TD
+	A[GameSnapshot + TurnRecord + RankedAnalysis] --> B[Analysis Session Builder]
+	B --> C[AnalysisSession]
+	C --> D[Future Persistence Adapter]
+```
+
+Session policy notes:
+
+- analysis sessions support sparse analyzed-turn sets (strictly ascending unique turn numbers with allowed gaps)
+- append operations are immutable and idempotent for exact duplicate retry payloads
+- reconciliation validates that stored analysis still matches committed deterministic game history
 
 ## Deterministic legal move requirement
 
