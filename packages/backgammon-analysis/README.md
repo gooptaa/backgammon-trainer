@@ -8,11 +8,16 @@ What this package does:
 - compares two positions with factual `after - before` deltas
 - classifies coarse contact status (`contact` or `race`)
 - analyzes complete legal move outcomes for a position/player/dice turn
+- defines provider-neutral evaluator request/result contracts
+- validates evaluator output against canonical legal outcomes
+- produces deterministic dense-ranked move analysis with loss-from-best
+- provides canonical deterministic move fingerprinting
 
 What this package does not do:
 
-- move ranking or recommendation
-- equity or rollout evaluation
+- strategic recommendation labels
+- built-in production evaluator strategy
+- GNU Backgammon process integration
 - coaching prose or AI integration
 - legality, move generation, or checker-transition rules
 
@@ -26,6 +31,8 @@ Minimal usage:
 ```ts
 import {
   analyzeLegalMoveOutcomes,
+  evaluateLegalMoves,
+  getMoveFingerprint,
   analyzePosition,
   comparePositions
 } from "@backgammon-trainer/backgammon-analysis";
@@ -48,6 +55,37 @@ if (outcomesResult.ok) {
   // Indicates an engine invariant disagreement between getLegalMoves and applyMove.
   console.error(outcomesResult.message);
 }
+
+const ranked = await evaluateLegalMoves(
+  {
+    position,
+    player,
+    dice,
+    context: { gameMode: "money" }
+  },
+  evaluator
+);
+
+if (ranked.ok && ranked.analysis.kind === "evaluated") {
+  for (const row of ranked.analysis.rankedMoves) {
+    console.log(
+      row.rank,
+      row.normalizedScore,
+      row.lossFromBest,
+      getMoveFingerprint(row.outcome.move)
+    );
+  }
+}
 ```
 
 Results are deterministic factual features, not strategic judgments.
+
+Fixture helper for tests/development preview:
+
+```ts
+import { createFixturePositionEvaluator } from "@backgammon-trainer/backgammon-analysis/fixture";
+
+const evaluator = createFixturePositionEvaluator({ mode: "complete" });
+```
+
+Fixture scores are synthetic contract data and are not strategic analysis.

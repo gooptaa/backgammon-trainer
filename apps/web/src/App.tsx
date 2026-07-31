@@ -1,7 +1,10 @@
 import styles from "./App.module.css";
 import {
   analyzeLegalMoveOutcomes,
-  type AnalyzeLegalMoveOutcomesResult
+  evaluateLegalMoves,
+  type AnalyzeLegalMoveOutcomesResult,
+  type EvaluateLegalMovesResult,
+  type PositionEvaluator
 } from "@backgammon-trainer/backgammon-analysis";
 import {
   applyGameMove,
@@ -355,6 +358,7 @@ interface AppProps {
   initialOpeningRollState?: OpeningRollState;
   initialOpeningTurnPending?: boolean;
   gameStorage?: GameStorage;
+  moveEvaluator?: PositionEvaluator;
 }
 
 type InspectionView = "before" | "after";
@@ -383,7 +387,8 @@ function App({
   randomSource,
   initialOpeningRollState,
   initialOpeningTurnPending,
-  gameStorage
+  gameStorage,
+  moveEvaluator
 }: AppProps): JSX.Element {
   const snapshotStorage = useMemo(
     () => gameStorage ?? createLocalGameStorage(DEFAULT_GAME_STORAGE_KEY),
@@ -418,8 +423,13 @@ function App({
   );
   const [historyInspection, setHistoryInspection] = useState<HistoryInspectionState | null>(null);
   const [selectedOutcomeKey, setSelectedOutcomeKey] = useState<string | null>(null);
+  const [moveEvaluationResult, setMoveEvaluationResult] = useState<EvaluateLegalMovesResult | null>(
+    null
+  );
+  const [moveEvaluationPending, setMoveEvaluationPending] = useState(false);
   const [importText, setImportText] = useState<string>("");
   const skipInitialPersistRef = useRef(true);
+  const moveEvaluationRequestIdRef = useRef(0);
   const gameStatus = useMemo(() => getGameStatus(gameState.position), [gameState]);
   const legalMovesResult = useMemo(() => getLegalMovesForState(gameState), [gameState]);
   const openingResolved = openingRollState.phase === "resolved";
@@ -449,6 +459,76 @@ function App({
     gameState.position,
     gameStatus.state,
     isInspectingHistory,
+    openingRollState.phase
+  ]);
+
+  useEffect(() => {
+    const canEvaluate =
+      moveEvaluator !== undefined &&
+      !isInspectingHistory &&
+      openingRollState.phase === "resolved" &&
+      gameStatus.state !== "complete" &&
+      gameState.dice !== null;
+
+    if (!canEvaluate) {
+      setMoveEvaluationPending(false);
+      setMoveEvaluationResult(null);
+      return;
+    }
+
+    let disposed = false;
+    moveEvaluationRequestIdRef.current += 1;
+    const requestId = moveEvaluationRequestIdRef.current;
+    setMoveEvaluationPending(true);
+
+    void evaluateLegalMoves(
+      {
+        position: gameState.position,
+        player: gameState.activePlayer,
+        dice: gameState.dice,
+        context: {
+          gameMode: "money"
+        }
+      },
+      moveEvaluator
+    )
+      .then((result) => {
+        if (disposed || requestId !== moveEvaluationRequestIdRef.current) {
+          return;
+        }
+
+        setMoveEvaluationResult(result);
+        setMoveEvaluationPending(false);
+      })
+      .catch(() => {
+        if (disposed || requestId !== moveEvaluationRequestIdRef.current) {
+          return;
+        }
+
+        if (legalMoveOutcomesResult !== null && legalMoveOutcomesResult.ok) {
+          setMoveEvaluationResult({
+            ok: false,
+            reason: "provider-failed",
+            message: "Evaluator request failed.",
+            factualAnalysis: legalMoveOutcomesResult.analysis
+          });
+        } else {
+          setMoveEvaluationResult(null);
+        }
+        setMoveEvaluationPending(false);
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [
+    gameState.activePlayer,
+    gameState.dice,
+    gameState.position,
+    gameStatus.state,
+    isInspectingHistory,
+    legalMoveOutcomesResult,
+    moveEvaluator,
     openingRollState.phase
   ]);
   const selectedOutcome = useMemo(
@@ -1389,6 +1469,9 @@ function App({
             turnDiceAssigned={gameState.dice !== null}
             isInspectingHistory={isInspectingHistory}
             analysisResult={legalMoveOutcomesResult}
+            evaluatorConfigured={moveEvaluator !== undefined}
+            evaluatorPending={moveEvaluationPending}
+            evaluationResult={moveEvaluationResult}
             selectedOutcomeKey={selectedOutcomeKey}
             previewActive={isPreviewingOutcome}
             onSelectOutcome={onSelectOutcome}

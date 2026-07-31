@@ -60,3 +60,22 @@
   display: grid;
   gap: 0.2rem;
 }
+
+.evaluatorSection {
+  margin-top: 0.8rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(17, 63, 90, 0.14);
+}
+
+.evaluatorSection h3 {
+  margin: 0;
+  color: #173346;
+  font-size: 0.95rem;
+}
+
+.warning {
+  margin: 0.35rem 0 0;
+  color: #8a4308;
+  font-size: 0.88rem;
+  font-weight: 600;
+}

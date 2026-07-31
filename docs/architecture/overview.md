@@ -35,12 +35,12 @@ Move-outcome analysis pipeline boundary is:
 - position + dice + active player
 - engine complete legal moves (`getLegalMoves(...)`)
 - analysis move outcomes (apply each legal move through engine + compute factual before/after)
-- future evaluator layer (equity/ranking, deferred)
+- evaluator contract layer (provider-neutral score normalization, validation, deterministic ranking)
 - future coaching layer (pedagogy/prose, deferred)
 
 No package under `packages/` depends on React, Fastify, browser APIs, or vendor SDKs.
 
-The analysis layer intentionally stays factual and machine-readable. It does not rank moves, compute equities, or generate coaching prose.
+The factual analysis APIs intentionally remain machine-readable and non-prescriptive. Ranked outputs are isolated behind the evaluator contract boundary and require explicit evaluator provenance. Coaching prose generation remains out of scope.
 
 ## Deterministic legal move requirement
 

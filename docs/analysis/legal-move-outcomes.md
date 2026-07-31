@@ -222,3 +222,9 @@ Future boundary:
 
 - evaluator layer may consume LegalMoveOutcomeAnalysis and add ranking/equity independently
 - coaching layer may consume evaluator output without changing this factual layer
+
+Current follow-on milestone status:
+
+- provider-neutral evaluator contracts and deterministic ranked analysis are now defined in `docs/analysis/evaluator-contract.md`
+- factual legal move outcome analysis remains independently usable without any evaluator
+- evaluator availability/failure does not invalidate factual move outcome inspection

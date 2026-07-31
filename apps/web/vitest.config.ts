@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      "@backgammon-trainer/backgammon-analysis/fixture": fileURLToPath(
+        new URL("../../packages/backgammon-analysis/src/fixture.ts", import.meta.url)
+      ),
       "@backgammon-trainer/backgammon-domain": fileURLToPath(
         new URL("../../packages/backgammon-domain/src/index.ts", import.meta.url)
       ),

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createGameState,
@@ -16,6 +16,13 @@ import {
   type BoardPosition,
   type DieValue
 } from "@backgammon-trainer/backgammon-domain";
+import {
+  type EvaluatePositionRequest,
+  getMoveFingerprint,
+  type EvaluatePositionResult,
+  type PositionEvaluator
+} from "@backgammon-trainer/backgammon-analysis";
+import { createFixturePositionEvaluator } from "@backgammon-trainer/backgammon-analysis/fixture";
 import { type GameStorage } from "./features/sandbox/gameStorage";
 
 import App from "./App";
@@ -315,6 +322,7 @@ const renderApp = (options?: {
   initialOpeningRollState?: OpeningRollState;
   initialOpeningTurnPending?: boolean;
   gameStorage?: GameStorage;
+  moveEvaluator?: PositionEvaluator;
 }): void => {
   const storage = options?.gameStorage ?? createMemoryGameStorage();
 
@@ -330,6 +338,7 @@ const renderApp = (options?: {
       {...(options?.initialOpeningTurnPending === undefined
         ? {}
         : { initialOpeningTurnPending: options.initialOpeningTurnPending })}
+      {...(options?.moveEvaluator === undefined ? {} : { moveEvaluator: options.moveEvaluator })}
       gameStorage={storage}
     />
   );
@@ -1409,6 +1418,336 @@ describe("App legal move outcomes panel", () => {
 
     expect(screen.getByTestId("legal-outcomes-game-complete")).toHaveTextContent(
       "Game complete. No further legal move analysis is available."
+    );
+  });
+
+  it("keeps factual outcomes visible when no evaluator is configured and shows evaluator message", () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    setDiceManually("1", "2");
+
+    expect(screen.getByTestId("legal-outcomes-list")).toBeInTheDocument();
+    expect(screen.getByTestId("evaluator-not-configured")).toHaveTextContent(
+      "No move evaluator configured."
+    );
+  });
+
+  it("renders fixture-ranked evaluator preview with synthetic warning and score fields", async () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+    const evaluator = createFixturePositionEvaluator({ mode: "complete", warnings: ["fixture"] });
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white"),
+      moveEvaluator: evaluator
+    });
+
+    setDiceManually("1", "2");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("evaluator-fixture-warning")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("evaluator-coverage")).toHaveTextContent("Coverage: complete");
+    expect(screen.getByTestId("evaluator-scale")).toHaveTextContent("Score scale: relative");
+    expect(screen.getByTestId("evaluator-provider")).toHaveTextContent(
+      "fixture-position-evaluator"
+    );
+    expect(screen.getByTestId("evaluator-version")).toHaveTextContent("Provider version:");
+    expect(screen.getByTestId("evaluator-ranked-list")).toBeInTheDocument();
+    expect(screen.getAllByText(/Fixture Rank:/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Fixture Score:/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Fixture Loss:/).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("evaluator-contract-preview")).not.toHaveTextContent(
+      /Best Move|Recommended Move|Correct Move|Equity/i
+    );
+  });
+
+  it("renders partial coverage and keeps unevaluated legal moves visible", async () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+    const evaluator = createFixturePositionEvaluator({ mode: "partial" });
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white"),
+      moveEvaluator: evaluator
+    });
+
+    setDiceManually("1", "2");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("evaluator-coverage")).toHaveTextContent("Coverage: partial");
+    });
+
+    expect(screen.getByTestId("legal-outcomes-list")).toBeInTheDocument();
+    expect(screen.getByTestId("evaluator-unevaluated-count")).not.toHaveTextContent(
+      "Unevaluated legal moves: 0"
+    );
+  });
+
+  it("supports tied ranks and ranked-row preview of the exact canonical outcome", async () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+    const tieEvaluateSpy = vi.fn(
+      async (request: EvaluatePositionRequest): Promise<EvaluatePositionResult> => {
+        const outcomes = request.legalOutcomes;
+        const first = outcomes[0];
+        const second = outcomes[1] ?? outcomes[0];
+
+        if (first === undefined || second === undefined) {
+          throw new Error("Expected at least one legal outcome for tie evaluator test.");
+        }
+
+        return {
+          ok: true,
+          coverage: "partial",
+          scores: [
+            {
+              moveFingerprint: getMoveFingerprint(first.move),
+              normalizedScore: 1
+            },
+            {
+              moveFingerprint: getMoveFingerprint(second.move),
+              normalizedScore: 1
+            }
+          ],
+          scoreScale: {
+            kind: "relative"
+          },
+          provenance: {
+            provider: "fixture-position-evaluator",
+            providerVersion: "0.1",
+            adapterVersion: "0.1",
+            settings: {}
+          },
+          warnings: []
+        } as const;
+      }
+    );
+    const tieEvaluator: PositionEvaluator = {
+      evaluate: tieEvaluateSpy
+    };
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white"),
+      moveEvaluator: tieEvaluator
+    });
+
+    setDiceManually("1", "2");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("evaluator-ranked-list")).toBeInTheDocument();
+    });
+
+    const rankedRows = within(screen.getByTestId("evaluator-ranked-list")).getAllByRole("listitem");
+    expect(rankedRows[0]).toHaveTextContent("Fixture Rank: 1");
+    expect(rankedRows[1]).toHaveTextContent("Fixture Rank: 1");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Preview ranked move" })[0]!);
+    expect(screen.getByTestId("move-outcome-preview-banner")).toHaveTextContent(
+      "Move Outcome Preview"
+    );
+  });
+
+  it("shows concise evaluator unavailable/failure/invalid messages and keeps factual outcomes", async () => {
+    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+    const unavailable = createFixturePositionEvaluator({ mode: "unavailable" });
+
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white"),
+      moveEvaluator: unavailable
+    });
+    setDiceManually("1", "2");
+    await waitFor(() => {
+      expect(screen.getByTestId("evaluator-failure")).toHaveTextContent("Evaluator unavailable");
+    });
+    expect(screen.getByTestId("legal-outcomes-list")).toBeInTheDocument();
+
+    cleanup();
+
+    const invalid = createFixturePositionEvaluator({ mode: "malformed" });
+    renderApp({
+      initialGameState,
+      initialOpeningRollState: resolvedOpeningState("white"),
+      moveEvaluator: invalid
+    });
+    setDiceManually("1", "2");
+    await waitFor(() => {
+      expect(screen.getByTestId("evaluator-failure")).toHaveTextContent(
+        "Evaluator returned invalid data."
+      );
+    });
+    expect(screen.getByTestId("legal-outcomes-list")).toBeInTheDocument();
+  });
+
+  it("does not invoke evaluator in opening unresolved, tie, no-dice, complete, or no-legal-move states", async () => {
+    const evaluateSpy = vi.fn(async (): Promise<EvaluatePositionResult> => {
+      throw new Error("not expected");
+    });
+    const evaluator: PositionEvaluator = {
+      evaluate: evaluateSpy
+    };
+
+    renderApp({
+      moveEvaluator: evaluator,
+      randomSource: createRandomSource([0.8, 0.2])
+    });
+    expect(evaluateSpy).not.toHaveBeenCalled();
+    clickOpeningRoll();
+    await waitFor(() => {
+      expect(evaluateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    cleanup();
+
+    renderApp({
+      randomSource: createRandomSource([0.2, 0.2]),
+      moveEvaluator: evaluator
+    });
+    clickOpeningRoll();
+    expect(screen.getByTestId("opening-phase")).toHaveTextContent("Opening phase: tied");
+    expect(evaluateSpy).toHaveBeenCalledTimes(1);
+
+    cleanup();
+
+    renderApp({
+      initialGameState: createGameState(createUndoPreviewPosition(), "white"),
+      initialOpeningRollState: resolvedOpeningState("white"),
+      moveEvaluator: evaluator
+    });
+    expect(evaluateSpy).toHaveBeenCalledTimes(1);
+    setDiceManually("1", "2");
+    await waitFor(() => {
+      expect(evaluateSpy).toHaveBeenCalledTimes(2);
+    });
+
+    cleanup();
+
+    renderApp({
+      initialGameState: createGameState(
+        createPosition({
+          borneOff: {
+            white: 15,
+            black: 0
+          }
+        }),
+        "white"
+      ),
+      initialOpeningRollState: resolvedOpeningState("white"),
+      moveEvaluator: evaluator
+    });
+    expect(evaluateSpy).toHaveBeenCalledTimes(2);
+
+    cleanup();
+
+    renderApp({
+      initialGameState: {
+        position: createNoLegalMovePosition(),
+        activePlayer: "white",
+        dice: {
+          dice: [1, 1]
+        }
+      },
+      initialOpeningRollState: resolvedOpeningState("white", 1, 1),
+      initialOpeningTurnPending: true,
+      moveEvaluator: evaluator
+    });
+    expect(evaluateSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores stale evaluator responses after state changes", async () => {
+    const resolvers: Array<(value: EvaluatePositionResult) => void> = [];
+    const evaluateSpy = vi.fn(
+      () =>
+        new Promise<EvaluatePositionResult>((resolve) => {
+          resolvers.push(resolve);
+        })
+    );
+    const evaluator: PositionEvaluator = {
+      evaluate: evaluateSpy
+    };
+
+    renderApp({
+      initialGameState: createGameState(createUndoPreviewPosition(), "white"),
+      initialOpeningRollState: resolvedOpeningState("white"),
+      moveEvaluator: evaluator,
+      randomSource: createRandomSource([0.8, 0.2])
+    });
+
+    setDiceManually("1", "2");
+    await waitFor(() => {
+      expect(evaluateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "New Game" }));
+    clickOpeningRoll();
+    await waitFor(() => {
+      expect(evaluateSpy).toHaveBeenCalledTimes(2);
+    });
+
+    const staleOutcome = getLegalMoves({
+      position: createUndoPreviewPosition(),
+      player: "white",
+      roll: { dice: [1, 2] }
+    }).moves[0];
+
+    resolvers[0]!({
+      ok: true,
+      coverage: "partial",
+      scores: [
+        {
+          moveFingerprint: getMoveFingerprint(staleOutcome!),
+          normalizedScore: 99
+        }
+      ],
+      scoreScale: { kind: "relative" },
+      provenance: {
+        provider: "fixture-position-evaluator",
+        providerVersion: "0.1",
+        adapterVersion: "0.1",
+        settings: {}
+      },
+      warnings: []
+    });
+
+    const currentOutcome = getLegalMoves({
+      position: STANDARD_STARTING_POSITION,
+      player: "white",
+      roll: { dice: [5, 2] }
+    }).moves[0];
+
+    resolvers[1]!({
+      ok: true,
+      coverage: "partial",
+      scores: [
+        {
+          moveFingerprint: getMoveFingerprint(currentOutcome!),
+          normalizedScore: 1
+        }
+      ],
+      scoreScale: { kind: "relative" },
+      provenance: {
+        provider: "fixture-position-evaluator",
+        providerVersion: "0.1",
+        adapterVersion: "0.1",
+        settings: {}
+      },
+      warnings: []
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("evaluator-ranked-list")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("evaluator-contract-preview")).toHaveTextContent("Fixture Score: 1");
+    expect(screen.getByTestId("evaluator-contract-preview")).not.toHaveTextContent(
+      "Fixture Score: 99"
     );
   });
 });
