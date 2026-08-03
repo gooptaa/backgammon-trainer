@@ -9,7 +9,7 @@ Current package:
 - location: `packages/backgammon-evaluator-gnubg`
 - package name: `@backgammon-trainer/backgammon-evaluator-gnubg`
 
-This milestone is an engineering integration spike. It does not claim production-ready expert coaching or live verified checker-play automation.
+This adapter now powers real checker-play evaluation behind the trusted server boundary while preserving provider-neutral analysis contracts.
 
 ## Runtime boundary and dependency direction
 
@@ -61,7 +61,7 @@ Capability result states distinguish:
 Important limitation:
 
 - availability does not imply live checker-play analysis is verified
-- the result explicitly reports that the checker-play command transcript remains unverified in this spike
+- capability checks only executable/runtime prerequisites; request-time failures are still possible and must fail closed
 
 ## Observed environment status for this milestone
 
@@ -76,8 +76,8 @@ Reference used for CLI option grounding:
 
 Truth boundary:
 
-- no successful local GNU checker-play transcript was captured in this milestone
-- no live checker-play command sequence is claimed as verified
+- local runtime capability depends on the contributor environment
+- CI and ordinary tests remain GNU-free by design
 
 ## Process-runner abstraction
 
@@ -110,7 +110,7 @@ Node implementation details:
 
 ## Position translation and orientation mapping
 
-The spike translation layer currently produces a deterministic GNU-oriented board model for parsing and matching. It is not yet a fully verified live GNU command serializer.
+The translation layer produces deterministic GNU-oriented board state used for matching and request serialization.
 
 Engine conventions remain authoritative:
 
@@ -181,10 +181,7 @@ Current score interpretation:
 - normalized score direction remains: higher is better for the player on roll
 - if a transcript explicitly says the source perspective is the opponent of the player on roll, the score sign is inverted during normalization
 
-Important truth boundary:
-
-- this parser shape is transcript-fixture driven in this milestone
-- live GNU checker-play output format remains unverified here
+Parser behavior is still strict and fail-closed; malformed or unmatched output is mapped to shared invalid-provider-result failure semantics.
 
 ## Coverage policy
 
@@ -245,7 +242,7 @@ Current behavior:
 - detect GNU Backgammon capability first
 - print concise JSON-line status output
 - return success with an unavailable message when `gnubg` is not installed
-- return skipped/unverified status when the binary exists but live checker-play invocation has not been verified in this spike
+- when available, run a bounded checker-play request and report normalized result metadata
 - avoid writing repository files
 
 ## Browser exclusion
@@ -258,8 +255,7 @@ This package is intentionally excluded from the browser sandbox:
 
 ## Known limitations
 
-- no verified live checker-play command sequence yet
-- no captured real GNU checker-play transcript in this repository environment
+- command bridge depends on GNU Python bindings available in local installation
 - no rollout support
 - no cube state or match score
 - no persistent evaluation records

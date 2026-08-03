@@ -13,9 +13,16 @@ const run = async (): Promise<void> => {
   ].join(" ");
 
   const evaluatorSummary = `evaluatorProvider=${config.evaluatorProvider}`;
+  const gnubgSummary =
+    config.evaluatorProvider === "gnubg"
+      ? `gnubgExecutable=${config.gnubg.executable} gnubgTimeoutMs=${config.gnubg.timeoutMs}`
+      : undefined;
 
   console.log(`[server-config] ${modelSummary}`);
   console.log(`[server-config] ${evaluatorSummary}`);
+  if (gnubgSummary !== undefined) {
+    console.log(`[server-config] ${gnubgSummary}`);
+  }
 
   if (issues.length === 0) {
     console.log("[server-config] configuration check passed.");

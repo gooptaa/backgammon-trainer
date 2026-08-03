@@ -6,9 +6,13 @@ import type {
 
 export interface EvaluatorProviderStatus {
   readonly configured: boolean;
-  readonly mode: "none" | "fixture";
-  readonly providerFamily: "none" | "mock";
+  readonly mode: "none" | "fixture" | "gnubg";
+  readonly providerFamily: "none" | "mock" | "gnubg";
   readonly providerLabel: string;
+  readonly availability?:
+    "unknown" | "checking" | "available" | "unavailable" | "incompatible" | "detection-failed";
+  readonly providerVersion?: string;
+  readonly issue?: string;
   readonly message: string;
 }
 

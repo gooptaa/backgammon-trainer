@@ -17,7 +17,7 @@ describe("server configuration parsing", () => {
       'Invalid MODEL_PROVIDER value "invalid-mode". Expected one of: none, mock, openai-compatible.'
     );
     expect(issues).toContain(
-      'Invalid EVALUATOR_PROVIDER value "wrong". Expected one of: none, mock.'
+      'Invalid EVALUATOR_PROVIDER value "wrong". Expected one of: none, mock, gnubg.'
     );
   });
 
@@ -66,5 +66,16 @@ describe("provider runtime invalid-mode behavior", () => {
     expect(runtime.evaluator).toBeUndefined();
     expect(runtime.status.configured).toBe(false);
     expect(runtime.status.message).toContain("Invalid EVALUATOR_PROVIDER value");
+  });
+
+  it("normalizes gnu alias to gnubg mode with defaults", () => {
+    const config = readServerConfig({
+      EVALUATOR_PROVIDER: "gnu"
+    });
+
+    expect(config.evaluatorProvider).toBe("gnubg");
+    expect(config.gnubg.executable).toBe("gnubg");
+    expect(config.gnubg.timeoutMs).toBe(4000);
+    expect(config.gnubg.detectionTimeoutMs).toBe(2000);
   });
 });

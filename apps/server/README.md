@@ -51,6 +51,13 @@ Evaluator mode is independent and controlled by `EVALUATOR_PROVIDER`:
 
 - `none`: evaluator requests are unavailable
 - `mock`: fixture evaluator mode for deterministic development/testing
+- `gnubg`: real GNU Backgammon evaluator mode through server process boundary
+
+GNU mode settings:
+
+- `GNUBG_EXECUTABLE` (default `gnubg`)
+- `GNUBG_TIMEOUT_MS` (default `4000`)
+- `GNUBG_DETECTION_TIMEOUT_MS` (default `2000`)
 
 Invalid evaluator mode values fail clearly as unconfigured evaluator status with explicit messages.
 
@@ -91,6 +98,16 @@ This command:
 - prints safe summary metadata only
 
 It is explicitly opt-in and not part of normal test/check/build commands.
+
+## Opt-in GNU evaluator smoke test
+
+With the server running in `EVALUATOR_PROVIDER=gnubg` mode:
+
+```bash
+ALLOW_GNUBG_SMOKE=true pnpm --filter @backgammon-trainer/server smoke:gnubg
+```
+
+This checks `/api/evaluator/status`, executes one bounded evaluator request through `/api/evaluator/evaluate-position`, and prints safe summary metadata.
 
 ## Security and privacy
 

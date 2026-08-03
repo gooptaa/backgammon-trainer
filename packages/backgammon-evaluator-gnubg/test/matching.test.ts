@@ -15,6 +15,19 @@ import {
 } from "./fixtures/testData";
 
 describe("GNU move matching", () => {
+  it("expands repeated-step notation tokens such as 8/7(2)", () => {
+    const parsed = parseGnuBgMoveNotation("8/7(2) 7/6 6/5", "white");
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      return;
+    }
+
+    expect(parsed.move.steps).toHaveLength(4);
+    expect(parsed.move.steps[0]).toMatchObject({ fromPoint: 8, toPoint: 7 });
+    expect(parsed.move.steps[1]).toMatchObject({ fromPoint: 8, toPoint: 7 });
+  });
+
   it("resolves ordinary, hit, bar-entry, bear-off, and doubles notation to exactly one canonical move", () => {
     const ordinary = parseGnuBgMoveNotation("8/7 7/5", "white");
     const hit = parseGnuBgMoveNotation("8/7* 7/5", "white");

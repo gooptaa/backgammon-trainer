@@ -39,6 +39,7 @@ Core deterministic pipeline direction is now:
 
 - `packages/backgammon-engine` -> `packages/backgammon-analysis` -> `packages/backgammon-analysis-session` -> future backend persistence -> future web persistence
 - `packages/backgammon-analysis` -> `packages/backgammon-evaluator-gnubg` -> Node host layers
+- `apps/server` composes `packages/backgammon-evaluator-gnubg` in `EVALUATOR_PROVIDER=gnubg` mode behind provider-neutral evaluator routes
 
 Move-outcome analysis pipeline boundary is:
 

@@ -32,9 +32,10 @@ describe("runSmoke", () => {
         parsedVersion: "1.08.003",
         supportsTty: true,
         supportsCommandsFile: true,
+        supportsPython: true,
         analysisInvocation: {
-          status: "unverified",
-          message: "unverified"
+          status: "configured",
+          message: "configured"
         }
       }),
       evaluateLegalMovesFn: async (request) => {
@@ -74,9 +75,10 @@ describe("runSmoke", () => {
         parsedVersion: "1.08.003",
         supportsTty: true,
         supportsCommandsFile: true,
+        supportsPython: true,
         analysisInvocation: {
-          status: "unverified",
-          message: "unverified"
+          status: "configured",
+          message: "configured"
         }
       }),
       evaluateLegalMovesFn: async () =>

@@ -55,6 +55,9 @@ importers:
       "@backgammon-trainer/backgammon-analysis":
         specifier: workspace:*
         version: link:../../packages/backgammon-analysis
+      "@backgammon-trainer/backgammon-evaluator-gnubg":
+        specifier: workspace:*
+        version: link:../../packages/backgammon-evaluator-gnubg
       "@backgammon-trainer/shared":
         specifier: workspace:*
         version: link:../../packages/shared

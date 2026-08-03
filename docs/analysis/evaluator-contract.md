@@ -249,7 +249,8 @@ Current status of that package:
 - capability detection and direct process-runner abstraction implemented
 - position translation, move-notation parsing, canonical matching, and transcript parsing implemented
 - transcript-driven tests cover normalized contract mapping without requiring GNU Backgammon installation
-- live checker-play command invocation remains explicitly unverified in this repository milestone
+- real checker-play invocation is wired for trusted Node/server execution
+- automation remains optional and availability-dependent; missing GNU degrades through contract failure reasons
 
 The analysis package remains the sole owner of:
 

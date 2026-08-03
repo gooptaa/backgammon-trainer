@@ -1476,9 +1476,9 @@ describe("App legal move outcomes panel", () => {
     );
     expect(screen.getByTestId("evaluator-version")).toHaveTextContent("Provider version:");
     expect(screen.getByTestId("evaluator-ranked-list")).toBeInTheDocument();
-    expect(screen.getAllByText(/Fixture Rank:/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Fixture Score:/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Fixture Loss:/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Rank:/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Normalized score:/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Loss from best:/).length).toBeGreaterThan(0);
     expect(screen.getByTestId("evaluator-contract-preview")).not.toHaveTextContent(
       /Best Move|Recommended Move|Correct Move|Equity/i
     );
@@ -1561,8 +1561,8 @@ describe("App legal move outcomes panel", () => {
     });
 
     const rankedRows = within(screen.getByTestId("evaluator-ranked-list")).getAllByRole("listitem");
-    expect(rankedRows[0]).toHaveTextContent("Fixture Rank: 1");
-    expect(rankedRows[1]).toHaveTextContent("Fixture Rank: 1");
+    expect(rankedRows[0]).toHaveTextContent("Rank: 1");
+    expect(rankedRows[1]).toHaveTextContent("Rank: 1");
 
     fireEvent.click(screen.getAllByRole("button", { name: "Preview ranked move" })[0]!);
     expect(screen.getByTestId("move-outcome-preview-banner")).toHaveTextContent(
@@ -1761,9 +1761,11 @@ describe("App legal move outcomes panel", () => {
       expect(screen.getByTestId("evaluator-ranked-list")).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId("evaluator-contract-preview")).toHaveTextContent("Fixture Score: 1");
+    expect(screen.getByTestId("evaluator-contract-preview")).toHaveTextContent(
+      "Normalized score: 1"
+    );
     expect(screen.getByTestId("evaluator-contract-preview")).not.toHaveTextContent(
-      "Fixture Score: 99"
+      "Normalized score: 99"
     );
   });
 });

@@ -97,11 +97,15 @@ Evaluator mode (`EVALUATOR_PROVIDER` on server):
 
 - `none`: no evaluator
 - `mock`: fixture evaluator only
+- `gnubg`: real GNU Backgammon evaluator via trusted server boundary
 
-Current evaluator limitations:
+GNU mode configuration:
 
-- no real GNU evaluator wiring in this milestone
-- OpenAI-compatible key does not enable authoritative evaluator evidence by itself
+- `GNUBG_EXECUTABLE` (default `gnubg`)
+- `GNUBG_TIMEOUT_MS` (default `4000`)
+- `GNUBG_DETECTION_TIMEOUT_MS` (default `2000`)
+
+OpenAI-compatible key configuration does not imply evaluator evidence quality; evaluator provenance determines recommendation authority behavior.
 
 ## Start web + server
 
@@ -258,5 +262,15 @@ Browser-visible shared values are not authentication.
 
 `Evaluator provider is unavailable`:
 
-- confirm `EVALUATOR_PROVIDER` is `none` or `mock`
-- remember real GNU evaluator wiring is not part of current runtime modes
+- if using fixture/disabled flow, set `EVALUATOR_PROVIDER=none` or `mock`
+- if using GNU flow, set `EVALUATOR_PROVIDER=gnubg` and verify `GNUBG_EXECUTABLE`
+
+## Opt-in GNU evaluator smoke test
+
+With server running in GNU mode:
+
+```bash
+ALLOW_GNUBG_SMOKE=true pnpm smoke:gnubg
+```
+
+This checks evaluator status and one bounded evaluator request through `/api/evaluator/evaluate-position` with safe summary output only.

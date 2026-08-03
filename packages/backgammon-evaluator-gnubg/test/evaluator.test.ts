@@ -36,6 +36,52 @@ const getLegalOutcomes = (
 };
 
 describe("createGnuBgPositionEvaluator", () => {
+  it("builds default python-bridge process requests with bounded args and JSON stdin", async () => {
+    const captured = {
+      request: null as {
+        executable: string;
+        args: readonly string[];
+        stdin: string;
+        timeoutMs: number;
+      } | null
+    };
+
+    const evaluator = createGnuBgPositionEvaluator({
+      executable: "gnubg-test",
+      timeoutMs: 2222,
+      pythonBridgeScriptPath: "/tmp/bridge.py",
+      processRunner: createFakeGnuBgProcessRunner(async (request) => {
+        captured.request = request;
+        return {
+          ok: true,
+          exitCode: 0,
+          stdout: readFixture("success-white-complete.txt"),
+          stderr: ""
+        };
+      })
+    });
+
+    const legalOutcomes = getLegalOutcomes(WHITE_SIMPLE_POSITION, "white");
+    const result = await evaluator.evaluate({
+      position: WHITE_SIMPLE_POSITION,
+      player: "white",
+      dice: DICE,
+      legalOutcomes,
+      context: { gameMode: "money" }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(captured.request).not.toBeNull();
+    if (captured.request === null) {
+      throw new Error("Expected process request to be captured.");
+    }
+    expect(captured.request.executable).toBe("gnubg-test");
+    expect(captured.request.timeoutMs).toBe(2222);
+    expect(captured.request.args).toEqual(["-t", "-q", "-r", "--python=/tmp/bridge.py"]);
+    expect(captured.request.stdin).toContain('"dice":[1,2]');
+    expect(captured.request.stdin).toContain(`"expectedMoves":${String(legalOutcomes.length)}`);
+  });
+
   it("implements PositionEvaluator and sends translated execution options through the process boundary", async () => {
     let capturedRequest: { executable: string; args: readonly string[]; timeoutMs: number } | null =
       null;

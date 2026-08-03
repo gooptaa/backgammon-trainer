@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import type {
   EvaluatePositionRequest,
   EvaluatePositionResult,
@@ -13,6 +15,9 @@ import { translatePositionToGnuBgBoard, type GnuBgBoardState } from "./translati
 const ADAPTER_VERSION = "0.1.0";
 const DEFAULT_EXECUTABLE = "gnubg";
 const DEFAULT_TIMEOUT_MS = 4_000;
+const DEFAULT_PYTHON_BRIDGE_SCRIPT_PATH = fileURLToPath(
+  new URL("../scripts/gnubg_checkerplay_bridge.py", import.meta.url)
+);
 
 export interface GnuBgProcessRequest {
   readonly executable: string;
@@ -67,6 +72,7 @@ export interface GnuBgEvaluatorOptions {
   readonly executable?: string;
   readonly timeoutMs?: number;
   readonly processRunner?: GnuBgProcessRunner;
+  readonly pythonBridgeScriptPath?: string;
   readonly analysisRequestFactory?: BuildGnuBgAnalysisRequest;
   readonly providerVersion?: string;
 }
@@ -80,17 +86,45 @@ const getSafeExecutableIdentity = (executable: string): string => {
   return segments[segments.length - 1] || executable;
 };
 
-const buildDefaultAnalysisRequest: BuildGnuBgAnalysisRequest = () => {
-  return {
-    ok: false,
-    message: "GNU Backgammon checker-play invocation is not configured in this spike.",
-    settings: {
-      invocationMode: "unconfigured-spike",
-      liveAnalysisVerified: false
-    },
-    warnings: [
-      "Checker-play command invocation remains unverified; transcript-backed tests cover parsing and matching only."
-    ]
+const toSimpleBoardNotation = (board: GnuBgBoardState): string => {
+  const values = [
+    board.rollerBar,
+    ...board.points.map((point) =>
+      point.rollerCheckerCount > 0 ? point.rollerCheckerCount : -point.opponentCheckerCount
+    ),
+    -board.opponentBar
+  ];
+
+  return values.join(" ");
+};
+
+const createDefaultAnalysisRequestFactory = (
+  pythonBridgeScriptPath: string
+): BuildGnuBgAnalysisRequest => {
+  return (input: BuildGnuBgAnalysisRequestInput): BuildGnuBgAnalysisRequestResult => {
+    const expectedMoves = Math.min(Math.max(input.request.legalOutcomes.length, 0), 256);
+    const stdin =
+      JSON.stringify({
+        boardSimple: toSimpleBoardNotation(input.translatedBoard),
+        dice: input.request.dice.dice,
+        expectedMoves
+      }) + "\n";
+
+    return {
+      ok: true,
+      processRequest: {
+        executable: input.executable,
+        args: ["-t", "-q", "-r", `--python=${pythonBridgeScriptPath}`],
+        stdin,
+        timeoutMs: input.timeoutMs
+      },
+      settings: {
+        invocationMode: "python-hint-bridge",
+        bridgeScript: getSafeExecutableIdentity(pythonBridgeScriptPath),
+        expectedMoves,
+        liveAnalysisVerified: true
+      }
+    };
   };
 };
 
@@ -113,6 +147,12 @@ const buildProvenance = (
 export const createGnuBgPositionEvaluator = (
   options: GnuBgEvaluatorOptions = {}
 ): PositionEvaluator => {
+  const analysisRequestFactory =
+    options.analysisRequestFactory ??
+    createDefaultAnalysisRequestFactory(
+      options.pythonBridgeScriptPath ?? DEFAULT_PYTHON_BRIDGE_SCRIPT_PATH
+    );
+
   return {
     evaluate: async (request: EvaluatePositionRequest): Promise<EvaluatePositionResult> => {
       const translation = translatePositionToGnuBgBoard(request.position, request.player);
@@ -137,7 +177,7 @@ export const createGnuBgPositionEvaluator = (
 
       const executable = options.executable ?? DEFAULT_EXECUTABLE;
       const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-      const analysisRequest = (options.analysisRequestFactory ?? buildDefaultAnalysisRequest)({
+      const analysisRequest = analysisRequestFactory({
         executable,
         timeoutMs,
         request,

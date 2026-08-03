@@ -15,8 +15,9 @@ export type GnuBgCapabilityResult =
       readonly parsedVersion: string;
       readonly supportsTty: true;
       readonly supportsCommandsFile: true;
+      readonly supportsPython: true;
       readonly analysisInvocation: {
-        readonly status: "unverified";
+        readonly status: "configured";
         readonly message: string;
       };
     }
@@ -40,7 +41,11 @@ export const parseGnuBgVersionText = (text: string): string | null => {
 const helpSupportsRequiredOptions = (output: string): boolean => {
   const normalized = output.toLowerCase();
 
-  return normalized.includes("--commands") && normalized.includes("--tty");
+  return (
+    normalized.includes("--commands") &&
+    normalized.includes("--tty") &&
+    normalized.includes("--python")
+  );
 };
 
 export const detectGnuBg = async (options: DetectGnuBgOptions): Promise<GnuBgCapabilityResult> => {
@@ -117,7 +122,7 @@ export const detectGnuBg = async (options: DetectGnuBgOptions): Promise<GnuBgCap
       status: "incompatible",
       executable,
       message:
-        "GNU Backgammon help output does not advertise required tty and commands-file options.",
+        "GNU Backgammon help output does not advertise required tty, commands-file, and python options.",
       versionText: versionResult.stdout.trim()
     };
   }
@@ -130,10 +135,10 @@ export const detectGnuBg = async (options: DetectGnuBgOptions): Promise<GnuBgCap
     parsedVersion: parseGnuBgVersionText(versionResult.stdout) ?? "unknown",
     supportsTty: true,
     supportsCommandsFile: true,
+    supportsPython: true,
     analysisInvocation: {
-      status: "unverified",
-      message:
-        "TTY and commands-file options were detected, but the checker-play command transcript remains unverified in this spike."
+      status: "configured",
+      message: "TTY, commands-file, and python options were detected for checker-play bridge use."
     }
   };
 };

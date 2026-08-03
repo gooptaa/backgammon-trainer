@@ -9,6 +9,7 @@ Provide a Node-only adapter that translates GNU Backgammon capability/evaluation
 - Detect GNU executable capability and CLI support.
 - Encapsulate process-runner invocation and timeout handling.
 - Translate/match GNU-oriented move data to canonical engine move identity.
+- Provide a bounded Python-bridge invocation path for real GNU checker-play evaluation.
 - Parse supported transcript output into normalized evaluator responses.
 - Expose smoke validation for local adapter availability checks.
 
@@ -41,7 +42,7 @@ Why these exports are public:
 - Browser execution.
 - Strategic recommendation generation.
 - Heuristic fallback scoring.
-- Verified default live checker-play command automation in this repository milestone.
+- Owning recommendation authority or coaching guidance policy.
 
 ## Server-hosted integration note
 
@@ -52,6 +53,5 @@ Current-position coaching consumes evaluator evidence through provider-neutral s
 
 ## Future Roadmap
 
-- Verified live command transcript capture against installed GNU versions.
 - Expanded parser support for additional output variants.
 - Optional host-level rollout/cube/match-context integration.

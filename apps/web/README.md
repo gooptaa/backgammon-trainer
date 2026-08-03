@@ -35,6 +35,8 @@ When server evaluator mode is configured, web evaluation uses:
 
 This preserves browser/Node separation while allowing current-position ranked evidence to flow into coaching evidence.
 
+When server reports `gnubg` evaluator mode, the web still uses only provider-neutral routes and does not import or execute GNU code in the browser.
+
 ## Local configuration boundary
 
 Browser configuration is loaded from repository root env files through Vite and is intentionally limited to `VITE_*` variables.

@@ -138,7 +138,11 @@ export function LegalMoveOutcomesPanel({
               <p className={styles.warning} data-testid="evaluator-fixture-warning">
                 Development fixture scores - not strategic evaluation.
               </p>
-            ) : null}
+            ) : (
+              <p className={styles.meta} data-testid="evaluator-real-provider-note">
+                Ranked output reflects evaluator-provided scores for canonical legal candidates.
+              </p>
+            )}
             <p className={styles.meta} data-testid="evaluator-coverage">
               Coverage: {evaluationResult.analysis.coverage}
             </p>
@@ -172,13 +176,13 @@ export function LegalMoveOutcomesPanel({
                   >
                     Preview ranked move
                   </button>
-                  <p className={styles.meta}>Fixture Rank: {rankedMove.rank}</p>
+                  <p className={styles.meta}>Rank: {rankedMove.rank}</p>
                   <p className={styles.meta}>
                     Move:{" "}
                     <span className={styles.moveText}>{formatMove(rankedMove.outcome.move)}</span>
                   </p>
-                  <p className={styles.meta}>Fixture Score: {rankedMove.normalizedScore}</p>
-                  <p className={styles.meta}>Fixture Loss: {rankedMove.lossFromBest}</p>
+                  <p className={styles.meta}>Normalized score: {rankedMove.normalizedScore}</p>
+                  <p className={styles.meta}>Loss from best: {rankedMove.lossFromBest}</p>
                 </li>
               ))}
             </ol>

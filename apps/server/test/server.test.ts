@@ -73,6 +73,7 @@ const app = buildServer({
       mode: "fixture",
       providerFamily: "mock",
       providerLabel: "test-evaluator",
+      availability: "available",
       message: "Configured"
     }
   } satisfies EvaluatorProviderRuntime
@@ -255,6 +256,7 @@ describe("server route unconfigured provider mode", () => {
         mode: "none",
         providerFamily: "none",
         providerLabel: "none",
+        availability: "unknown",
         message: "Evaluator disabled"
       }
     }

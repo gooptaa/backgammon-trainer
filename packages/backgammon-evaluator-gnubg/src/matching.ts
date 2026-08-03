@@ -41,7 +41,7 @@ export type MatchGnuBgMoveToLegalOutcomeResult =
       readonly candidateFingerprints: readonly string[];
     };
 
-const MOVE_TOKEN_PATTERN = /^(bar|[1-9]|1\d|2[0-4])\/(off|[1-9]|1\d|2[0-4])(\*)?$/i;
+const MOVE_TOKEN_PATTERN = /^(bar|[1-9]|1\d|2[0-4])\/(off|[1-9]|1\d|2[0-4])(\*)?(?:\(([1-4])\))?$/i;
 
 const normalizeNotation = (notation: string): string => {
   return notation
@@ -87,6 +87,7 @@ export const parseGnuBgMoveNotation = (
     const fromPoint = parsePointToken(match[1]!.toLowerCase(), playerOnRoll);
     const toPoint = parsePointToken(match[2]!.toLowerCase(), playerOnRoll);
     const hitsBlot = match[3] === "*";
+    const repeatCount = match[4] === undefined ? 1 : Number.parseInt(match[4], 10);
 
     if (fromPoint === "off") {
       return {
@@ -109,13 +110,33 @@ export const parseGnuBgMoveNotation = (
       };
     }
 
-    steps.push({
-      kind:
-        fromPoint === "bar" ? "enter-from-bar" : toPoint === "off" ? "bear-off" : "point-to-point",
-      fromPoint,
-      toPoint,
-      hitsBlot
-    });
+    if (!Number.isInteger(repeatCount) || repeatCount < 1 || repeatCount > 4) {
+      return {
+        ok: false,
+        message: `GNU move token repeat count is unsupported: ${token}.`
+      };
+    }
+
+    if (hitsBlot && repeatCount > 1) {
+      return {
+        ok: false,
+        message: `GNU move token cannot combine hit and repeat count: ${token}.`
+      };
+    }
+
+    for (let index = 0; index < repeatCount; index += 1) {
+      steps.push({
+        kind:
+          fromPoint === "bar"
+            ? "enter-from-bar"
+            : toPoint === "off"
+              ? "bear-off"
+              : "point-to-point",
+        fromPoint,
+        toPoint,
+        hitsBlot
+      });
+    }
   }
 
   return {

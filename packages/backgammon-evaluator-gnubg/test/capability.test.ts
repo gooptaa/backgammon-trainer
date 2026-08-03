@@ -8,7 +8,7 @@ const readFixture = (name: string): string => {
   return readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 };
 
-const HELP_TEXT = `-c, --commands=FILE Evaluate commands in FILE and exit\n-t, --tty Start on tty instead of using window system\n-v, --version Show version information and exit\n`;
+const HELP_TEXT = `-c, --commands=FILE Evaluate commands in FILE and exit\n-p, --python=FILE Start in Python mode or evaluate code in FILE and exit\n-t, --tty Start on tty instead of using window system\n-v, --version Show version information and exit\n`;
 
 describe("detectGnuBg", () => {
   it("reports an available binary with observed version and required help options", async () => {

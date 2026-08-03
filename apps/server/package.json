@@ -7,6 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "config:check": "tsx src/configCheck.ts",
     "smoke:live-provider": "node scripts/liveProviderSmoke.mjs",
+    "smoke:gnubg": "node scripts/gnubgSmoke.mjs",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "lint": "eslint src test --ext .ts",
@@ -16,6 +17,7 @@
   "dependencies": {
     "@backgammon-trainer/ai-contracts": "workspace:*",
     "@backgammon-trainer/backgammon-analysis": "workspace:*",
+    "@backgammon-trainer/backgammon-evaluator-gnubg": "workspace:*",
     "@backgammon-trainer/shared": "workspace:*",
     "dotenv": "^16.6.1",
     "fastify": "^5.0.0"

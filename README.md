@@ -22,6 +22,7 @@ Implemented now:
 - trusted server-side evaluator execution with:
   - fixture mode
   - no-provider mode
+  - real GNU Backgammon mode (server-hosted)
   - provider-neutral evaluator status and evaluate-position routes
 - web coach integration that preserves request snapshots, stale-response protection, and gameplay independence while requests are pending
 - root `.env.local` local configuration convention with explicit server and browser boundaries
@@ -75,9 +76,16 @@ pnpm config:check
 
 Run explicit opt-in live provider smoke check (server must already be running):
 
-```bash
+````bash
 ALLOW_LIVE_PROVIDER_SMOKE=true pnpm smoke:live-provider
-```
+
+Run explicit opt-in GNU evaluator smoke check (server must already be running):
+
+```bash
+ALLOW_GNUBG_SMOKE=true pnpm smoke:gnubg
+````
+
+````
 
 ## Validation commands
 
@@ -91,7 +99,7 @@ pnpm test
 pnpm --filter @backgammon-trainer/web test:e2e
 pnpm build
 pnpm check
-```
+````
 
 ## Repository map
 

@@ -43,6 +43,7 @@ This repository enforces architectural boundaries with lightweight checks in exi
 - Real model-provider credentials and protocol execution remain in server runtime code.
 - Browser requests do not select arbitrary upstream provider destinations.
 - Browser evaluator requests use server routes; browser code does not import GNU adapter or Node process code.
+- Real GNU evaluator execution is server-owned (`EVALUATOR_PROVIDER=gnubg`) and remains outside browser runtime.
 
 ## Local environment file convention
 
