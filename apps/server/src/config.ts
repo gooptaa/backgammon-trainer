@@ -28,12 +28,20 @@ const normalizeProviderMode = (raw: string | undefined): "mock" | "openai-compat
     return raw;
   }
 
-  return "mock";
+  if (raw === undefined) {
+    return "mock";
+  }
+
+  return "none";
 };
 
 const normalizeEvaluatorProviderMode = (raw: string | undefined): "mock" | "none" => {
   if (raw === "mock" || raw === "none") {
     return raw;
+  }
+
+  if (raw === undefined) {
+    return "none";
   }
 
   return "none";
@@ -57,6 +65,8 @@ export interface ServerConfig {
   readonly port: number;
   readonly modelProvider: "mock" | "openai-compatible" | "none";
   readonly evaluatorProvider: "mock" | "none";
+  readonly invalidModelProvider: string | undefined;
+  readonly invalidEvaluatorProvider: string | undefined;
   readonly openAiCompatible: {
     readonly baseUrl: string;
     readonly model: string | undefined;
@@ -66,16 +76,74 @@ export interface ServerConfig {
   };
 }
 
-export const serverConfig: ServerConfig = {
-  host: process.env.SERVER_HOST ?? "0.0.0.0",
-  port: parsePort(process.env.SERVER_PORT),
-  modelProvider: normalizeProviderMode(process.env.MODEL_PROVIDER),
-  evaluatorProvider: normalizeEvaluatorProviderMode(process.env.EVALUATOR_PROVIDER),
-  openAiCompatible: {
-    baseUrl: normalizeBaseUrl(process.env.OPENAI_COMPAT_BASE_URL) ?? "https://api.openai.com/v1",
-    model: process.env.OPENAI_COMPAT_MODEL?.trim() || undefined,
-    apiKey: process.env.OPENAI_COMPAT_API_KEY?.trim() || undefined,
-    timeoutMs: parseTimeoutMs(process.env.OPENAI_COMPAT_TIMEOUT_MS),
-    providerLabel: process.env.OPENAI_COMPAT_PROVIDER_LABEL?.trim() || "openai-compatible"
+const toTrimmed = (raw: string | undefined): string | undefined => {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return undefined;
   }
+
+  return trimmed;
+};
+
+export const readServerConfig = (env: NodeJS.ProcessEnv = process.env): ServerConfig => {
+  const rawModelProvider = toTrimmed(env.MODEL_PROVIDER);
+  const rawEvaluatorProvider = toTrimmed(env.EVALUATOR_PROVIDER);
+  const modelProvider = normalizeProviderMode(rawModelProvider);
+  const evaluatorProvider = normalizeEvaluatorProviderMode(rawEvaluatorProvider);
+
+  return {
+    host: env.SERVER_HOST ?? "0.0.0.0",
+    port: parsePort(env.SERVER_PORT),
+    modelProvider,
+    evaluatorProvider,
+    invalidModelProvider:
+      rawModelProvider !== undefined &&
+      rawModelProvider !== "none" &&
+      rawModelProvider !== "mock" &&
+      rawModelProvider !== "openai-compatible"
+        ? rawModelProvider
+        : undefined,
+    invalidEvaluatorProvider:
+      rawEvaluatorProvider !== undefined &&
+      evaluatorProvider === "none" &&
+      rawEvaluatorProvider !== "none" &&
+      rawEvaluatorProvider !== "mock"
+        ? rawEvaluatorProvider
+        : undefined,
+    openAiCompatible: {
+      baseUrl: normalizeBaseUrl(env.OPENAI_COMPAT_BASE_URL) ?? "https://api.openai.com/v1",
+      model: env.OPENAI_COMPAT_MODEL?.trim() || undefined,
+      apiKey: env.OPENAI_COMPAT_API_KEY?.trim() || undefined,
+      timeoutMs: parseTimeoutMs(env.OPENAI_COMPAT_TIMEOUT_MS),
+      providerLabel: env.OPENAI_COMPAT_PROVIDER_LABEL?.trim() || "openai-compatible"
+    }
+  };
+};
+
+export const getServerConfigIssues = (config: ServerConfig): readonly string[] => {
+  const issues: string[] = [];
+
+  if (config.invalidModelProvider !== undefined) {
+    issues.push(
+      `Invalid MODEL_PROVIDER value "${config.invalidModelProvider}". Expected one of: none, mock, openai-compatible.`
+    );
+  }
+
+  if (config.invalidEvaluatorProvider !== undefined) {
+    issues.push(
+      `Invalid EVALUATOR_PROVIDER value "${config.invalidEvaluatorProvider}". Expected one of: none, mock.`
+    );
+  }
+
+  if (config.modelProvider === "openai-compatible") {
+    if (!config.openAiCompatible.model) {
+      issues.push("OPENAI_COMPAT_MODEL is required when MODEL_PROVIDER=openai-compatible.");
+    }
+
+    if (!config.openAiCompatible.apiKey) {
+      issues.push("OPENAI_COMPAT_API_KEY is required when MODEL_PROVIDER=openai-compatible.");
+    }
+  }
+
+  return issues;
 };

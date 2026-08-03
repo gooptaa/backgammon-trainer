@@ -24,6 +24,8 @@ The web app is a development sandbox for deterministic backgammon gameplay, fact
 - `VITE_COACH_MODEL_MODE=server`: provider-neutral server client (`/api/coach/status`, `/api/coach/complete`).
 - `VITE_COACH_MODEL_MODE=none`: no coach model configured in browser runtime.
 
+Invalid `VITE_COACH_MODEL_MODE` values fail closed to disabled mode with explicit status text.
+
 When server mode is active and configured, the Coach panel discloses provider identity/model and notes that bounded context/evidence/knowledge is sent to the configured provider.
 
 When server evaluator mode is configured, web evaluation uses:
@@ -32,6 +34,17 @@ When server evaluator mode is configured, web evaluation uses:
 - `POST /api/evaluator/evaluate-position`
 
 This preserves browser/Node separation while allowing current-position ranked evidence to flow into coaching evidence.
+
+## Local configuration boundary
+
+Browser configuration is loaded from repository root env files through Vite and is intentionally limited to `VITE_*` variables.
+
+- safe/public browser variables: `VITE_*`
+- server-private variables: everything else
+
+Do not place API keys or server-only settings in `VITE_*` variables.
+
+For local setup, copy `.env.example` to repository root `.env.local`.
 
 ## Current analysis capture behavior
 

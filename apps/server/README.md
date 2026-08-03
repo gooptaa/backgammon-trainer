@@ -34,6 +34,8 @@ Set `MODEL_PROVIDER` to one of:
 - `mock`: fixture adapter mode
 - `openai-compatible`: real server-hosted adapter mode
 
+Invalid mode values fail clearly as unconfigured provider status with explicit messages.
+
 OpenAI-compatible mode requires:
 
 - `OPENAI_COMPAT_BASE_URL` (trusted server-configured endpoint)
@@ -49,6 +51,46 @@ Evaluator mode is independent and controlled by `EVALUATOR_PROVIDER`:
 
 - `none`: evaluator requests are unavailable
 - `mock`: fixture evaluator mode for deterministic development/testing
+
+Invalid evaluator mode values fail clearly as unconfigured evaluator status with explicit messages.
+
+## Local environment loading
+
+Server startup loads local environment files from repository root:
+
+1. `.env.local`
+2. `.env`
+
+Existing process environment variables take precedence over file values.
+
+This local file convention is a development/self-hosting convenience. CI and production deployments should continue using platform environment/secret stores.
+
+## Local configuration check
+
+Run a non-secret configuration validation summary:
+
+```bash
+pnpm --filter @backgammon-trainer/server config:check
+```
+
+This reports selected modes and configuration issues without printing credential values.
+
+## Opt-in live provider smoke test
+
+With the server running and real-provider values configured:
+
+```bash
+ALLOW_LIVE_PROVIDER_SMOKE=true pnpm --filter @backgammon-trainer/server smoke:live-provider
+```
+
+This command:
+
+- verifies configured production provider status via `/api/coach/status`
+- sends one small completion request via `/api/coach/complete`
+- confirms non-empty response text and provenance
+- prints safe summary metadata only
+
+It is explicitly opt-in and not part of normal test/check/build commands.
 
 ## Security and privacy
 

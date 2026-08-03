@@ -16,6 +16,7 @@ import {
   createServerPositionEvaluator,
   loadEvaluatorProviderStatus
 } from "./features/analysis-session/serverPositionEvaluator";
+import { resolveApiBaseUrlFromEnv, resolveCoachModeFromEnv } from "./runtimeConfig";
 
 registerSW({
   immediate: true
@@ -34,21 +35,6 @@ const devAnalysisCaptureRuntime = {
   now: () => new Date().toISOString()
 };
 
-const defaultCoachMode = import.meta.env.DEV ? "fixture" : "server";
-
-const readEnvString = (value: unknown): string | undefined => {
-  return typeof value === "string" ? value : undefined;
-};
-
-const resolveCoachMode = (): "fixture" | "server" | "none" => {
-  const configured = readEnvString(import.meta.env.VITE_COACH_MODEL_MODE)?.trim();
-  if (configured === "fixture" || configured === "server" || configured === "none") {
-    return configured;
-  }
-
-  return defaultCoachMode;
-};
-
 interface CoachRuntimeBootstrap {
   readonly coachModel?: ChatModel;
   readonly moveEvaluator?: PositionEvaluator;
@@ -57,7 +43,22 @@ interface CoachRuntimeBootstrap {
 }
 
 const resolveCoachRuntimeBootstrap = async (): Promise<CoachRuntimeBootstrap> => {
-  const mode = resolveCoachMode();
+  const modeResolution = resolveCoachModeFromEnv(import.meta.env, import.meta.env.DEV);
+  const mode = modeResolution.mode;
+
+  if (modeResolution.warning !== undefined) {
+    return {
+      coachFixtureEnabled: false,
+      coachProviderStatus: {
+        configured: false,
+        mode: "none",
+        providerFamily: "none",
+        providerLabel: "none",
+        model: null,
+        message: modeResolution.warning
+      }
+    };
+  }
 
   if (mode === "none") {
     return {
@@ -92,7 +93,7 @@ const resolveCoachRuntimeBootstrap = async (): Promise<CoachRuntimeBootstrap> =>
     };
   }
 
-  const apiBaseUrl = readEnvString(import.meta.env.VITE_API_BASE_URL) ?? "http://localhost:3001";
+  const apiBaseUrl = resolveApiBaseUrlFromEnv(import.meta.env);
   const serverStatus = await loadCoachProviderStatus(apiBaseUrl);
   const evaluatorStatus = await loadEvaluatorProviderStatus(apiBaseUrl);
 

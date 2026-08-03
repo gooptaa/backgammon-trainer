@@ -8,6 +8,8 @@
   },
   "scripts": {
     "dev": "concurrently -n web,server -c blue,green \"pnpm --filter @backgammon-trainer/web dev\" \"pnpm --filter @backgammon-trainer/server dev\"",
+    "config:check": "pnpm --filter @backgammon-trainer/server config:check",
+    "smoke:live-provider": "pnpm --filter @backgammon-trainer/server smoke:live-provider",
     "architecture:check": "node scripts/validate-architecture.mjs",
     "knowledge:check": "pnpm --filter @backgammon-trainer/backgammon-knowledge knowledge:check",
     "build": "pnpm -r build",

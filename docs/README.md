@@ -53,6 +53,7 @@
 
 ## Developer Guides
 
+- [Local development configuration](local-development.md)
 - [Web sandbox README](../apps/web/README.md)
 - [Server README](../apps/server/README.md)
 - [Repository root README](../README.md)

@@ -263,3 +263,4 @@ The following remain stable when that happens:
 - no long-term habit analysis
 - no semantic ranking
 - real provider support is currently one server-hosted OpenAI-compatible non-streaming text adapter only
+- evaluator server mode remains `none` or fixture `mock`; real GNU evaluator wiring is still out of scope

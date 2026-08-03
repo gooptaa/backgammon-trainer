@@ -17,6 +17,19 @@ export interface EvaluatorProviderRuntime {
 }
 
 export const createEvaluatorProviderRuntime = (config: ServerConfig): EvaluatorProviderRuntime => {
+  if (config.invalidEvaluatorProvider !== undefined) {
+    return {
+      evaluator: undefined,
+      status: {
+        configured: false,
+        mode: "none",
+        providerFamily: "none",
+        providerLabel: "none",
+        message: `Invalid EVALUATOR_PROVIDER value "${config.invalidEvaluatorProvider}". Expected one of: none, mock.`
+      }
+    };
+  }
+
   if (config.evaluatorProvider === "none") {
     return {
       evaluator: undefined,

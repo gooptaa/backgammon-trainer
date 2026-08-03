@@ -257,6 +257,12 @@ Implemented:
 - server-hosted OpenAI-compatible adapter (`/chat/completions` protocol slice)
 - explicit fixture, real, and unconfigured runtime modes
 - non-secret provider status disclosure to browser
+- local configuration convention with root `.env.local` and explicit browser/public `VITE_*` boundary
+
+Mode validation behavior:
+
+- invalid server provider mode selection reports unconfigured status with explicit invalid-mode message
+- invalid browser `VITE_COACH_MODEL_MODE` resolves to disabled mode with explicit invalid-mode message
 
 Still not implemented:
 
@@ -284,6 +290,7 @@ Decision for this milestone:
 - no semantic retrieval
 - no cross-game learning/habit inference
 - OpenAI-compatible support is intentionally narrow (non-streaming text completion only)
+- local environment file updates require process restart to take effect
 
 ## Next milestone
 

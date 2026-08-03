@@ -39,9 +39,17 @@ This repository enforces architectural boundaries with lightweight checks in exi
 - Browser source (`apps/web/src`) must not import `node:*` modules.
 - Browser source must not import GNU adapter root/node/testing subpaths.
 - Browser source must not import Node-only knowledge authoring helpers.
+- Browser source must not read server-private env values; browser configuration is limited to `VITE_*` variables.
 - Real model-provider credentials and protocol execution remain in server runtime code.
 - Browser requests do not select arbitrary upstream provider destinations.
 - Browser evaluator requests use server routes; browser code does not import GNU adapter or Node process code.
+
+## Local environment file convention
+
+- Repository-root `.env.local` is the canonical local convenience file.
+- `.env.example` remains committed as the supported variable inventory.
+- `.env.local` and local variants remain Git-ignored.
+- Local env files are convenience only; CI and production continue to use process/platform environment.
 
 ## Validation workflow
 

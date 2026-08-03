@@ -8,6 +8,10 @@ test-results/
 *.tsbuildinfo
 .env
 .env.local
+.env.*.local
+apps/*/.env
+apps/*/.env.local
+apps/*/.env.*.local
 pnpm-debug.log*
 .DS_Store
 .tmp

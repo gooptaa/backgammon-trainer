@@ -33,6 +33,12 @@ const buildNoProvider = (message: string): CoachProviderRuntime => {
 };
 
 export const createCoachProviderRuntime = (config: ServerConfig): CoachProviderRuntime => {
+  if (config.invalidModelProvider !== undefined) {
+    return buildNoProvider(
+      `Invalid MODEL_PROVIDER value "${config.invalidModelProvider}". Expected one of: none, mock, openai-compatible.`
+    );
+  }
+
   if (config.modelProvider === "none") {
     return buildNoProvider("Coach provider is disabled by server configuration.");
   }

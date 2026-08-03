@@ -1,6 +1,6 @@
 # Public API Audit
 
-Date: 2026-08-03 (real provider milestone)
+Date: 2026-08-03 (local environment integration milestone)
 
 Scope: workspace packages under `packages/*`.
 
@@ -67,10 +67,9 @@ No unintended package exports were found in this audit. Public surfaces are curr
 ## Changes made in this milestone
 
 - No new workspace package exports were added.
-- Real OpenAI-compatible provider execution is implemented in server app internals, not package public APIs.
+- Local environment loading and configuration checks were implemented in app internals (`apps/server`, `apps/web`) only.
+- Live provider smoke command is app-level operational tooling and does not change package export surfaces.
 - `@backgammon-trainer/ai-contracts` and `@backgammon-trainer/backgammon-coach` public contracts remain provider-neutral.
-- `@backgammon-trainer/backgammon-coach` evidence payload now includes recommendation-support authority metadata without introducing provider-specific coupling.
-- Evaluator server routes are app-internal and do not change workspace package export surfaces.
 
 ## Follow-up trigger
 

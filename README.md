@@ -4,7 +4,7 @@ Backgammon Trainer is a mobile-first progressive web app project focused on help
 
 ## Repository status
 
-Milestone: **Evidence-backed current-position coaching**
+Milestone: **Local environment loading and live integration**
 
 Implemented now:
 
@@ -24,6 +24,9 @@ Implemented now:
   - no-provider mode
   - provider-neutral evaluator status and evaluate-position routes
 - web coach integration that preserves request snapshots, stale-response protection, and gameplay independence while requests are pending
+- root `.env.local` local configuration convention with explicit server and browser boundaries
+- predictable server local env loading and explicit Vite root env loading for browser-safe values
+- opt-in live provider smoke command through provider-neutral server routes
 
 Not implemented yet:
 
@@ -62,6 +65,18 @@ Server only:
 
 ```bash
 pnpm --filter @backgammon-trainer/server dev
+```
+
+Check local configuration (non-secret summary + validation):
+
+```bash
+pnpm config:check
+```
+
+Run explicit opt-in live provider smoke check (server must already be running):
+
+```bash
+ALLOW_LIVE_PROVIDER_SMOKE=true pnpm smoke:live-provider
 ```
 
 ## Validation commands
@@ -104,13 +119,21 @@ pnpm check
 
 ## Environment setup
 
-1. Copy `.env.example` values into your local environment (or `.env.local` for your shell tooling).
-2. Keep server secrets server-side only.
-3. Any `VITE_*` variable is bundled into browser code and should be treated as public.
+1. Copy `.env.example` to repository root `.env.local`.
+2. Put server-private values (for example provider API keys) only in server variables.
+3. Keep browser values limited to intentional public `VITE_*` variables.
+
+```bash
+cp .env.example .env.local
+```
 
 Current local run can use fixture mode without real provider credentials.
 
 To run with a real provider, configure server-side values from `.env.example` and set browser mode to `VITE_COACH_MODEL_MODE=server`.
+
+Detailed local setup, mode behavior, smoke verification, and troubleshooting:
+
+- `docs/local-development.md`
 
 ## PWA testing instructions
 

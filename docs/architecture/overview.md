@@ -232,6 +232,16 @@ Any variable bundled by Vite into client code is public. Provider keys and model
 
 Current real-provider slice uses OpenAI-compatible chat-completions protocol through trusted server configuration. Browser clients cannot supply arbitrary upstream provider URLs.
 
+## Local environment-loading boundary
+
+Local developer convenience configuration uses a repository-root `.env.local` convention.
+
+- `apps/server` loads root `.env.local` (and optional `.env`) during server startup without overriding explicit process env values.
+- `apps/web` loads only `VITE_*` values from repository root through explicit Vite `envDir` configuration.
+- Non-`VITE_*` values remain server-only and are never intentionally exposed to browser bundles.
+
+Production and CI environments are expected to continue supplying secrets through platform environment and secret stores.
+
 ## Why provider-neutral AI contracts
 
 The app should not couple to OpenAI/Anthropic/Google/local-model payloads. Provider-neutral request and response contracts make adapters swappable, support feature disparity through capability flags, and preserve a stable app-facing coaching interface.

@@ -2,21 +2,23 @@ import Fastify from "fastify";
 
 import { createCoachProviderRuntime, type CoachProviderRuntime } from "./coachProvider";
 import { createEvaluatorProviderRuntime, type EvaluatorProviderRuntime } from "./evaluatorProvider";
-import { serverConfig } from "./config";
+import { readServerConfig, type ServerConfig } from "./config";
 import coachingRoutes from "./routes/coaching";
 import evaluatorRoutes from "./routes/evaluator";
 import healthRoutes from "./routes/health";
 
 export interface BuildServerOptions {
+  readonly config?: ServerConfig;
   readonly coachProviderRuntime?: CoachProviderRuntime;
   readonly evaluatorProviderRuntime?: EvaluatorProviderRuntime;
 }
 
 export const buildServer = (options?: BuildServerOptions) => {
   const app = Fastify({ logger: false });
-  const providerRuntime = options?.coachProviderRuntime ?? createCoachProviderRuntime(serverConfig);
+  const config = options?.config ?? readServerConfig();
+  const providerRuntime = options?.coachProviderRuntime ?? createCoachProviderRuntime(config);
   const evaluatorRuntime =
-    options?.evaluatorProviderRuntime ?? createEvaluatorProviderRuntime(serverConfig);
+    options?.evaluatorProviderRuntime ?? createEvaluatorProviderRuntime(config);
 
   app.register(healthRoutes);
   app.register(evaluatorRoutes, {

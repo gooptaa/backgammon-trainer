@@ -1,8 +1,17 @@
-import { serverConfig } from "./config";
+import { getServerConfigIssues, readServerConfig } from "./config";
 import { buildServer } from "./app";
+import { loadLocalEnvironment } from "./localEnv";
 
 const start = async (): Promise<void> => {
-  const app = buildServer();
+  await loadLocalEnvironment();
+
+  const serverConfig = readServerConfig();
+  const configIssues = getServerConfigIssues(serverConfig);
+  for (const issue of configIssues) {
+    console.warn(`[server-config] ${issue}`);
+  }
+
+  const app = buildServer({ config: serverConfig });
 
   try {
     await app.listen({

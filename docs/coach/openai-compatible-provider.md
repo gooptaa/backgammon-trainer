@@ -63,10 +63,47 @@ Browser mode is controlled by `VITE_COACH_MODEL_MODE`:
 - `fixture`
 - `server`
 
+Browser mode validation:
+
+- invalid `VITE_COACH_MODEL_MODE` values fail closed to disabled mode with explicit invalid-mode status text
+
 Evaluator server mode is controlled by `EVALUATOR_PROVIDER`:
 
 - `none`
 - `mock` (fixture evaluator)
+
+## Local configuration convention
+
+Local convenience file:
+
+- repository root `.env.local`
+
+Server startup loads root `.env.local` and optional root `.env` without overriding explicit process env values.
+
+Web build/dev loads `VITE_*` from repository root through explicit Vite `envDir` configuration.
+
+## Opt-in live smoke path
+
+An explicit live smoke command verifies real-provider wiring through the established server boundary.
+
+Command:
+
+```bash
+ALLOW_LIVE_PROVIDER_SMOKE=true pnpm smoke:live-provider
+```
+
+Behavior:
+
+- checks `/api/coach/status` for configured production provider mode
+- sends one small non-streaming provider-neutral completion request to `/api/coach/complete`
+- verifies non-empty response text and provider/model provenance
+- reports only safe summary metadata (no API key, no full prompt/response dump)
+
+This smoke path is not part of normal `pnpm test`, `pnpm check`, package tests, or CI by default.
+
+## Test isolation note
+
+Normal automated tests remain deterministic and credential-free. Local `.env.local` convenience loading is bound to server startup entrypoints and does not make ordinary package tests depend on local secrets.
 
 ## Compatibility surface
 
