@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { ChatModel } from "@backgammon-trainer/ai-contracts";
+import type { RankedLegalMoveAnalysis } from "@backgammon-trainer/backgammon-analysis";
 import {
   createCoachConversation,
   createLocalCoachKnowledgeRetriever,
@@ -26,6 +27,10 @@ interface CoachPanelProps {
   readonly providerStatus?: CoachProviderStatus;
   readonly evaluatorConfigured?: boolean;
   readonly analysisPending?: boolean;
+  readonly resolveHistoryTurnAnalysis?: (input: {
+    question: string;
+    context: Extract<CoachQuestionContext, { kind: "history-turn" }>;
+  }) => Promise<RankedLegalMoveAnalysis | undefined>;
 }
 
 interface EvidenceRow {
@@ -96,6 +101,58 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
     details.push(`Selected move rows: ${row.evidence.legalMoveEvidence.length}`);
   }
 
+  if (row.evidence.committedTurnEvidence !== undefined) {
+    details.push(`Committed turn: ${row.evidence.committedTurnEvidence.turnNumber}`);
+    details.push(`Committed turn player: ${row.evidence.committedTurnEvidence.player}`);
+    details.push(
+      `Committed turn dice: ${row.evidence.committedTurnEvidence.dice[0]}-${row.evidence.committedTurnEvidence.dice[1]}`
+    );
+    details.push(`Played move: ${row.evidence.committedTurnEvidence.outcome}`);
+    details.push(`Has analysis record: ${row.evidence.committedTurnEvidence.hasAnalysisRecord}`);
+
+    const chosen = row.evidence.committedTurnEvidence.evaluatedChosenMove;
+    if (chosen?.evaluatorRank !== undefined) {
+      details.push(`Played move rank: ${chosen.evaluatorRank}`);
+    }
+    if (chosen?.normalizedScore !== undefined) {
+      details.push(`Played move normalized score: ${chosen.normalizedScore}`);
+    }
+    if (chosen?.lossFromTopScoredMove !== undefined) {
+      details.push(`Played move loss from best: ${chosen.lossFromTopScoredMove}`);
+    }
+  }
+
+  if (row.evidence.historicalReviewEvidence !== undefined) {
+    details.push(`Review target source: ${row.evidence.historicalReviewEvidence.selectionSource}`);
+    details.push(`Review turn: ${row.evidence.historicalReviewEvidence.turnNumber}`);
+    details.push(`Review played move: ${row.evidence.historicalReviewEvidence.playedMove}`);
+    details.push(
+      `Played move evaluated: ${row.evidence.historicalReviewEvidence.playedMoveEvaluated}`
+    );
+
+    if (row.evidence.historicalReviewEvidence.evaluatedLegalMoveCount !== undefined) {
+      details.push(
+        `Evaluated legal moves: ${row.evidence.historicalReviewEvidence.evaluatedLegalMoveCount}`
+      );
+    }
+    if (row.evidence.historicalReviewEvidence.unevaluatedLegalMoveCount !== undefined) {
+      details.push(
+        `Unevaluated legal moves: ${row.evidence.historicalReviewEvidence.unevaluatedLegalMoveCount}`
+      );
+    }
+
+    if (row.evidence.historicalReviewEvidence.bestEvaluatedMove !== undefined) {
+      const best = row.evidence.historicalReviewEvidence.bestEvaluatedMove;
+      details.push(`Best evaluated move: ${best.moveLabel}`);
+      details.push(`Best evaluated rank: ${best.evaluatorRank}`);
+      details.push(`Best evaluated normalized score: ${best.normalizedScore}`);
+    }
+
+    for (const limitation of row.evidence.historicalReviewEvidence.limitations) {
+      details.push(`Review limitation: ${limitation}`);
+    }
+  }
+
   if (row.evidence.evaluatorProvenance !== undefined) {
     details.push(`Evaluator provider: ${row.evidence.evaluatorProvenance.provider}`);
     details.push(`Evaluator coverage: ${row.evidence.evaluatorCoverage ?? "unknown"}`);
@@ -133,7 +190,8 @@ export function CoachPanel({
   knowledgeRetriever,
   providerStatus,
   evaluatorConfigured = false,
-  analysisPending = false
+  analysisPending = false,
+  resolveHistoryTurnAnalysis
 }: CoachPanelProps): JSX.Element {
   const [conversation, setConversation] = useState(() =>
     createCoachConversation({ id: runtime.createId(), createdAt: runtime.now() })
@@ -189,6 +247,7 @@ export function CoachPanel({
       conversation,
       question: draft,
       context,
+      ...(resolveHistoryTurnAnalysis === undefined ? {} : { resolveHistoryTurnAnalysis }),
       pending: false
     })
       .then((result) => {

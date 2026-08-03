@@ -1,5 +1,6 @@
 import type { ChatModel, ChatModelResult } from "@backgammon-trainer/ai-contracts";
 import type { BackgammonKnowledgeConcept } from "@backgammon-trainer/backgammon-knowledge";
+import type { RankedLegalMoveAnalysis } from "@backgammon-trainer/backgammon-analysis";
 
 import {
   appendCoachCoachMessage,
@@ -11,6 +12,51 @@ import { buildCoachEvidence, type CoachEvidenceBundle } from "./evidence";
 import type { CoachKnowledgeRetriever } from "./knowledge";
 import { buildCoachModelRequest, toCoachEvidenceReference, toCoachModelProvenance } from "./prompt";
 import type { CoachQuestionContext } from "./context";
+
+type HistoryTurnContext = Extract<CoachQuestionContext, { kind: "history-turn" }>;
+
+const LAST_MOVE_REVIEW_PATTERN =
+  /\b(last move|that move|what should i have done|why was .* better|review my last move|was that move good)\b/i;
+
+const isLastMoveReviewQuestion = (question: string): boolean => {
+  return LAST_MOVE_REVIEW_PATTERN.test(question);
+};
+
+const getLatestCommittedMoveTurn = (
+  context: CoachQuestionContext
+): HistoryTurnContext | undefined => {
+  const latestMoveTurn = [...context.snapshot.turnHistory]
+    .reverse()
+    .find((turnRecord) => turnRecord.outcome.kind === "move");
+
+  if (latestMoveTurn === undefined) {
+    return undefined;
+  }
+
+  return {
+    kind: "history-turn",
+    gameReference: context.gameReference,
+    turnNumber: latestMoveTurn.turnNumber,
+    selectionSource: "latest-committed",
+    snapshot: structuredClone(context.snapshot),
+    turnRecord: structuredClone(latestMoveTurn)
+  };
+};
+
+const resolveSubmissionContext = (
+  question: string,
+  context: CoachQuestionContext
+): CoachQuestionContext => {
+  if (!isLastMoveReviewQuestion(question)) {
+    return context;
+  }
+
+  if (context.kind === "history-turn") {
+    return context;
+  }
+
+  return getLatestCommittedMoveTurn(context) ?? context;
+};
 
 const deriveKnowledgeConcepts = (
   context: CoachQuestionContext,
@@ -116,6 +162,10 @@ export const submitCoachQuestion = async (input: {
   conversation: CoachConversation;
   question: string;
   context: CoachQuestionContext;
+  resolveHistoryTurnAnalysis?: (input: {
+    question: string;
+    context: HistoryTurnContext;
+  }) => Promise<RankedLegalMoveAnalysis | undefined>;
   pending: boolean;
 }): Promise<SubmitCoachQuestionResult> => {
   if (input.model === undefined) {
@@ -149,6 +199,31 @@ export const submitCoachQuestion = async (input: {
     };
   }
 
+  let resolvedContext = resolveSubmissionContext(question, input.context);
+  if (
+    resolvedContext.kind === "history-turn" &&
+    resolvedContext.turnRecord.outcome.kind === "move" &&
+    resolvedContext.analysisRecord === undefined &&
+    resolvedContext.rankedAnalysis === undefined &&
+    input.resolveHistoryTurnAnalysis !== undefined
+  ) {
+    try {
+      const rankedAnalysis = await input.resolveHistoryTurnAnalysis({
+        question,
+        context: resolvedContext
+      });
+
+      if (rankedAnalysis !== undefined) {
+        resolvedContext = {
+          ...resolvedContext,
+          rankedAnalysis: structuredClone(rankedAnalysis)
+        };
+      }
+    } catch {
+      // Fall back to factual history evidence without evaluator rankings.
+    }
+  }
+
   const now = input.runtime.now();
   const userMessageId = input.runtime.createId();
   const appendUserResult = appendUserCoachMessage({
@@ -157,11 +232,13 @@ export const submitCoachQuestion = async (input: {
     createdAt: now,
     text: question,
     contextReference: {
-      kind: input.context.kind,
-      gameReference: input.context.gameReference,
-      ...(input.context.kind === "history-turn" ? { turnNumber: input.context.turnNumber } : {}),
-      ...(input.context.kind === "move-outcome"
-        ? { moveFingerprint: input.context.moveFingerprint }
+      kind: resolvedContext.kind,
+      gameReference: resolvedContext.gameReference,
+      ...(resolvedContext.kind === "history-turn"
+        ? { turnNumber: resolvedContext.turnNumber }
+        : {}),
+      ...(resolvedContext.kind === "move-outcome"
+        ? { moveFingerprint: resolvedContext.moveFingerprint }
         : {})
     }
   });
@@ -172,14 +249,14 @@ export const submitCoachQuestion = async (input: {
       reason: "conversation-rejected",
       message: appendUserResult.message,
       conversation: input.conversation,
-      context: input.context
+      context: resolvedContext
     };
   }
 
   let knowledgeWarning: string | undefined;
   const evidenceResult = buildCoachEvidence({
     question,
-    context: input.context,
+    context: resolvedContext,
     conversation: appendUserResult.conversation
   });
 
@@ -192,9 +269,9 @@ export const submitCoachQuestion = async (input: {
         }
       : await knowledgeRetriever.retrieve({
           question,
-          contextKind: input.context.kind,
+          contextKind: resolvedContext.kind,
           ...(() => {
-            const concepts = deriveKnowledgeConcepts(input.context, evidenceResult.evidence);
+            const concepts = deriveKnowledgeConcepts(resolvedContext, evidenceResult.evidence);
             return concepts.length === 0 ? {} : { concepts };
           })(),
           maxItems: 4
@@ -211,7 +288,7 @@ export const submitCoachQuestion = async (input: {
     conversationId: appendUserResult.conversation.id,
     userMessageId,
     question,
-    context: input.context,
+    context: resolvedContext,
     conversation: appendUserResult.conversation,
     evidence: evidenceResult.evidence,
     knowledge: knowledgeEntries,
@@ -229,7 +306,7 @@ export const submitCoachQuestion = async (input: {
       reason: "model-failed",
       message: response.message,
       conversation: appendUserResult.conversation,
-      context: input.context,
+      context: resolvedContext,
       response
     };
   }
@@ -240,7 +317,7 @@ export const submitCoachQuestion = async (input: {
     createdAt: input.runtime.now(),
     text: response.text,
     evidenceReference: toCoachEvidenceReference({
-      context: input.context,
+      context: resolvedContext,
       evidence: evidenceResult.evidence
     }),
     model: toCoachModelProvenance({
@@ -257,7 +334,7 @@ export const submitCoachQuestion = async (input: {
       reason: "conversation-rejected",
       message: appendCoachResult.message,
       conversation: appendUserResult.conversation,
-      context: input.context
+      context: resolvedContext
     };
   }
 
@@ -265,7 +342,7 @@ export const submitCoachQuestion = async (input: {
     ok: true,
     requestId,
     conversation: appendCoachResult.conversation,
-    context: input.context,
+    context: resolvedContext,
     evidence: evidenceResult.evidence,
     response,
     knowledge: knowledgeEntries,

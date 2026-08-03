@@ -14,6 +14,8 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Define knowledge-retriever boundary with no-op, fixture, and local curated-content implementations.
 - Build provider-neutral chat-model requests from conversation + evidence.
 - Orchestrate single-request coaching submission flow with explicit failure handling.
+- Resolve evidence-backed historical review targets for "last move" questions without replacing explicit history selection.
+- Preserve immutable historical-review context per submission even if current gameplay continues.
 
 ## Allowed Dependencies
 
@@ -36,8 +38,18 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Evidence builder (`buildCoachEvidence`) with bounded deterministic output.
 - Prompt builder (`buildCoachModelRequest`) for `ChatModel`.
 - Recommendation-support evidence (`recommendationSupport`) for current-position claims.
+- Historical review evidence (`historicalReviewEvidence`) with deterministic played-move coverage limits.
 - Knowledge interfaces (`CoachKnowledgeRetriever`) and local/fixture/no-op retrievers.
-- Submission orchestration (`submitCoachQuestion`) for host-layer integration.
+- Submission orchestration (`submitCoachQuestion`) for host-layer integration, including optional on-demand history-turn ranked-analysis hydration.
+
+## Last Move Review Behavior
+
+- Explicit selected history turn remains highest precedence for historical review.
+- If no history turn is selected and the question asks about the last move, submission resolves to the latest committed checker-play turn in the same lineage.
+- Staged/uncommitted moves are never treated as historical review targets.
+- Historical review uses committed turn `positionBefore` and `dice` as the decision-time authority.
+- Played-move rank/loss claims are emitted only when the played move is evaluator-covered.
+- Partial evaluator coverage is surfaced explicitly and never upgraded to authoritative best-move claims.
 
 ## Non-goals
 

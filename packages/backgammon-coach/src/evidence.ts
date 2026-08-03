@@ -76,7 +76,9 @@ export interface CoachRecommendationSupport {
     | "fixture-evaluator"
     | "missing-evaluator"
     | "non-decision-state"
-    | "no-legal-moves";
+    | "no-legal-moves"
+    | "played-move-not-evaluated"
+    | "unsupported-history-turn";
   readonly supportedRecommendation?: CoachSupportedRecommendation;
 }
 
@@ -97,6 +99,23 @@ export interface CoachEvidenceBundle {
   positionFacts?: ReturnType<typeof analyzePosition>;
   legalMoveSelection?: CoachLegalMoveSelectionSummary;
   legalMoveEvidence?: readonly CoachMoveEvidence[];
+  historicalReviewEvidence?: {
+    selectionSource: "selected-history" | "latest-committed";
+    turnNumber: number;
+    playedMove: string;
+    playedMoveFingerprint?: string;
+    totalLegalMoveCount?: number;
+    evaluatedLegalMoveCount?: number;
+    unevaluatedLegalMoveCount?: number;
+    playedMoveEvaluated: boolean;
+    bestEvaluatedMove?: {
+      moveFingerprint: string;
+      moveLabel: string;
+      evaluatorRank: number;
+      normalizedScore: number;
+    };
+    limitations: readonly string[];
+  };
   committedTurnEvidence?: {
     turnNumber: number;
     player: "white" | "black";
@@ -724,6 +743,9 @@ export const buildCoachEvidence = (input: {
 
   if (input.context.kind === "history-turn") {
     const turnRecord = input.context.turnRecord;
+    const rankedAnalysis =
+      input.context.analysisRecord?.rankedMoveAnalysis ?? input.context.rankedAnalysis;
+    const limitations: string[] = [];
     evidence.positionFacts = analyzePosition(turnRecord.positionBefore);
 
     let evaluatedChosenMove:
@@ -734,22 +756,184 @@ export const buildCoachEvidence = (input: {
         }
       | undefined;
 
-    if (input.context.analysisRecord !== undefined && turnRecord.outcome.kind === "move") {
-      const ranked = input.context.analysisRecord.rankedMoveAnalysis;
-      if (ranked.kind === "evaluated") {
-        evidence.evaluatorProvenance = structuredClone(ranked.provenance);
-        evidence.evaluatorCoverage = ranked.coverage;
-        const fingerprint = getMoveFingerprint(turnRecord.outcome.move);
-        const rankedChosen = ranked.rankedMoves.find((row) => row.moveFingerprint === fingerprint);
-        evaluatedChosenMove = {
-          ...(rankedChosen === undefined ? {} : { evaluatorRank: rankedChosen.rank }),
-          ...(rankedChosen === undefined ? {} : { normalizedScore: rankedChosen.normalizedScore }),
-          ...(rankedChosen === undefined
-            ? {}
-            : { lossFromTopScoredMove: rankedChosen.lossFromBest })
-        };
-      }
+    if (rankedAnalysis?.kind === "evaluated") {
+      evidence.evaluatorProvenance = structuredClone(rankedAnalysis.provenance);
+      evidence.evaluatorCoverage = rankedAnalysis.coverage;
     }
+
+    let playedMoveFingerprint: string | undefined;
+    let playedMoveEvaluated = false;
+
+    if (turnRecord.outcome.kind === "move") {
+      playedMoveFingerprint = getMoveFingerprint(turnRecord.outcome.move);
+    }
+
+    if (playedMoveFingerprint !== undefined && rankedAnalysis?.kind === "evaluated") {
+      const rankedChosen = rankedAnalysis.rankedMoves.find(
+        (row) => row.moveFingerprint === playedMoveFingerprint
+      );
+      playedMoveEvaluated = rankedChosen !== undefined;
+      evaluatedChosenMove = {
+        ...(rankedChosen === undefined ? {} : { evaluatorRank: rankedChosen.rank }),
+        ...(rankedChosen === undefined ? {} : { normalizedScore: rankedChosen.normalizedScore }),
+        ...(rankedChosen === undefined ? {} : { lossFromTopScoredMove: rankedChosen.lossFromBest })
+      };
+
+      const bestEvaluated = rankedAnalysis.rankedMoves.find((row) => row.rank === 1);
+
+      if (isFixtureEvaluator(rankedAnalysis.provenance.provider)) {
+        evidence.recommendationSupport = {
+          status: "not-supported",
+          reason: "fixture-evaluator"
+        };
+        limitations.push("Fixture evaluator evidence is non-authoritative.");
+      } else if (rankedChosen !== undefined && bestEvaluated !== undefined) {
+        const recommendationMove = rankedAnalysis.rankedMoves[0]!;
+        const recommendationLabel = formatMoveLabel(recommendationMove.outcome.move);
+
+        evidence.recommendationSupport = {
+          status: "supported",
+          reason:
+            rankedAnalysis.coverage === "complete"
+              ? "complete-trustworthy-coverage"
+              : "partial-coverage",
+          supportedRecommendation: {
+            kind: rankedAnalysis.coverage === "complete" ? "authoritative" : "strongest-evaluated",
+            moveFingerprint: recommendationMove.moveFingerprint,
+            moveLabel: recommendationLabel,
+            evaluatorRank: recommendationMove.rank,
+            normalizedScore: recommendationMove.normalizedScore,
+            comparedLegalMoveCount: rankedAnalysis.rankedMoves.length,
+            totalLegalMoveCount:
+              rankedAnalysis.rankedMoves.length + rankedAnalysis.unevaluatedMoves.length,
+            unevaluatedLegalMoveCount: rankedAnalysis.unevaluatedMoves.length
+          }
+        };
+
+        if (rankedAnalysis.coverage === "partial") {
+          limitations.push("Evaluator coverage is partial across legal candidates.");
+        }
+      } else {
+        evidence.recommendationSupport = {
+          status: "not-supported",
+          reason: "played-move-not-evaluated"
+        };
+        limitations.push("The played move was not scored by the evaluator.");
+      }
+
+      if (rankedAnalysis.rankedMoves.length > 0) {
+        const bestEvaluated = rankedAnalysis.rankedMoves[0]!;
+        const legalRows: CoachMoveEvidence[] = [];
+
+        if (playedMoveFingerprint !== undefined) {
+          const playedRanked = rankedAnalysis.rankedMoves.find(
+            (row) => row.moveFingerprint === playedMoveFingerprint
+          );
+          const playedUnevaluated = rankedAnalysis.unevaluatedMoves.find(
+            (outcome) => getMoveFingerprint(outcome.move) === playedMoveFingerprint
+          );
+          const playedOutcome = playedRanked?.outcome ?? playedUnevaluated;
+
+          if (playedOutcome !== undefined) {
+            legalRows.push({
+              moveFingerprint: playedMoveFingerprint,
+              moveLabel: formatMoveLabel(playedOutcome.move),
+              featureDelta: structuredClone(playedOutcome.featureDelta),
+              selectionReasons: [
+                {
+                  code: "deterministic-fallback",
+                  message: "Selected because this is the committed move under review."
+                }
+              ],
+              ...(playedRanked === undefined ? {} : { evaluatorRank: playedRanked.rank }),
+              ...(playedRanked === undefined
+                ? {}
+                : { normalizedScore: playedRanked.normalizedScore }),
+              ...(playedRanked === undefined
+                ? {}
+                : { lossFromTopScoredMove: playedRanked.lossFromBest })
+            });
+          }
+        }
+
+        if (bestEvaluated.moveFingerprint !== playedMoveFingerprint) {
+          legalRows.push({
+            moveFingerprint: bestEvaluated.moveFingerprint,
+            moveLabel: formatMoveLabel(bestEvaluated.outcome.move),
+            featureDelta: structuredClone(bestEvaluated.outcome.featureDelta),
+            selectionReasons: [
+              {
+                code: "top-ranked-comparison",
+                message: "Selected as the strongest evaluated legal alternative."
+              }
+            ],
+            evaluatorRank: bestEvaluated.rank,
+            normalizedScore: bestEvaluated.normalizedScore,
+            lossFromTopScoredMove: bestEvaluated.lossFromBest
+          });
+        }
+
+        evidence.legalMoveSelection = {
+          totalLegalMoves:
+            rankedAnalysis.rankedMoves.length + rankedAnalysis.unevaluatedMoves.length,
+          selectedLegalMoves: legalRows.length,
+          omittedLegalMoves: Math.max(
+            0,
+            rankedAnalysis.rankedMoves.length +
+              rankedAnalysis.unevaluatedMoves.length -
+              legalRows.length
+          ),
+          coachEvidenceCoverage:
+            legalRows.length >=
+            rankedAnalysis.rankedMoves.length + rankedAnalysis.unevaluatedMoves.length
+              ? "complete"
+              : "selected-subset",
+          truncated: false,
+          questionMoveReferences: []
+        };
+        evidence.legalMoveEvidence = legalRows;
+      }
+    } else if (turnRecord.outcome.kind === "move") {
+      evidence.recommendationSupport = {
+        status: "not-supported",
+        reason: "missing-evaluator"
+      };
+      limitations.push("No evaluator ranking is available for this historical decision.");
+    } else {
+      evidence.recommendationSupport = {
+        status: "not-supported",
+        reason: "unsupported-history-turn"
+      };
+      limitations.push("The selected historical turn is not a checker-play move.");
+    }
+
+    evidence.historicalReviewEvidence = {
+      selectionSource: input.context.selectionSource,
+      turnNumber: turnRecord.turnNumber,
+      playedMove:
+        turnRecord.outcome.kind === "pass" ? "pass" : formatMoveLabel(turnRecord.outcome.move),
+      ...(playedMoveFingerprint === undefined ? {} : { playedMoveFingerprint }),
+      ...(rankedAnalysis?.kind !== "evaluated"
+        ? {}
+        : {
+            totalLegalMoveCount:
+              rankedAnalysis.rankedMoves.length + rankedAnalysis.unevaluatedMoves.length,
+            evaluatedLegalMoveCount: rankedAnalysis.rankedMoves.length,
+            unevaluatedLegalMoveCount: rankedAnalysis.unevaluatedMoves.length,
+            ...(rankedAnalysis.rankedMoves[0] === undefined
+              ? {}
+              : {
+                  bestEvaluatedMove: {
+                    moveFingerprint: rankedAnalysis.rankedMoves[0].moveFingerprint,
+                    moveLabel: formatMoveLabel(rankedAnalysis.rankedMoves[0].outcome.move),
+                    evaluatorRank: rankedAnalysis.rankedMoves[0].rank,
+                    normalizedScore: rankedAnalysis.rankedMoves[0].normalizedScore
+                  }
+                })
+          }),
+      playedMoveEvaluated,
+      limitations
+    };
 
     evidence.committedTurnEvidence = {
       turnNumber: turnRecord.turnNumber,
@@ -757,11 +941,12 @@ export const buildCoachEvidence = (input: {
       dice: [turnRecord.dice.dice[0], turnRecord.dice.dice[1]],
       outcome:
         turnRecord.outcome.kind === "pass" ? "pass" : formatMoveLabel(turnRecord.outcome.move),
-      hasAnalysisRecord: input.context.analysisRecord !== undefined,
+      hasAnalysisRecord:
+        input.context.analysisRecord !== undefined || input.context.rankedAnalysis !== undefined,
       ...(evaluatedChosenMove === undefined ? {} : { evaluatedChosenMove })
     };
 
-    if (input.context.analysisRecord === undefined) {
+    if (input.context.analysisRecord === undefined && input.context.rankedAnalysis === undefined) {
       warnings.push({
         code: "missing-history-analysis",
         message: "No analysis record is available for the selected historical turn."

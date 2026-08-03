@@ -692,6 +692,221 @@ describe("coach evidence and prompt", () => {
     );
   });
 
+  it("supports authoritative historical review when complete trustworthy coverage includes played move", async () => {
+    const snapshot = buildSnapshot();
+    const ranked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "white",
+        dice: { dice: [1, 2] }
+      },
+      createFixturePositionEvaluator({ mode: "complete" })
+    );
+
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok || ranked.analysis.kind !== "evaluated") {
+      return;
+    }
+
+    const playedOutcome =
+      ranked.analysis.rankedMoves[1]?.outcome ?? ranked.analysis.rankedMoves[0]?.outcome;
+    expect(playedOutcome).toBeDefined();
+    if (playedOutcome === undefined) {
+      return;
+    }
+
+    const turnRecord = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: {
+        kind: "move",
+        move: playedOutcome.move
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: playedOutcome.positionAfter,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null,
+      selectedHistoryTurn: {
+        turnRecord,
+        rankedAnalysis: {
+          ...ranked.analysis,
+          provenance: {
+            ...ranked.analysis.provenance,
+            provider: "trusted-evaluator"
+          }
+        }
+      }
+    });
+
+    expect(context.kind).toBe("history-turn");
+    if (context.kind !== "history-turn") {
+      return;
+    }
+
+    const evidence = buildCoachEvidence({
+      question: "Was that move good?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    });
+
+    expect(evidence.evidence.recommendationSupport?.status).toBe("supported");
+    expect(evidence.evidence.recommendationSupport?.reason).toBe("complete-trustworthy-coverage");
+    expect(evidence.evidence.historicalReviewEvidence?.playedMoveEvaluated).toBe(true);
+  });
+
+  it("qualifies historical review when only partial trusted coverage exists", async () => {
+    const snapshot = buildSnapshot();
+    const ranked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "white",
+        dice: { dice: [1, 2] }
+      },
+      createFixturePositionEvaluator({ mode: "partial" })
+    );
+
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok || ranked.analysis.kind !== "evaluated") {
+      return;
+    }
+
+    const playedOutcome = ranked.analysis.rankedMoves[0]?.outcome;
+    expect(playedOutcome).toBeDefined();
+    if (playedOutcome === undefined) {
+      return;
+    }
+
+    const turnRecord = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: {
+        kind: "move",
+        move: playedOutcome.move
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: playedOutcome.positionAfter,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null,
+      selectedHistoryTurn: {
+        turnRecord,
+        rankedAnalysis: {
+          ...ranked.analysis,
+          provenance: {
+            ...ranked.analysis.provenance,
+            provider: "trusted-evaluator"
+          }
+        }
+      }
+    });
+
+    expect(context.kind).toBe("history-turn");
+    if (context.kind !== "history-turn") {
+      return;
+    }
+
+    const evidence = buildCoachEvidence({
+      question: "What should I have done?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    });
+
+    expect(evidence.evidence.recommendationSupport?.status).toBe("supported");
+    expect(evidence.evidence.recommendationSupport?.reason).toBe("partial-coverage");
+    expect(evidence.evidence.historicalReviewEvidence?.limitations).toContain(
+      "Evaluator coverage is partial across legal candidates."
+    );
+  });
+
+  it("does not assign played rank when historical played move is uncovered", async () => {
+    const snapshot = buildSnapshot();
+    const ranked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "white",
+        dice: { dice: [1, 2] }
+      },
+      createFixturePositionEvaluator({ mode: "partial" })
+    );
+
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok || ranked.analysis.kind !== "evaluated") {
+      return;
+    }
+
+    const playedOutcome = ranked.analysis.unevaluatedMoves[0];
+    expect(playedOutcome).toBeDefined();
+    if (playedOutcome === undefined) {
+      return;
+    }
+
+    const turnRecord = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: {
+        kind: "move",
+        move: playedOutcome.move
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: playedOutcome.positionAfter,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null,
+      selectedHistoryTurn: {
+        turnRecord,
+        rankedAnalysis: {
+          ...ranked.analysis,
+          provenance: {
+            ...ranked.analysis.provenance,
+            provider: "trusted-evaluator"
+          }
+        }
+      }
+    });
+
+    expect(context.kind).toBe("history-turn");
+    if (context.kind !== "history-turn") {
+      return;
+    }
+
+    const evidence = buildCoachEvidence({
+      question: "Why was the other move better?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    });
+
+    expect(evidence.evidence.recommendationSupport).toEqual({
+      status: "not-supported",
+      reason: "played-move-not-evaluated"
+    });
+    expect(evidence.evidence.committedTurnEvidence?.evaluatedChosenMove).toEqual({});
+  });
+
   it("builds deterministic provider-neutral prompt with bounded history", () => {
     const snapshot = buildSnapshot();
     const context = resolveCoachQuestionContext({
@@ -966,5 +1181,205 @@ describe("coach knowledge and orchestration", () => {
     }
 
     expect(result.knowledgeWarning).toContain("failed");
+  });
+
+  it("resolves last-move review questions to the latest committed checker-play turn", async () => {
+    const snapshot = buildSnapshot();
+    const moveTurn = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: {
+        kind: "move",
+        move: {
+          player: "white",
+          steps: [
+            {
+              kind: "point-to-point",
+              fromPoint: 13,
+              toPoint: 12,
+              dieValue: 1,
+              dieIndex: 0,
+              hitsBlot: false
+            },
+            {
+              kind: "point-to-point",
+              fromPoint: 12,
+              toPoint: 10,
+              dieValue: 2,
+              dieIndex: 1,
+              hitsBlot: false
+            }
+          ]
+        }
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: snapshot.gameState.position,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: {
+        ...snapshot,
+        turnHistory: [moveTurn]
+      },
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    expect(context.kind).toBe("current-position");
+    const result = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+      runtime,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      question: "Was that move good?",
+      context,
+      pending: false
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.context.kind).toBe("history-turn");
+    if (result.context.kind !== "history-turn") {
+      return;
+    }
+    expect(result.context.turnNumber).toBe(1);
+    expect(result.context.selectionSource).toBe("latest-committed");
+  });
+
+  it("keeps explicit selected history turn as the review target", async () => {
+    const snapshot = buildSnapshot();
+    const selectedTurn = createTurnRecord({
+      turnNumber: 12,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: { kind: "pass" },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: snapshot.gameState.position,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null,
+      selectedHistoryTurn: {
+        turnRecord: selectedTurn
+      }
+    });
+
+    expect(context.kind).toBe("history-turn");
+
+    const result = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+      runtime,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      question: "Can you review my last move?",
+      context,
+      pending: false
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.context.kind !== "history-turn") {
+      return;
+    }
+
+    expect(result.context.turnNumber).toBe(12);
+    expect(result.context.selectionSource).toBe("selected-history");
+  });
+
+  it("hydrates history-turn ranked analysis through optional resolver when absent", async () => {
+    const snapshot = buildSnapshot();
+    const moveTurn = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: {
+        kind: "move",
+        move: {
+          player: "white",
+          steps: [
+            {
+              kind: "point-to-point",
+              fromPoint: 13,
+              toPoint: 12,
+              dieValue: 1,
+              dieIndex: 0,
+              hitsBlot: false
+            },
+            {
+              kind: "point-to-point",
+              fromPoint: 12,
+              toPoint: 10,
+              dieValue: 2,
+              dieIndex: 1,
+              hitsBlot: false
+            }
+          ]
+        }
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: snapshot.gameState.position,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: {
+        ...snapshot,
+        turnHistory: [moveTurn]
+      },
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const ranked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "white",
+        dice: { dice: [1, 2] }
+      },
+      createFixturePositionEvaluator({ mode: "complete" })
+    );
+
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok || ranked.analysis.kind !== "evaluated") {
+      return;
+    }
+
+    let resolverCalled = false;
+    const result = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+      runtime,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      question: "Review my last move",
+      context,
+      resolveHistoryTurnAnalysis: async () => {
+        resolverCalled = true;
+        return ranked.analysis;
+      },
+      pending: false
+    });
+
+    expect(resolverCalled).toBe(true);
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.context.kind !== "history-turn") {
+      return;
+    }
+    expect(result.context.rankedAnalysis).toBeDefined();
   });
 });

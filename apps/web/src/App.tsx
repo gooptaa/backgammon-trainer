@@ -48,9 +48,10 @@ import {
   resolveCoachQuestionContext,
   type CoachRuntime,
   type CoachStagedSelectionSummary,
-  type CoachKnowledgeRetriever
+  type CoachKnowledgeRetriever,
+  type CoachQuestionContext
 } from "@backgammon-trainer/backgammon-coach";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { BackgammonBoard } from "./features/board/BackgammonBoard";
 import { AnalysisSessionPanel } from "./features/analysis-session/AnalysisSessionPanel";
@@ -927,6 +928,40 @@ function App({
   ]);
 
   const coachLineageKey = activeGameReference ?? `lineage-unavailable-${activeSnapshot.savedAt}`;
+
+  const resolveHistoryTurnAnalysis = useCallback(
+    async (input: {
+      question: string;
+      context: Extract<CoachQuestionContext, { kind: "history-turn" }>;
+    }) => {
+      if (moveEvaluator === undefined) {
+        return undefined;
+      }
+
+      if (input.context.turnRecord.outcome.kind !== "move") {
+        return undefined;
+      }
+
+      const evaluated = await evaluateLegalMoves(
+        {
+          position: input.context.turnRecord.positionBefore,
+          player: input.context.turnRecord.player,
+          dice: input.context.turnRecord.dice,
+          context: {
+            gameMode: "money"
+          }
+        },
+        moveEvaluator
+      );
+
+      if (!evaluated.ok || evaluated.analysis.kind !== "evaluated") {
+        return undefined;
+      }
+
+      return evaluated.analysis;
+    },
+    [moveEvaluator]
+  );
 
   useEffect(() => {
     if (gameState.dice === null || !legalMovesResult.ok || gameStatus.state === "complete") {
@@ -1923,6 +1958,7 @@ function App({
             fixtureEnabled={coachFixtureEnabled}
             evaluatorConfigured={moveEvaluator !== undefined}
             analysisPending={moveEvaluationPending}
+            resolveHistoryTurnAnalysis={resolveHistoryTurnAnalysis}
             {...(coachProviderStatus === undefined ? {} : { providerStatus: coachProviderStatus })}
             {...(coachModel === undefined ? {} : { model: coachModel })}
             {...(coachKnowledgeRetriever === undefined

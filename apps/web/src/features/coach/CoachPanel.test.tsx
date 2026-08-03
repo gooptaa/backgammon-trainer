@@ -321,7 +321,7 @@ describe("CoachPanel", () => {
       />
     );
 
-    expect(screen.getByTestId("coach-context-label").textContent).toContain("Turn 12");
+    expect(screen.getByTestId("coach-context-label").textContent).toContain("Reviewing turn 12");
   });
 
   it("new lineage clears conversation", async () => {

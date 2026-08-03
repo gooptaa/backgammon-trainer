@@ -78,6 +78,13 @@ Precedence on submit:
 3. current committed position
 4. completed game review when no narrower context exists
 
+Historical-review extension:
+
+- if the question explicitly asks to review the last move, submit resolves a historical target
+- explicit selected history turn remains authoritative when present
+- otherwise, the latest committed checker-play turn in the same lineage is selected
+- if no committed checker-play turn exists, history review is not forced and evidence degrades honestly
+
 Hover state, selected checker state, and uncommitted staged board projection are never treated as committed context.
 
 ## Current-turn context contract
@@ -119,6 +126,13 @@ Recommendation authority is also separated from generation:
 - partial evaluator coverage can support only a strongest-evaluated claim
 - fixture or missing evaluator evidence cannot support authoritative strongest-move claims
 - non-decision and no-legal-move states explicitly block fabricated recommendations
+
+Historical review authority remains deterministic before generation:
+
+- complete trustworthy coverage supports played-vs-best rank and loss claims
+- partial trustworthy coverage supports strongest-evaluated claims only
+- uncovered played moves receive no fabricated rank/loss claims
+- fixture, unavailable, or failed evaluator output remains non-authoritative
 
 Fixture evaluator caveat:
 
@@ -199,6 +213,12 @@ On submit:
 
 - context and evidence are captured for that request
 - same-lineage board advancement does not rewrite prior message context
+
+Historical review request capture:
+
+- the resolved committed-turn identity is fixed at submit time
+- subsequent move play does not retarget that request
+- selecting another turn later affects only future requests
 
 Stale policy:
 

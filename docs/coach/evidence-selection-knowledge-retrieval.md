@@ -23,11 +23,23 @@ Deterministic facts remain authoritative for board state, legal moves, committed
 
 Evaluator evidence may contribute rank, normalized score, loss from best, provenance, and coverage when available.
 
+Historical review evidence now additionally records:
+
+- committed-turn review target source (explicit selection vs latest committed fallback)
+- canonical played move and whether it was evaluator-covered
+- strongest evaluated alternative when available
+- explicit limitations for partial, uncovered, fixture, unavailable, or failed evaluation
+
 Current-position evidence now also includes recommendation-support resolution before model generation:
 
 - supported authoritative recommendation (complete trustworthy evaluator coverage)
 - supported strongest-evaluated recommendation (partial evaluator coverage)
 - not-supported recommendation (fixture evaluator, missing evaluator, non-decision, or no-legal-move)
+
+History-turn evidence uses parallel support states and adds:
+
+- `played-move-not-evaluated` when the played move is legal but uncovered
+- `unsupported-history-turn` for non-checker historical actions
 
 Curated knowledge may explain general ideas such as hitting, point making, bar entry, or race-versus-contact. It is not authoritative for what is true in the current position.
 
@@ -263,4 +275,4 @@ The following remain stable when that happens:
 - no long-term habit analysis
 - no semantic ranking
 - real provider support is currently one server-hosted OpenAI-compatible non-streaming text adapter only
-- evaluator server mode remains `none` or fixture `mock`; real GNU evaluator wiring is still out of scope
+- real GNU evaluator server mode is available through the provider-neutral server evaluator boundary

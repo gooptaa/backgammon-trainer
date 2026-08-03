@@ -44,9 +44,11 @@ export type CoachQuestionContext =
       readonly kind: "history-turn";
       readonly gameReference: string;
       readonly turnNumber: number;
+      readonly selectionSource: "selected-history" | "latest-committed";
       readonly snapshot: GameSnapshot;
       readonly turnRecord: TurnRecord;
       readonly analysisRecord?: AnalysisRecord;
+      readonly rankedAnalysis?: RankedLegalMoveAnalysis;
     }
   | {
       readonly kind: "move-outcome";
@@ -73,6 +75,7 @@ export interface ResolveCoachQuestionContextInput {
   readonly selectedHistoryTurn?: {
     readonly turnRecord: TurnRecord;
     readonly analysisRecord?: AnalysisRecord;
+    readonly rankedAnalysis?: RankedLegalMoveAnalysis;
   };
   readonly selectedMoveOutcome?: {
     readonly moveFingerprint: string;
@@ -158,11 +161,15 @@ export const resolveCoachQuestionContext = (
       kind: "history-turn",
       gameReference: input.gameReference,
       turnNumber: input.selectedHistoryTurn.turnRecord.turnNumber,
+      selectionSource: "selected-history",
       snapshot: structuredClone(input.snapshot),
       turnRecord: structuredClone(input.selectedHistoryTurn.turnRecord),
       ...(input.selectedHistoryTurn.analysisRecord === undefined
         ? {}
-        : { analysisRecord: structuredClone(input.selectedHistoryTurn.analysisRecord) })
+        : { analysisRecord: structuredClone(input.selectedHistoryTurn.analysisRecord) }),
+      ...(input.selectedHistoryTurn.rankedAnalysis === undefined
+        ? {}
+        : { rankedAnalysis: structuredClone(input.selectedHistoryTurn.rankedAnalysis) })
     };
   }
 
@@ -208,7 +215,14 @@ export const formatCoachContextLabel = (context: CoachQuestionContext): string =
   }
 
   if (context.kind === "history-turn") {
-    return `Context: Turn ${context.turnNumber} before move`;
+    if (context.turnRecord.outcome.kind === "move") {
+      const moveLabel = context.turnRecord.outcome.move.steps
+        .map((step) => `${step.fromPoint}/${step.toPoint}`)
+        .join(" ");
+      return `Reviewing turn ${context.turnNumber} · ${moveLabel}`;
+    }
+
+    return `Reviewing turn ${context.turnNumber} · pass`;
   }
 
   return "Context: Completed game";
