@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@backgammon-trainer/ai-contracts": "workspace:*",
+    "@backgammon-trainer/backgammon-analysis": "workspace:*",
     "@backgammon-trainer/shared": "workspace:*",
     "fastify": "^5.0.0"
   },

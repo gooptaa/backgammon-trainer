@@ -104,12 +104,21 @@ Evidence includes:
 - legal move selection coverage and question-reference summaries for current-position requests
 - optional ranked fields (`evaluatorRank`, `normalizedScore`, `lossFromTopScoredMove`)
 - evaluator provenance and coverage when available
+- recommendation-support status resolved before model generation
 - historical turn facts and optional analysis linkage
 - completed-game aggregate counts (only currently supported aggregates)
 - conversation summary counts
 - bounded warnings list
 
 Facts are always separated from evaluator-attributed claims.
+
+Recommendation authority is also separated from generation:
+
+- coach-domain evidence decides whether strongest-move claims are supported
+- complete trustworthy evaluator coverage can support an authoritative recommendation
+- partial evaluator coverage can support only a strongest-evaluated claim
+- fixture or missing evaluator evidence cannot support authoritative strongest-move claims
+- non-decision and no-legal-move states explicitly block fabricated recommendations
 
 Fixture evaluator caveat:
 
@@ -199,6 +208,7 @@ Stale policy:
 Concurrency policy:
 
 - one pending coach request per conversation
+- current-position send is disabled while evaluator analysis is pending when evaluator runtime is configured
 - Send disabled while pending
 - gameplay remains enabled
 

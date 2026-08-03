@@ -244,6 +244,27 @@ describe("CoachPanel", () => {
     });
   });
 
+  it("shows analysis pending state and disables send for current-position context", () => {
+    render(
+      <CoachPanel
+        lineageKey="game-1"
+        context={currentContext}
+        runtime={runtime}
+        model={createFixtureChatModel()}
+        fixtureEnabled={true}
+        evaluatorConfigured={true}
+        analysisPending={true}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Ask the coach"), { target: { value: "Question" } });
+
+    expect(screen.getByTestId("coach-analysis-pending-status")).toHaveTextContent(
+      "Position analysis pending"
+    );
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+
   it("shows concise model failure states", async () => {
     render(
       <CoachPanel

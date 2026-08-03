@@ -57,6 +57,29 @@ export interface CoachMoveEvidence {
   readonly lossFromTopScoredMove?: number;
 }
 
+export interface CoachSupportedRecommendation {
+  readonly kind: "authoritative" | "strongest-evaluated";
+  readonly moveFingerprint: string;
+  readonly moveLabel: string;
+  readonly evaluatorRank: number;
+  readonly normalizedScore: number;
+  readonly comparedLegalMoveCount: number;
+  readonly totalLegalMoveCount: number;
+  readonly unevaluatedLegalMoveCount: number;
+}
+
+export interface CoachRecommendationSupport {
+  readonly status: "supported" | "not-supported";
+  readonly reason:
+    | "complete-trustworthy-coverage"
+    | "partial-coverage"
+    | "fixture-evaluator"
+    | "missing-evaluator"
+    | "non-decision-state"
+    | "no-legal-moves";
+  readonly supportedRecommendation?: CoachSupportedRecommendation;
+}
+
 export interface CoachLegalMoveSelectionSummary {
   readonly totalLegalMoves: number;
   readonly selectedLegalMoves: number;
@@ -103,6 +126,7 @@ export interface CoachEvidenceBundle {
   };
   evaluatorProvenance?: EvaluatorProvenance;
   evaluatorCoverage?: "complete" | "partial";
+  recommendationSupport?: CoachRecommendationSupport;
   conversationSummary: {
     messageCount: number;
     userMessageCount: number;
@@ -128,6 +152,11 @@ const DEFAULT_LIMITS: CoachEvidenceBuildLimits = {
 
 const formatMoveLabel = (move: Move): string => {
   return move.steps.map((step) => `${step.fromPoint}/${step.toPoint}`).join(", ");
+};
+
+const isFixtureEvaluator = (provider: string): boolean => {
+  const normalized = provider.toLowerCase();
+  return normalized.includes("fixture") || normalized.includes("mock");
 };
 
 const formatStepLabel = (fromPoint: string | number, toPoint: string | number): string => {
@@ -556,15 +585,37 @@ export const buildCoachEvidence = (input: {
     const positionFacts = analyzePosition(input.context.snapshot.gameState.position);
     evidence.positionFacts = positionFacts;
 
+    if (input.context.currentTurn.status !== "decision-available") {
+      evidence.recommendationSupport = {
+        status: "not-supported",
+        reason: "non-decision-state"
+      };
+    }
+
     const legalMoveOutcomes = input.context.currentTurn.legalMoveOutcomes?.outcomes ?? [];
     const rankedAnalysis = input.context.currentTurn.rankedAnalysis;
     const rankedByFingerprint = new Map<string, { rank: number; score: number; loss: number }>();
+    const legalMoveLabelByFingerprint = new Map<string, string>();
+
+    for (const outcome of legalMoveOutcomes) {
+      legalMoveLabelByFingerprint.set(
+        getMoveFingerprint(outcome.move),
+        formatMoveLabel(outcome.move)
+      );
+    }
+
+    if (legalMoveOutcomes.length === 0 && input.context.currentTurn.status === "no-legal-move") {
+      evidence.recommendationSupport = {
+        status: "not-supported",
+        reason: "no-legal-moves"
+      };
+    }
 
     if (rankedAnalysis?.kind === "evaluated") {
       evidence.evaluatorProvenance = structuredClone(rankedAnalysis.provenance);
       evidence.evaluatorCoverage = rankedAnalysis.coverage;
 
-      if (rankedAnalysis.provenance.provider.includes("fixture")) {
+      if (isFixtureEvaluator(rankedAnalysis.provenance.provider)) {
         warnings.push({
           code: "fixture-evaluator",
           message: "Ranked analysis is fixture-derived synthetic output."
@@ -578,11 +629,63 @@ export const buildCoachEvidence = (input: {
           loss: rankedMove.lossFromBest
         });
       }
+
+      const topMove = rankedAnalysis.rankedMoves.find((move) => move.rank === 1);
+      if (topMove !== undefined) {
+        const moveLabel = legalMoveLabelByFingerprint.get(topMove.moveFingerprint);
+        const fixtureProvider = isFixtureEvaluator(rankedAnalysis.provenance.provider);
+        const unevaluatedLegalMoveCount = rankedAnalysis.unevaluatedMoves.length;
+
+        if (moveLabel !== undefined) {
+          if (fixtureProvider) {
+            evidence.recommendationSupport = {
+              status: "not-supported",
+              reason: "fixture-evaluator"
+            };
+          } else if (rankedAnalysis.coverage === "complete") {
+            evidence.recommendationSupport = {
+              status: "supported",
+              reason: "complete-trustworthy-coverage",
+              supportedRecommendation: {
+                kind: "authoritative",
+                moveFingerprint: topMove.moveFingerprint,
+                moveLabel,
+                evaluatorRank: topMove.rank,
+                normalizedScore: topMove.normalizedScore,
+                comparedLegalMoveCount: rankedAnalysis.rankedMoves.length,
+                totalLegalMoveCount: legalMoveOutcomes.length,
+                unevaluatedLegalMoveCount
+              }
+            };
+          } else {
+            evidence.recommendationSupport = {
+              status: "supported",
+              reason: "partial-coverage",
+              supportedRecommendation: {
+                kind: "strongest-evaluated",
+                moveFingerprint: topMove.moveFingerprint,
+                moveLabel,
+                evaluatorRank: topMove.rank,
+                normalizedScore: topMove.normalizedScore,
+                comparedLegalMoveCount: rankedAnalysis.rankedMoves.length,
+                totalLegalMoveCount: legalMoveOutcomes.length,
+                unevaluatedLegalMoveCount
+              }
+            };
+          }
+        }
+      }
     } else if (legalMoveOutcomes.length > 0) {
       warnings.push({
         code: "no-ranked-analysis",
         message: "No ranked analysis was available for these legal outcomes."
       });
+      if (evidence.recommendationSupport === undefined) {
+        evidence.recommendationSupport = {
+          status: "not-supported",
+          reason: "missing-evaluator"
+        };
+      }
     }
 
     const stagedPriority = new Set(

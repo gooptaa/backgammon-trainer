@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ChatModel } from "@backgammon-trainer/ai-contracts";
+import type { PositionEvaluator } from "@backgammon-trainer/backgammon-analysis";
 
 import { buildServer } from "../src/app";
 import type { CoachProviderRuntime } from "../src/coachProvider";
+import type { EvaluatorProviderRuntime } from "../src/evaluatorProvider";
 
 const buildConfiguredRuntime = (): CoachProviderRuntime => {
   const model: ChatModel = {
@@ -42,7 +44,38 @@ const buildConfiguredRuntime = (): CoachProviderRuntime => {
 };
 
 const app = buildServer({
-  coachProviderRuntime: buildConfiguredRuntime()
+  coachProviderRuntime: buildConfiguredRuntime(),
+  evaluatorProviderRuntime: {
+    evaluator: {
+      evaluate: async (request) => {
+        return {
+          ok: true,
+          coverage: "complete",
+          scores: request.legalOutcomes.map(() => ({
+            moveFingerprint: "test-move",
+            normalizedScore: 1
+          })),
+          scoreScale: {
+            kind: "relative"
+          },
+          provenance: {
+            provider: "test-evaluator",
+            providerVersion: "1.0.0",
+            adapterVersion: "1.0.0",
+            settings: {}
+          },
+          warnings: []
+        };
+      }
+    } satisfies PositionEvaluator,
+    status: {
+      configured: true,
+      mode: "fixture",
+      providerFamily: "mock",
+      providerLabel: "test-evaluator",
+      message: "Configured"
+    }
+  } satisfies EvaluatorProviderRuntime
 });
 
 describe("server routes", () => {
@@ -142,6 +175,64 @@ describe("server routes", () => {
 
     expect(response.statusCode).toBe(413);
   });
+
+  it("returns non-secret evaluator status", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/evaluator/status"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: {
+        evaluatorProvider: {
+          configured: true,
+          providerFamily: "mock",
+          providerLabel: "test-evaluator"
+        }
+      }
+    });
+  });
+
+  it("accepts evaluator position requests", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/evaluator/evaluate-position",
+      payload: {
+        position: {
+          points: Object.fromEntries(
+            Array.from({ length: 24 }, (_, index) => [String(index + 1), null])
+          ),
+          bar: {
+            white: 0,
+            black: 0
+          },
+          borneOff: {
+            white: 0,
+            black: 0
+          }
+        },
+        player: "white",
+        dice: {
+          dice: [1, 2]
+        },
+        legalOutcomes: []
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: {
+        result: {
+          ok: true,
+          coverage: "complete",
+          provenance: {
+            provider: "test-evaluator"
+          }
+        }
+      }
+    });
+  });
 });
 
 describe("server route unconfigured provider mode", () => {
@@ -155,6 +246,16 @@ describe("server route unconfigured provider mode", () => {
         providerLabel: "none",
         model: null,
         message: "Disabled"
+      }
+    },
+    evaluatorProviderRuntime: {
+      evaluator: undefined,
+      status: {
+        configured: false,
+        mode: "none",
+        providerFamily: "none",
+        providerLabel: "none",
+        message: "Evaluator disabled"
       }
     }
   });
@@ -183,6 +284,41 @@ describe("server route unconfigured provider mode", () => {
       error: {
         code: "coach-provider-unconfigured",
         message: "Disabled"
+      }
+    });
+  });
+
+  it("returns 503 when evaluator is requested without configured provider", async () => {
+    const response = await unconfigured.inject({
+      method: "POST",
+      url: "/api/evaluator/evaluate-position",
+      payload: {
+        position: {
+          points: Object.fromEntries(
+            Array.from({ length: 24 }, (_, index) => [String(index + 1), null])
+          ),
+          bar: {
+            white: 0,
+            black: 0
+          },
+          borneOff: {
+            white: 0,
+            black: 0
+          }
+        },
+        player: "white",
+        dice: {
+          dice: [1, 2]
+        },
+        legalOutcomes: []
+      }
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      error: {
+        code: "evaluator-provider-unconfigured",
+        message: "Evaluator disabled"
       }
     });
   });

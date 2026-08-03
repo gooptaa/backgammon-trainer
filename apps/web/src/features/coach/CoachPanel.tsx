@@ -24,6 +24,8 @@ interface CoachPanelProps {
   readonly fixtureEnabled: boolean;
   readonly knowledgeRetriever?: CoachKnowledgeRetriever;
   readonly providerStatus?: CoachProviderStatus;
+  readonly evaluatorConfigured?: boolean;
+  readonly analysisPending?: boolean;
 }
 
 interface EvidenceRow {
@@ -129,7 +131,9 @@ export function CoachPanel({
   runtime,
   fixtureEnabled,
   knowledgeRetriever,
-  providerStatus
+  providerStatus,
+  evaluatorConfigured = false,
+  analysisPending = false
 }: CoachPanelProps): JSX.Element {
   const [conversation, setConversation] = useState(() =>
     createCoachConversation({ id: runtime.createId(), createdAt: runtime.now() })
@@ -153,9 +157,16 @@ export function CoachPanel({
 
   const contextLabel = useMemo(() => formatCoachContextLabel(context), [context]);
   const hasModel = model !== undefined;
+  const currentPositionAnalysisPending =
+    context.kind === "current-position" && evaluatorConfigured && analysisPending;
 
   const onSubmit = (): void => {
     if (pending) {
+      return;
+    }
+
+    if (currentPositionAnalysisPending) {
+      setFailure("Position analysis is still running. Submit once analysis is ready.");
       return;
     }
 
@@ -261,6 +272,11 @@ export function CoachPanel({
       <p className={styles.context} data-testid="coach-context-label">
         {contextLabel}
       </p>
+      {currentPositionAnalysisPending ? (
+        <p className={styles.status} data-testid="coach-analysis-pending-status" aria-live="polite">
+          Position analysis pending...
+        </p>
+      ) : null}
 
       <div className={styles.messages} aria-label="Coach conversation" data-testid="coach-messages">
         {conversation.messages.length === 0 ? (
@@ -299,7 +315,12 @@ export function CoachPanel({
           disabled={pending}
         />
         <div className={styles.actions}>
-          <button type="submit" disabled={pending || !hasModel || draft.trim().length === 0}>
+          <button
+            type="submit"
+            disabled={
+              pending || !hasModel || draft.trim().length === 0 || currentPositionAnalysisPending
+            }
+          >
             Send
           </button>
         </div>

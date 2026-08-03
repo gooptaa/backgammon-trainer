@@ -16,6 +16,16 @@ The server owns provider credentials and real provider protocol execution so bro
   - Invokes configured server-side chat model adapter.
   - Returns provider-neutral `ChatModelResult` payload.
 
+## Evaluator routes
+
+- `GET /api/evaluator/status`
+  - Returns non-secret evaluator provider status.
+- `POST /api/evaluator/evaluate-position`
+  - Accepts provider-neutral `EvaluatePositionRequest` payload.
+  - Validates bounded payload size and required top-level fields.
+  - Invokes configured server-side evaluator provider.
+  - Returns provider-neutral `EvaluatePositionResult` payload.
+
 ## Runtime provider modes
 
 Set `MODEL_PROVIDER` to one of:
@@ -34,6 +44,11 @@ Optional:
 
 - `OPENAI_COMPAT_TIMEOUT_MS` (default `15000`)
 - `OPENAI_COMPAT_PROVIDER_LABEL` (default `openai-compatible`)
+
+Evaluator mode is independent and controlled by `EVALUATOR_PROVIDER`:
+
+- `none`: evaluator requests are unavailable
+- `mock`: fixture evaluator mode for deterministic development/testing
 
 ## Security and privacy
 

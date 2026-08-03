@@ -69,6 +69,8 @@ No unintended package exports were found in this audit. Public surfaces are curr
 - No new workspace package exports were added.
 - Real OpenAI-compatible provider execution is implemented in server app internals, not package public APIs.
 - `@backgammon-trainer/ai-contracts` and `@backgammon-trainer/backgammon-coach` public contracts remain provider-neutral.
+- `@backgammon-trainer/backgammon-coach` evidence payload now includes recommendation-support authority metadata without introducing provider-specific coupling.
+- Evaluator server routes are app-internal and do not change workspace package export surfaces.
 
 ## Follow-up trigger
 

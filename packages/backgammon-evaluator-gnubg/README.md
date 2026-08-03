@@ -43,6 +43,13 @@ Why these exports are public:
 - Heuristic fallback scoring.
 - Verified default live checker-play command automation in this repository milestone.
 
+## Server-hosted integration note
+
+Current-position coaching consumes evaluator evidence through provider-neutral server routes.
+
+- Browser code does not import this package.
+- Server composition may choose this adapter in future non-fixture evaluator modes while preserving the same provider-neutral coaching contracts.
+
 ## Future Roadmap
 
 - Verified live command transcript capture against installed GNU versions.

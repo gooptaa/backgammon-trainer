@@ -45,3 +45,10 @@ Why these exports are public:
 - Additional evaluator adapters behind the same contract.
 - Broader score-scale and coverage diagnostics where justified.
 - Richer factual feature sets that remain deterministic and non-prescriptive.
+
+## Current-position coaching boundary
+
+This package does not decide coaching recommendation claims.
+
+- It provides deterministic legal-move outcomes and evaluator-attributed ranking data.
+- Recommendation-support decisions remain in `@backgammon-trainer/backgammon-coach` so this package stays factual and provider-neutral.

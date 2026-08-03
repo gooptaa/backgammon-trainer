@@ -38,6 +38,7 @@
 - [Text-first coaching ADR](adr/0007-text-first-provider-neutral-coaching.md)
 - [Curated knowledge retrieval ADR](adr/0008-curated-knowledge-retrieval-boundary.md)
 - [Trusted server real-provider boundary ADR](adr/0009-server-hosted-real-provider-boundary.md)
+- [Recommendation authority before generation ADR](adr/0010-recommendation-authority-before-generation.md)
 
 ## Roadmap
 

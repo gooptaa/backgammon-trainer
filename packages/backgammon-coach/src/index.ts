@@ -28,7 +28,9 @@ export {
   type BuildCoachEvidenceResult,
   type CoachEvidenceBundle,
   type CoachEvidenceBuildLimits,
+  type CoachRecommendationSupport,
   type CoachEvidenceWarning,
+  type CoachSupportedRecommendation,
   type CoachMoveEvidence
 } from "./evidence";
 

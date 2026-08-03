@@ -31,6 +31,14 @@ const normalizeProviderMode = (raw: string | undefined): "mock" | "openai-compat
   return "mock";
 };
 
+const normalizeEvaluatorProviderMode = (raw: string | undefined): "mock" | "none" => {
+  if (raw === "mock" || raw === "none") {
+    return raw;
+  }
+
+  return "none";
+};
+
 const normalizeBaseUrl = (raw: string | undefined): string | undefined => {
   if (raw === undefined) {
     return undefined;
@@ -48,6 +56,7 @@ export interface ServerConfig {
   readonly host: string;
   readonly port: number;
   readonly modelProvider: "mock" | "openai-compatible" | "none";
+  readonly evaluatorProvider: "mock" | "none";
   readonly openAiCompatible: {
     readonly baseUrl: string;
     readonly model: string | undefined;
@@ -61,6 +70,7 @@ export const serverConfig: ServerConfig = {
   host: process.env.SERVER_HOST ?? "0.0.0.0",
   port: parsePort(process.env.SERVER_PORT),
   modelProvider: normalizeProviderMode(process.env.MODEL_PROVIDER),
+  evaluatorProvider: normalizeEvaluatorProviderMode(process.env.EVALUATOR_PROVIDER),
   openAiCompatible: {
     baseUrl: normalizeBaseUrl(process.env.OPENAI_COMPAT_BASE_URL) ?? "https://api.openai.com/v1",
     model: process.env.OPENAI_COMPAT_MODEL?.trim() || undefined,

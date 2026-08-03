@@ -66,6 +66,13 @@ Authoritative source policy remains explicit:
 - curated knowledge for general instructional guidance only
 - model output is non-authoritative coaching text
 
+Current-position recommendation authority policy is explicit:
+
+- coach-domain evidence resolves recommendation support before model generation
+- evaluator ranking claims are allowed only when supported by supplied evaluator coverage/provenance
+- fixture evaluator provenance blocks authoritative strongest-move claims
+- missing evaluator evidence and non-decision states block strongest-move claims
+
 No package under `packages/` depends on React, Fastify, browser APIs, or vendor SDKs.
 
 GNU Backgammon process execution is a stricter runtime boundary:
@@ -171,6 +178,7 @@ Current web policy notes:
 - capture failures never roll back committed game moves
 - evaluator failures never block gameplay
 - GNU adapter is not imported into the browser sandbox
+- browser evaluator calls use provider-neutral server routes (`/api/evaluator/status`, `/api/evaluator/evaluate-position`)
 
 Session policy notes:
 

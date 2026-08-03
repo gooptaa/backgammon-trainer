@@ -41,6 +41,7 @@ This repository enforces architectural boundaries with lightweight checks in exi
 - Browser source must not import Node-only knowledge authoring helpers.
 - Real model-provider credentials and protocol execution remain in server runtime code.
 - Browser requests do not select arbitrary upstream provider destinations.
+- Browser evaluator requests use server routes; browser code does not import GNU adapter or Node process code.
 
 ## Validation workflow
 

@@ -66,6 +66,7 @@ Current knowledge boundaries:
 - authored markdown is canonical source, while generated TypeScript is the browser-safe delivery artifact
 - no runtime filesystem access is used in browser coaching flows
 - real provider execution (when configured) occurs in server runtime and does not change knowledge package responsibilities
+- recommendation-support authority is resolved in coach-domain evidence, not in curated knowledge entries
 
 Current analysis-capture boundaries:
 

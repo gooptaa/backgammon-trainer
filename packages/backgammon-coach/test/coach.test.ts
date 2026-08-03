@@ -423,6 +423,183 @@ describe("coach evidence and prompt", () => {
     expect(() => JSON.stringify(evidence.evidence)).not.toThrow();
   });
 
+  it("derives authoritative recommendation support only for complete non-fixture coverage", async () => {
+    const snapshot = buildSnapshot();
+    const legal = analyzeLegalMoveOutcomes(snapshot.gameState.position, "white", { dice: [1, 2] });
+    expect(legal.ok).toBe(true);
+    if (!legal.ok) {
+      return;
+    }
+
+    const ranked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "white",
+        dice: { dice: [1, 2] }
+      },
+      createFixturePositionEvaluator({ mode: "complete" })
+    );
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok || ranked.analysis.kind !== "evaluated") {
+      return;
+    }
+
+    const trustedRankedAnalysis = {
+      ...ranked.analysis,
+      provenance: {
+        ...ranked.analysis.provenance,
+        provider: "trusted-evaluator"
+      }
+    };
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: {
+        ...snapshot,
+        gameState: {
+          ...snapshot.gameState,
+          dice: { dice: [1, 2] }
+        }
+      },
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: legal,
+      rankedAnalysis: trustedRankedAnalysis
+    });
+
+    expect(context.kind).toBe("current-position");
+    if (context.kind !== "current-position") {
+      return;
+    }
+
+    const evidence = buildCoachEvidence({
+      question: "What should I do?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    });
+
+    expect(evidence.evidence.recommendationSupport?.status).toBe("supported");
+    expect(evidence.evidence.recommendationSupport?.reason).toBe("complete-trustworthy-coverage");
+    expect(evidence.evidence.recommendationSupport?.supportedRecommendation?.kind).toBe(
+      "authoritative"
+    );
+  });
+
+  it("derives strongest-evaluated recommendation support for partial trusted coverage", async () => {
+    const snapshot = buildSnapshot();
+    const legal = analyzeLegalMoveOutcomes(snapshot.gameState.position, "white", { dice: [1, 2] });
+    expect(legal.ok).toBe(true);
+    if (!legal.ok) {
+      return;
+    }
+
+    const ranked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "white",
+        dice: { dice: [1, 2] }
+      },
+      createFixturePositionEvaluator({ mode: "partial" })
+    );
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok || ranked.analysis.kind !== "evaluated") {
+      return;
+    }
+
+    const trustedRankedAnalysis = {
+      ...ranked.analysis,
+      provenance: {
+        ...ranked.analysis.provenance,
+        provider: "trusted-evaluator"
+      }
+    };
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: {
+        ...snapshot,
+        gameState: {
+          ...snapshot.gameState,
+          dice: { dice: [1, 2] }
+        }
+      },
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: legal,
+      rankedAnalysis: trustedRankedAnalysis
+    });
+
+    expect(context.kind).toBe("current-position");
+    if (context.kind !== "current-position") {
+      return;
+    }
+
+    const evidence = buildCoachEvidence({
+      question: "What is strongest among these?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    });
+
+    expect(evidence.evidence.recommendationSupport?.status).toBe("supported");
+    expect(evidence.evidence.recommendationSupport?.reason).toBe("partial-coverage");
+    expect(evidence.evidence.recommendationSupport?.supportedRecommendation?.kind).toBe(
+      "strongest-evaluated"
+    );
+  });
+
+  it("blocks authoritative recommendation support for fixture evaluator provenance", async () => {
+    const snapshot = buildSnapshot();
+    const legal = analyzeLegalMoveOutcomes(snapshot.gameState.position, "white", { dice: [1, 2] });
+    expect(legal.ok).toBe(true);
+    if (!legal.ok) {
+      return;
+    }
+
+    const ranked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "white",
+        dice: { dice: [1, 2] }
+      },
+      createFixturePositionEvaluator({ mode: "complete" })
+    );
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok) {
+      return;
+    }
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: {
+        ...snapshot,
+        gameState: {
+          ...snapshot.gameState,
+          dice: { dice: [1, 2] }
+        }
+      },
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: legal,
+      rankedAnalysis: ranked.analysis
+    });
+
+    expect(context.kind).toBe("current-position");
+    if (context.kind !== "current-position") {
+      return;
+    }
+
+    const evidence = buildCoachEvidence({
+      question: "Best move?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    });
+
+    expect(evidence.evidence.recommendationSupport).toEqual({
+      status: "not-supported",
+      reason: "fixture-evaluator"
+    });
+  });
+
   it("selects a clearly referenced legal move and records coverage details", () => {
     const snapshot = buildSnapshot();
     const legal = analyzeLegalMoveOutcomes(snapshot.gameState.position, "white", { dice: [1, 2] });
@@ -586,6 +763,54 @@ describe("coach evidence and prompt", () => {
     expect(request.systemInstruction).toContain("Do not invent legal moves");
     expect(JSON.stringify(request)).toContain("curatedKnowledge");
     expect(JSON.stringify(request)).not.toContain("apiKey");
+  });
+
+  it("instructs the model not to claim strongest move when evaluator evidence is missing", () => {
+    const snapshot = buildSnapshot();
+    const decisionSnapshot = {
+      ...snapshot,
+      gameState: {
+        ...snapshot.gameState,
+        dice: { dice: [1, 2] as const }
+      }
+    };
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: decisionSnapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: analyzeLegalMoveOutcomes(snapshot.gameState.position, "white", {
+        dice: [1, 2]
+      })
+    });
+
+    const conversation = createCoachConversation({ id: "conversation-1", createdAt: NOW });
+    const request = buildCoachModelRequest({
+      requestId: "request-2",
+      conversationId: "conversation-1",
+      userMessageId: "m2",
+      question: "What should I do?",
+      context,
+      conversation,
+      evidence: buildCoachEvidence({
+        question: "What should I do?",
+        context,
+        conversation
+      }).evidence,
+      knowledge: [],
+      responsePreferences: {
+        explanationLevel: "beginner",
+        verbosity: "normal"
+      }
+    });
+
+    const developerInstructions = request.developerInstructions ?? [];
+
+    expect(
+      developerInstructions.some((instruction) =>
+        instruction.includes("No trustworthy evaluator ranking is available")
+      )
+    ).toBe(true);
   });
 });
 

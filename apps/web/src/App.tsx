@@ -1921,6 +1921,8 @@ function App({
             context={coachContext}
             runtime={resolvedCoachRuntime}
             fixtureEnabled={coachFixtureEnabled}
+            evaluatorConfigured={moveEvaluator !== undefined}
+            analysisPending={moveEvaluationPending}
             {...(coachProviderStatus === undefined ? {} : { providerStatus: coachProviderStatus })}
             {...(coachModel === undefined ? {} : { model: coachModel })}
             {...(coachKnowledgeRetriever === undefined

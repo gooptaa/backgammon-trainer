@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import type { ChatModel } from "@backgammon-trainer/ai-contracts";
+import type { PositionEvaluator } from "@backgammon-trainer/backgammon-analysis";
 import { createFixturePositionEvaluator } from "@backgammon-trainer/backgammon-analysis/fixture";
 import { createFixtureChatModel } from "@backgammon-trainer/ai-contracts/fixture";
 
@@ -11,6 +12,10 @@ import {
   loadCoachProviderStatus,
   type CoachProviderStatus
 } from "./features/coach/serverChatModel";
+import {
+  createServerPositionEvaluator,
+  loadEvaluatorProviderStatus
+} from "./features/analysis-session/serverPositionEvaluator";
 
 registerSW({
   immediate: true
@@ -46,6 +51,7 @@ const resolveCoachMode = (): "fixture" | "server" | "none" => {
 
 interface CoachRuntimeBootstrap {
   readonly coachModel?: ChatModel;
+  readonly moveEvaluator?: PositionEvaluator;
   readonly coachFixtureEnabled: boolean;
   readonly coachProviderStatus?: CoachProviderStatus;
 }
@@ -88,6 +94,7 @@ const resolveCoachRuntimeBootstrap = async (): Promise<CoachRuntimeBootstrap> =>
 
   const apiBaseUrl = readEnvString(import.meta.env.VITE_API_BASE_URL) ?? "http://localhost:3001";
   const serverStatus = await loadCoachProviderStatus(apiBaseUrl);
+  const evaluatorStatus = await loadEvaluatorProviderStatus(apiBaseUrl);
 
   if (serverStatus === null) {
     return {
@@ -96,6 +103,13 @@ const resolveCoachRuntimeBootstrap = async (): Promise<CoachRuntimeBootstrap> =>
         providerLabel: "server-unavailable",
         modelLabel: "unresolved"
       }),
+      ...(evaluatorStatus?.configured
+        ? {
+            moveEvaluator: createServerPositionEvaluator({
+              apiBaseUrl
+            })
+          }
+        : {}),
       coachFixtureEnabled: false,
       coachProviderStatus: {
         configured: false,
@@ -115,6 +129,13 @@ const resolveCoachRuntimeBootstrap = async (): Promise<CoachRuntimeBootstrap> =>
             apiBaseUrl,
             providerLabel: serverStatus.providerLabel,
             modelLabel: serverStatus.model ?? "unknown-model"
+          })
+        }
+      : {}),
+    ...(evaluatorStatus?.configured
+      ? {
+          moveEvaluator: createServerPositionEvaluator({
+            apiBaseUrl
           })
         }
       : {}),
@@ -148,7 +169,10 @@ void resolveCoachRuntimeBootstrap().then((coachBootstrap) => {
         {...(coachBootstrap.coachProviderStatus === undefined
           ? {}
           : { coachProviderStatus: coachBootstrap.coachProviderStatus })}
-        {...(devFixtureEvaluator === undefined ? {} : { moveEvaluator: devFixtureEvaluator })}
+        {...(() => {
+          const evaluator = devFixtureEvaluator ?? coachBootstrap.moveEvaluator;
+          return evaluator === undefined ? {} : { moveEvaluator: evaluator };
+        })()}
       />
     </React.StrictMode>
   );

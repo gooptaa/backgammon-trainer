@@ -98,6 +98,22 @@ export const buildCoachModelRequest = (
       }
     }));
   const serializedEvidence = JSON.parse(JSON.stringify(request.evidence)) as JsonValue;
+  const recommendationSupport = request.evidence.recommendationSupport;
+
+  const recommendationInstruction =
+    recommendationSupport === undefined || recommendationSupport.status === "not-supported"
+      ? recommendationSupport?.reason === "fixture-evaluator"
+        ? "Fixture evaluator evidence is synthetic. Do not present any move as authoritative best play."
+        : recommendationSupport?.reason === "partial-coverage"
+          ? "Evaluator coverage is partial. You may describe the strongest evaluated move but must not claim it is definitively best among all legal moves."
+          : recommendationSupport?.reason === "no-legal-moves"
+            ? "No legal checker-play move exists in this state. Explain the state factually and do not invent a move recommendation."
+            : recommendationSupport?.reason === "non-decision-state"
+              ? "This is not an active checker-play decision state. Do not fabricate a recommendation."
+              : "No trustworthy evaluator ranking is available. Do not claim the strongest legal move is known."
+      : recommendationSupport.supportedRecommendation?.kind === "authoritative"
+        ? "A trustworthy complete-coverage evaluator recommendation is supplied. Lead with that legal move and explain tradeoffs without exaggerating close alternatives."
+        : "Only strongest-evaluated support is supplied from partial evaluator coverage. State the coverage caveat plainly before recommending it as strongest among evaluated moves.";
 
   return {
     requestId: request.requestId,
@@ -105,6 +121,8 @@ export const buildCoachModelRequest = (
       "You are a backgammon coach assistant. Answer the user question using only supplied evidence. Do not invent legal moves, board facts, evaluator scores, committed history, or long-term patterns.",
     developerInstructions: [
       "Treat engine-derived and deterministic analysis evidence as authoritative for board facts and legal move facts.",
+      "Treat evaluator ranking evidence as authoritative only when recommendation support explicitly says it is supported.",
+      recommendationInstruction,
       "Keep deterministic facts, evaluator-attributed evidence, and curated general guidance clearly separated.",
       "Curated knowledge is general instructional guidance and does not prove that any legal move is best in this position.",
       "Omitted legal move rows may still represent legal moves; do not describe omitted rows as illegal.",

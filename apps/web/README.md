@@ -11,6 +11,7 @@ The web app is a development sandbox for deterministic backgammon gameplay, fact
 - New game and imported lineage replacement start a fresh empty conversation.
 - Browser reload restores deterministic game snapshot but starts an empty conversation.
 - One pending coach request is allowed at a time; gameplay stays enabled while pending.
+- If a current-position evaluator is configured and analysis is still running, coach send is temporarily disabled and the panel shows `Position analysis pending...`.
 - Current coach requests use selected legal move evidence rather than a broad move dump when current-turn legal outcomes exist.
 - Current coach requests may include a small project-authored curated knowledge subset chosen deterministically from the question and trusted evidence.
 - Fixture warning is explicit: `Development fixture coach - responses are not strategic advice.`
@@ -24,6 +25,13 @@ The web app is a development sandbox for deterministic backgammon gameplay, fact
 - `VITE_COACH_MODEL_MODE=none`: no coach model configured in browser runtime.
 
 When server mode is active and configured, the Coach panel discloses provider identity/model and notes that bounded context/evidence/knowledge is sent to the configured provider.
+
+When server evaluator mode is configured, web evaluation uses:
+
+- `GET /api/evaluator/status`
+- `POST /api/evaluator/evaluate-position`
+
+This preserves browser/Node separation while allowing current-position ranked evidence to flow into coaching evidence.
 
 ## Current analysis capture behavior
 

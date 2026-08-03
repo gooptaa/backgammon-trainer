@@ -10,6 +10,7 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Resolve explicit coaching question context from application state.
 - Build bounded deterministic evidence bundles from trusted game and analysis data.
 - Select bounded question-relevant legal move evidence without introducing strategic verdicts.
+- Resolve recommendation-support authority from evaluator evidence before model generation.
 - Define knowledge-retriever boundary with no-op, fixture, and local curated-content implementations.
 - Build provider-neutral chat-model requests from conversation + evidence.
 - Orchestrate single-request coaching submission flow with explicit failure handling.
@@ -34,6 +35,7 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Context model + resolver (`resolveCoachQuestionContext`, `deriveCurrentTurnContext`).
 - Evidence builder (`buildCoachEvidence`) with bounded deterministic output.
 - Prompt builder (`buildCoachModelRequest`) for `ChatModel`.
+- Recommendation-support evidence (`recommendationSupport`) for current-position claims.
 - Knowledge interfaces (`CoachKnowledgeRetriever`) and local/fixture/no-op retrievers.
 - Submission orchestration (`submitCoachQuestion`) for host-layer integration.
 

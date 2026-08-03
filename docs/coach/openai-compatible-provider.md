@@ -15,6 +15,14 @@ Backgammon Trainer can now execute real non-streaming coach completions through 
 7. Provider-neutral `ChatModelResult`
 8. Coach conversation rendering with provider/model provenance
 
+Current-position evaluator path (same trusted server boundary):
+
+1. Browser legal outcomes generated from engine-authoritative state
+2. Browser sends provider-neutral evaluator request to `POST /api/evaluator/evaluate-position`
+3. Server evaluator provider returns provider-neutral `EvaluatePositionResult`
+4. Browser analysis pipeline derives ranked legal-move analysis and coverage
+5. Coach evidence resolves recommendation support before model generation
+
 ## Trusted execution boundary
 
 - Browser does not hold provider credentials.
@@ -54,6 +62,11 @@ Browser mode is controlled by `VITE_COACH_MODEL_MODE`:
 - `none`
 - `fixture`
 - `server`
+
+Evaluator server mode is controlled by `EVALUATOR_PROVIDER`:
+
+- `none`
+- `mock` (fixture evaluator)
 
 ## Compatibility surface
 

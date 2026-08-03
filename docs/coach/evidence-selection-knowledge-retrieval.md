@@ -23,6 +23,12 @@ Deterministic facts remain authoritative for board state, legal moves, committed
 
 Evaluator evidence may contribute rank, normalized score, loss from best, provenance, and coverage when available.
 
+Current-position evidence now also includes recommendation-support resolution before model generation:
+
+- supported authoritative recommendation (complete trustworthy evaluator coverage)
+- supported strongest-evaluated recommendation (partial evaluator coverage)
+- not-supported recommendation (fixture evaluator, missing evaluator, non-decision, or no-legal-move)
+
 Curated knowledge may explain general ideas such as hitting, point making, bar entry, or race-versus-contact. It is not authoritative for what is true in the current position.
 
 ## Package placement
@@ -176,6 +182,7 @@ Developer instructions explicitly tell the model that:
 - curated knowledge is general guidance only
 - omitted move rows may still be legal
 - insufficient evidence must be acknowledged rather than invented
+- evaluator ranking authority comes from supplied recommendation-support state, not model inference
 
 ## Fixture model behavior
 

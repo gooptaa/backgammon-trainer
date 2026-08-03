@@ -4,7 +4,7 @@ Backgammon Trainer is a mobile-first progressive web app project focused on help
 
 ## Repository status
 
-Milestone: **OpenAI-compatible real coach provider (server hosted)**
+Milestone: **Evidence-backed current-position coaching**
 
 Implemented now:
 
@@ -12,12 +12,17 @@ Implemented now:
 - factual analysis and evaluator-attributed ranked move evidence
 - analysis-session capture and reconciliation boundaries
 - text-first coach conversation orchestration with evidence version `2`
+- recommendation-support authority resolved before model generation for current-position coaching
 - curated project-authored knowledge retrieval and bounded evidence disclosure
 - provider-neutral chat model contracts in `@backgammon-trainer/ai-contracts`
 - trusted server-side coach provider execution with:
   - fixture mode
   - no-provider mode
   - OpenAI-compatible chat-completions adapter mode
+- trusted server-side evaluator execution with:
+  - fixture mode
+  - no-provider mode
+  - provider-neutral evaluator status and evaluate-position routes
 - web coach integration that preserves request snapshots, stale-response protection, and gameplay independence while requests are pending
 
 Not implemented yet:
