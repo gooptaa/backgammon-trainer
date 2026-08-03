@@ -55,6 +55,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BackgammonBoard } from "./features/board/BackgammonBoard";
 import { AnalysisSessionPanel } from "./features/analysis-session/AnalysisSessionPanel";
 import { CoachPanel } from "./features/coach/CoachPanel";
+import type { CoachProviderStatus } from "./features/coach/serverChatModel";
 import {
   captureCommittedTurnAnalysis,
   createFixtureAnalysisSessionMetadata,
@@ -430,6 +431,7 @@ interface AppProps {
   coachRuntime?: CoachRuntime;
   coachFixtureEnabled?: boolean;
   coachKnowledgeRetriever?: CoachKnowledgeRetriever;
+  coachProviderStatus?: CoachProviderStatus;
 }
 
 type InspectionView = "before" | "after";
@@ -466,7 +468,8 @@ function App({
   coachModel,
   coachRuntime,
   coachFixtureEnabled = false,
-  coachKnowledgeRetriever
+  coachKnowledgeRetriever,
+  coachProviderStatus
 }: AppProps): JSX.Element {
   const snapshotStorage = useMemo(
     () => gameStorage ?? createLocalGameStorage(DEFAULT_GAME_STORAGE_KEY),
@@ -1918,6 +1921,7 @@ function App({
             context={coachContext}
             runtime={resolvedCoachRuntime}
             fixtureEnabled={coachFixtureEnabled}
+            {...(coachProviderStatus === undefined ? {} : { providerStatus: coachProviderStatus })}
             {...(coachModel === undefined ? {} : { model: coachModel })}
             {...(coachKnowledgeRetriever === undefined
               ? {}

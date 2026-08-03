@@ -52,6 +52,13 @@
   font-size: 0.9rem;
 }
 
+.modelMeta {
+  display: block;
+  margin-top: 0.35rem;
+  color: #445a6a;
+  font-size: 0.78rem;
+}
+
 .userLabel,
 .coachLabel {
   display: inline-block;

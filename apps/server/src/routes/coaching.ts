@@ -1,70 +1,106 @@
 import type { FastifyPluginAsync } from "fastify";
+import type { ChatModel, ChatModelRequest } from "@backgammon-trainer/ai-contracts";
 
-import { MockModelAdapter } from "../mockAdapter";
+import type { CoachProviderStatus } from "../coachProvider";
 
-const coachingBodySchema = {
+const MAX_COACH_REQUEST_BYTES = 120_000;
+
+const completionBodySchema = {
   type: "object",
-  required: ["sessionId", "mode", "moveNotation"],
+  required: ["requestId", "systemInstruction", "messages"],
   additionalProperties: false,
   properties: {
-    sessionId: { type: "string", minLength: 1 },
-    mode: {
-      type: "string",
-      enum: ["critique", "hint", "explain-candidates"]
+    requestId: { type: "string", minLength: 1, maxLength: 128 },
+    systemInstruction: { type: "string", minLength: 1, maxLength: 5000 },
+    developerInstructions: {
+      type: "array",
+      maxItems: 24,
+      items: {
+        type: "string",
+        maxLength: 2000
+      }
     },
-    moveNotation: { type: "string", minLength: 1 },
-    positionId: { type: "string" }
+    messages: {
+      type: "array",
+      minItems: 1,
+      maxItems: 24,
+      items: {
+        type: "object",
+        required: ["role", "text"],
+        additionalProperties: false,
+        properties: {
+          role: {
+            type: "string",
+            enum: ["system", "developer", "user", "assistant"]
+          },
+          text: {
+            type: "string",
+            minLength: 1,
+            maxLength: 4000
+          }
+        }
+      }
+    },
+    evidence: {},
+    settings: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        temperature: { type: "number", minimum: 0, maximum: 2 },
+        maxOutputChars: { type: "number", minimum: 1, maximum: 12000 }
+      }
+    }
   }
 } as const;
 
-interface CoachingBody {
-  sessionId: string;
-  mode: "critique" | "hint" | "explain-candidates";
-  moveNotation: string;
-  positionId?: string;
-}
+const coachingRoutes: FastifyPluginAsync<{
+  coachModel: ChatModel | undefined;
+  coachProviderStatus: CoachProviderStatus;
+}> = async (app, options) => {
+  app.get("/api/coach/status", async (_request, reply) => {
+    return reply.send({
+      data: {
+        coachProvider: options.coachProviderStatus
+      }
+    });
+  });
 
-const coachingRoutes: FastifyPluginAsync = async (app) => {
-  const adapter = new MockModelAdapter();
-
-  app.post<{ Body: CoachingBody }>(
-    "/api/coaching",
+  app.post<{ Body: ChatModelRequest }>(
+    "/api/coach/complete",
     {
       schema: {
-        body: coachingBodySchema
-      }
+        body: completionBodySchema
+      },
+      bodyLimit: MAX_COACH_REQUEST_BYTES
     },
     async (request, reply) => {
-      const response = await adapter.complete({
-        requestId: request.body.sessionId,
-        systemInstruction: "Server fixture coaching endpoint.",
-        developerInstructions: [
-          "Return concise fixture output and never present strategic authority."
-        ],
-        messages: [
-          {
-            role: "user",
-            text: `${request.body.mode}: ${request.body.moveNotation}`
+      const payloadBytes = Buffer.byteLength(JSON.stringify(request.body), "utf8");
+      if (payloadBytes > MAX_COACH_REQUEST_BYTES) {
+        return reply.code(413).send({
+          error: {
+            code: "payload-too-large",
+            message: "Coach request payload is too large."
           }
-        ],
-        evidence: {
-          positionId: request.body.positionId ?? "placeholder-position"
-        }
-      });
+        });
+      }
+
+      if (options.coachModel === undefined) {
+        return reply.code(503).send({
+          error: {
+            code: "coach-provider-unconfigured",
+            message: options.coachProviderStatus.message
+          }
+        });
+      }
+
+      const result = await options.coachModel.complete(request.body);
 
       return reply.send({
         data: {
-          mock: true,
-          positionId: request.body.positionId ?? "placeholder-position",
-          moveNotation: request.body.moveNotation,
-          coaching: response,
-          adapter: {
-            name: adapter.name,
-            streamingReady: false
-          }
+          result
         },
         meta: {
-          mock: true
+          requestId: request.body.requestId
         }
       });
     }

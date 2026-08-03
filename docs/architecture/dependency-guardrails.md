@@ -39,6 +39,8 @@ This repository enforces architectural boundaries with lightweight checks in exi
 - Browser source (`apps/web/src`) must not import `node:*` modules.
 - Browser source must not import GNU adapter root/node/testing subpaths.
 - Browser source must not import Node-only knowledge authoring helpers.
+- Real model-provider credentials and protocol execution remain in server runtime code.
+- Browser requests do not select arbitrary upstream provider destinations.
 
 ## Validation workflow
 

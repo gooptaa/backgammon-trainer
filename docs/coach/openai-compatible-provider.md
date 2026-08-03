@@ -1,0 +1,82 @@
+# OpenAI-Compatible Real Coach Provider
+
+## Capability
+
+Backgammon Trainer can now execute real non-streaming coach completions through a trusted server-side OpenAI-compatible adapter while preserving provider-neutral coach-domain contracts.
+
+## Stable pipeline
+
+1. Board + conversation state in web app
+2. Context resolution in `@backgammon-trainer/backgammon-coach`
+3. Deterministic evidence selection (v2) + curated knowledge retrieval
+4. Provider-neutral `ChatModelRequest`
+5. Server route `POST /api/coach/complete`
+6. OpenAI-compatible adapter (`/chat/completions`)
+7. Provider-neutral `ChatModelResult`
+8. Coach conversation rendering with provider/model provenance
+
+## Trusted execution boundary
+
+- Browser does not hold provider credentials.
+- Server owns provider endpoint/model/key configuration.
+- Browser does not send arbitrary upstream provider URLs.
+- Provider-specific request/response parsing stays in server adapter internals.
+
+## Runtime modes
+
+- `MODEL_PROVIDER=none`: no provider configured, coach send unavailable.
+- `MODEL_PROVIDER=mock`: fixture adapter mode.
+- `MODEL_PROVIDER=openai-compatible`: real provider mode.
+
+Browser mode is controlled by `VITE_COACH_MODEL_MODE`:
+
+- `none`
+- `fixture`
+- `server`
+
+## Compatibility surface
+
+Implemented now:
+
+- OpenAI-compatible `POST /chat/completions`
+- text output extraction from first choice
+- usage mapping (`prompt_tokens`, `completion_tokens`, `total_tokens`)
+- non-streaming request/response only
+
+Not claimed:
+
+- streaming
+- tool calling
+- multimodal/audio/image generation
+- arbitrary provider-specific extensions
+
+## Error mapping
+
+Provider/transport failures are normalized to provider-neutral `ChatModelResult` failures:
+
+- `unavailable`
+- `authentication-failed`
+- `rate-limited`
+- `timeout`
+- `provider-failed`
+- `invalid-response`
+
+## Privacy and transmitted context
+
+In real provider mode, requests may include:
+
+- user question
+- bounded recent conversation messages
+- deterministic evidence bundle
+- curated knowledge excerpts
+
+Requests do not include:
+
+- provider credentials
+- browser storage contents
+- unrelated app debug state
+- cross-game learner profile data
+
+## Extension path
+
+Future providers can be added by composing additional server-side adapters behind the same provider-neutral route and `ChatModel` contract.

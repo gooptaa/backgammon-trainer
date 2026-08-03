@@ -238,27 +238,33 @@ Conversation/coaching data is not persisted to:
 
 Conversation persistence remains a separate future milestone.
 
-## BYOM boundary and unresolved security strategy
+## BYOM boundary
 
-This milestone prepares BYOM through `ChatModel` and `backgammon-coach` contracts only.
+Current implementation keeps `ChatModel` and `backgammon-coach` contracts provider-neutral while executing real provider calls behind trusted server routes.
 
-Not implemented:
+Implemented:
 
-- OpenAI/Anthropic/Google/OpenRouter/local adapters
-- API-key forms
-- OAuth/SSO
-- credential storage
+- server-hosted OpenAI-compatible adapter (`/chat/completions` protocol slice)
+- explicit fixture, real, and unconfigured runtime modes
+- non-secret provider status disclosure to browser
 
-Credential and trust strategy is intentionally deferred to a dedicated security milestone.
+Still not implemented:
+
+- browser credential entry
+- OAuth/SSO or account-linked credential storage
+- per-user provider selection
+- provider comparison/fallback routing
 
 ## Server impact decision
 
 Decision for this milestone:
 
-- web uses injected fixture `ChatModel` directly for development/tests
-- existing server mock coaching endpoint is retained but not required by core coach-domain tests
-
-No real provider calls were added.
+- server now exposes provider-neutral coach routes:
+  - `GET /api/coach/status`
+  - `POST /api/coach/complete`
+- server owns real provider execution and credentials
+- browser uses provider-neutral server client adapter for real mode
+- fixture chat model remains available for deterministic local development/tests
 
 ## Known limitations
 
@@ -267,9 +273,10 @@ No real provider calls were added.
 - no streaming
 - no semantic retrieval
 - no cross-game learning/habit inference
+- OpenAI-compatible support is intentionally narrow (non-streaming text completion only)
 
 ## Next milestone
 
 Recommended next step:
 
-- add secure server-hosted BYOM adapter boundary with explicit credential handling and policy controls while preserving current provider-neutral coach contracts.
+- add additional provider adapters (Anthropic/Google/local hosts) behind the same server boundary without changing coach-domain contracts.

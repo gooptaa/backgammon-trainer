@@ -255,4 +255,4 @@ The following remain stable when that happens:
 - no strategic verdict generation
 - no long-term habit analysis
 - no semantic ranking
-- no provider adapters or streaming
+- real provider support is currently one server-hosted OpenAI-compatible non-streaming text adapter only

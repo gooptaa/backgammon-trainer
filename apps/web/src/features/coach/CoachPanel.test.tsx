@@ -131,6 +131,29 @@ describe("CoachPanel", () => {
     expect(screen.getByTestId("coach-fixture-warning")).toBeInTheDocument();
   });
 
+  it("shows configured provider status and transparency note", () => {
+    render(
+      <CoachPanel
+        lineageKey="game-1"
+        context={currentContext}
+        runtime={runtime}
+        model={createFixtureChatModel()}
+        fixtureEnabled={false}
+        providerStatus={{
+          configured: true,
+          mode: "production",
+          providerFamily: "openai-compatible",
+          providerLabel: "openai-compatible",
+          model: "gpt-test",
+          message: "Configured"
+        }}
+      />
+    );
+
+    expect(screen.getByTestId("coach-provider-status")).toHaveTextContent("gpt-test");
+    expect(screen.getByTestId("coach-provider-transparency")).toBeInTheDocument();
+  });
+
   it("displays no-model message and disables send", () => {
     render(
       <CoachPanel
@@ -181,6 +204,8 @@ describe("CoachPanel", () => {
     await waitFor(() => {
       expect(screen.getByText(/Fixture coach response/)).toBeInTheDocument();
     });
+
+    expect(screen.getByText(/via fixture-coach/)).toBeInTheDocument();
   });
 
   it("shows pending state and prevents duplicate send", async () => {

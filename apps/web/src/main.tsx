@@ -1,10 +1,16 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
+import type { ChatModel } from "@backgammon-trainer/ai-contracts";
 import { createFixturePositionEvaluator } from "@backgammon-trainer/backgammon-analysis/fixture";
 import { createFixtureChatModel } from "@backgammon-trainer/ai-contracts/fixture";
 
 import App from "./App";
+import {
+  createServerCoachChatModel,
+  loadCoachProviderStatus,
+  type CoachProviderStatus
+} from "./features/coach/serverChatModel";
 
 registerSW({
   immediate: true
@@ -23,13 +29,99 @@ const devAnalysisCaptureRuntime = {
   now: () => new Date().toISOString()
 };
 
-const devFixtureCoachModel = import.meta.env.DEV
-  ? createFixtureChatModel({
-      mode: "success",
-      responseText:
-        "Fixture coach response. This response is development fixture output and not strategic advice."
-    })
-  : undefined;
+const defaultCoachMode = import.meta.env.DEV ? "fixture" : "server";
+
+const readEnvString = (value: unknown): string | undefined => {
+  return typeof value === "string" ? value : undefined;
+};
+
+const resolveCoachMode = (): "fixture" | "server" | "none" => {
+  const configured = readEnvString(import.meta.env.VITE_COACH_MODEL_MODE)?.trim();
+  if (configured === "fixture" || configured === "server" || configured === "none") {
+    return configured;
+  }
+
+  return defaultCoachMode;
+};
+
+interface CoachRuntimeBootstrap {
+  readonly coachModel?: ChatModel;
+  readonly coachFixtureEnabled: boolean;
+  readonly coachProviderStatus?: CoachProviderStatus;
+}
+
+const resolveCoachRuntimeBootstrap = async (): Promise<CoachRuntimeBootstrap> => {
+  const mode = resolveCoachMode();
+
+  if (mode === "none") {
+    return {
+      coachFixtureEnabled: false,
+      coachProviderStatus: {
+        configured: false,
+        mode: "none",
+        providerFamily: "none",
+        providerLabel: "none",
+        model: null,
+        message: "Coach provider is disabled in browser configuration."
+      }
+    };
+  }
+
+  if (mode === "fixture") {
+    return {
+      coachModel: createFixtureChatModel({
+        mode: "success",
+        responseText:
+          "Fixture coach response. This response is development fixture output and not strategic advice."
+      }),
+      coachFixtureEnabled: true,
+      coachProviderStatus: {
+        configured: true,
+        mode: "fixture",
+        providerFamily: "mock",
+        providerLabel: "browser-fixture",
+        model: "fixture-text-v1",
+        message: "Development fixture coach is active in this browser build."
+      }
+    };
+  }
+
+  const apiBaseUrl = readEnvString(import.meta.env.VITE_API_BASE_URL) ?? "http://localhost:3001";
+  const serverStatus = await loadCoachProviderStatus(apiBaseUrl);
+
+  if (serverStatus === null) {
+    return {
+      coachModel: createServerCoachChatModel({
+        apiBaseUrl,
+        providerLabel: "server-unavailable",
+        modelLabel: "unresolved"
+      }),
+      coachFixtureEnabled: false,
+      coachProviderStatus: {
+        configured: false,
+        mode: "production",
+        providerFamily: "openai-compatible",
+        providerLabel: "server-unavailable",
+        model: null,
+        message: "Unable to load coach provider status from server."
+      }
+    };
+  }
+
+  return {
+    ...(serverStatus.configured
+      ? {
+          coachModel: createServerCoachChatModel({
+            apiBaseUrl,
+            providerLabel: serverStatus.providerLabel,
+            modelLabel: serverStatus.model ?? "unknown-model"
+          })
+        }
+      : {}),
+    coachFixtureEnabled: serverStatus.mode === "fixture",
+    coachProviderStatus: serverStatus
+  };
+};
 
 const devAnalysisCaptureMetadata = {
   analysisFormat: "ranked-legal-move-analysis",
@@ -42,15 +134,22 @@ const devAnalysisCaptureMetadata = {
   } as const
 };
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App
-      analysisCaptureEnabled={import.meta.env.DEV}
-      analysisCaptureRuntime={devAnalysisCaptureRuntime}
-      analysisCaptureMetadata={devAnalysisCaptureMetadata}
-      coachFixtureEnabled={devFixtureCoachModel !== undefined}
-      {...(devFixtureCoachModel === undefined ? {} : { coachModel: devFixtureCoachModel })}
-      {...(devFixtureEvaluator === undefined ? {} : { moveEvaluator: devFixtureEvaluator })}
-    />
-  </React.StrictMode>
-);
+void resolveCoachRuntimeBootstrap().then((coachBootstrap) => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <App
+        analysisCaptureEnabled={import.meta.env.DEV}
+        analysisCaptureRuntime={devAnalysisCaptureRuntime}
+        analysisCaptureMetadata={devAnalysisCaptureMetadata}
+        coachFixtureEnabled={coachBootstrap.coachFixtureEnabled}
+        {...(coachBootstrap.coachModel === undefined
+          ? {}
+          : { coachModel: coachBootstrap.coachModel })}
+        {...(coachBootstrap.coachProviderStatus === undefined
+          ? {}
+          : { coachProviderStatus: coachBootstrap.coachProviderStatus })}
+        {...(devFixtureEvaluator === undefined ? {} : { moveEvaluator: devFixtureEvaluator })}
+      />
+    </React.StrictMode>
+  );
+});

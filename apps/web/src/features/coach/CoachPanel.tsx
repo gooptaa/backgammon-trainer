@@ -12,6 +12,7 @@ import {
   type CoachQuestionContext,
   type CoachRuntime
 } from "@backgammon-trainer/backgammon-coach";
+import type { CoachProviderStatus } from "./serverChatModel";
 
 import styles from "./CoachPanel.module.css";
 
@@ -22,6 +23,7 @@ interface CoachPanelProps {
   readonly runtime: CoachRuntime;
   readonly fixtureEnabled: boolean;
   readonly knowledgeRetriever?: CoachKnowledgeRetriever;
+  readonly providerStatus?: CoachProviderStatus;
 }
 
 interface EvidenceRow {
@@ -32,8 +34,17 @@ interface EvidenceRow {
   readonly knowledgeWarning?: string;
 }
 
-const toFailureMessage = (reason: string): string => {
+const toFailureMessage = (reason: string, providerMessage?: string): string => {
+  const normalizedProviderMessage = providerMessage?.toLowerCase() ?? "";
+
   if (reason === "unavailable") {
+    if (
+      normalizedProviderMessage.includes("config") ||
+      normalizedProviderMessage.includes("disabled")
+    ) {
+      return "Coach provider is not configured.";
+    }
+
     return "Coach unavailable. Try again.";
   }
 
@@ -117,7 +128,8 @@ export function CoachPanel({
   model,
   runtime,
   fixtureEnabled,
-  knowledgeRetriever
+  knowledgeRetriever,
+  providerStatus
 }: CoachPanelProps): JSX.Element {
   const [conversation, setConversation] = useState(() =>
     createCoachConversation({ id: runtime.createId(), createdAt: runtime.now() })
@@ -176,7 +188,7 @@ export function CoachPanel({
         if (!result.ok) {
           setConversation(result.conversation);
           if (result.response?.ok === false) {
-            setFailure(toFailureMessage(result.response.reason));
+            setFailure(toFailureMessage(result.response.reason, result.response.message));
           } else {
             setFailure(result.message);
           }
@@ -233,6 +245,19 @@ export function CoachPanel({
           No coach model configured.
         </p>
       ) : null}
+      {providerStatus !== undefined ? (
+        <p className={styles.context} data-testid="coach-provider-status">
+          Coach provider: {providerStatus.providerLabel}
+          {providerStatus.model === null ? "" : ` (${providerStatus.model})`}
+          {providerStatus.configured ? "" : " - not configured"}
+        </p>
+      ) : null}
+      {providerStatus?.mode === "production" && providerStatus.configured ? (
+        <p className={styles.status} data-testid="coach-provider-transparency">
+          Asking the coach sends bounded conversation context, deterministic evidence, and curated
+          knowledge excerpts to the configured provider.
+        </p>
+      ) : null}
       <p className={styles.context} data-testid="coach-context-label">
         {contextLabel}
       </p>
@@ -247,6 +272,11 @@ export function CoachPanel({
                 {message.role === "user" ? "You" : "Coach"}
               </span>
               {message.text}
+              {message.role === "coach" && message.model !== undefined ? (
+                <span className={styles.modelMeta}>
+                  via {message.model.provider} / {message.model.model}
+                </span>
+              ) : null}
             </p>
           ))
         )}

@@ -1,6 +1,6 @@
 # Public API Audit
 
-Date: 2026-08-03
+Date: 2026-08-03 (real provider milestone)
 
 Scope: workspace packages under `packages/*`.
 
@@ -66,9 +66,9 @@ No unintended package exports were found in this audit. Public surfaces are curr
 
 ## Changes made in this milestone
 
-- Added `@backgammon-trainer/backgammon-knowledge` root export.
-- `@backgammon-trainer/backgammon-coach` root export added local curated retriever and richer knowledge metadata types.
-- Guardrails were strengthened through architecture checks, lint restrictions, and explicit curated-knowledge validation.
+- No new workspace package exports were added.
+- Real OpenAI-compatible provider execution is implemented in server app internals, not package public APIs.
+- `@backgammon-trainer/ai-contracts` and `@backgammon-trainer/backgammon-coach` public contracts remain provider-neutral.
 
 ## Follow-up trigger
 

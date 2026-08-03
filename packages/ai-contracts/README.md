@@ -39,7 +39,7 @@ Why these exports are public:
 
 ## Future Roadmap
 
-- Preserve provider neutrality while adding provider adapters in host layers.
+- Preserve provider neutrality while host layers add provider adapters (current real slice: server-hosted OpenAI-compatible adapter).
 - Add optional streaming and tool-calling contracts in a dedicated milestone.
 
 ## Fixture model note

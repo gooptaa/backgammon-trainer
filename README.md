@@ -4,26 +4,29 @@ Backgammon Trainer is a mobile-first progressive web app project focused on help
 
 ## Repository status
 
-Milestone: **Foundation only**
+Milestone: **OpenAI-compatible real coach provider (server hosted)**
 
 Implemented now:
 
-- pnpm workspace monorepo with strict TypeScript
-- minimal React + Vite PWA shell
-- small Fastify server with mock coaching endpoint
-- provider-neutral AI contracts package
-- deterministic domain types package (no game engine yet)
-- baseline unit/component/server/e2e tests
-- lint/format/typecheck/build validation and CI
+- deterministic gameplay foundation (engine authority, legal moves, committed turn history, snapshot versioning)
+- factual analysis and evaluator-attributed ranked move evidence
+- analysis-session capture and reconciliation boundaries
+- text-first coach conversation orchestration with evidence version `2`
+- curated project-authored knowledge retrieval and bounded evidence disclosure
+- provider-neutral chat model contracts in `@backgammon-trainer/ai-contracts`
+- trusted server-side coach provider execution with:
+  - fixture mode
+  - no-provider mode
+  - OpenAI-compatible chat-completions adapter mode
+- web coach integration that preserves request snapshots, stale-response protection, and gameplay independence while requests are pending
 
 Not implemented yet:
 
-- complete board rendering
-- legal move generation/validation
-- checker movement and animations
-- game replay workflows
-- real LLM adapters
-- authentication/persistence/production integrations
+- streaming/tool-calling/multimodal provider features
+- browser credential entry or per-user credential storage
+- provider comparison/fallback routing
+- semantic retrieval/embeddings/vector search
+- conversation persistence and cross-game learner modeling
 
 ## Prerequisites
 
@@ -100,7 +103,9 @@ pnpm check
 2. Keep server secrets server-side only.
 3. Any `VITE_*` variable is bundled into browser code and should be treated as public.
 
-Current local run does **not** require real provider credentials.
+Current local run can use fixture mode without real provider credentials.
+
+To run with a real provider, configure server-side values from `.env.example` and set browser mode to `VITE_COACH_MODEL_MODE=server`.
 
 ## PWA testing instructions
 

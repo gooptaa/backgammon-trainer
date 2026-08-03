@@ -47,6 +47,6 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 
 ## Future Roadmap
 
-- Add server-hosted adapters using the same `ChatModel` contract.
+- Add additional server-hosted adapters using the same `ChatModel` contract (first OpenAI-compatible slice is now implemented in `apps/server`).
 - Add independent conversation persistence boundary.
 - Add richer knowledge retrieval and response-quality controls.

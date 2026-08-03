@@ -17,6 +17,14 @@ The web app is a development sandbox for deterministic backgammon gameplay, fact
 - No microphone, voice capture, speech synthesis, or audio-agent behavior is implemented.
 - Coach failures are concise and non-fatal; gameplay and deterministic analysis remain available.
 
+## Coach runtime modes
+
+- `VITE_COACH_MODEL_MODE=fixture`: browser fixture model for deterministic local development.
+- `VITE_COACH_MODEL_MODE=server`: provider-neutral server client (`/api/coach/status`, `/api/coach/complete`).
+- `VITE_COACH_MODEL_MODE=none`: no coach model configured in browser runtime.
+
+When server mode is active and configured, the Coach panel discloses provider identity/model and notes that bounded context/evidence/knowledge is sent to the configured provider.
+
 ## Current analysis capture behavior
 
 This milestone adds development-only in-memory `AnalysisSession` capture.

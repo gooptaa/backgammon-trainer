@@ -55,6 +55,7 @@ Text coach pipeline boundary is:
 - deterministic evidence bundle generation with selected legal move rows
 - optional replaceable knowledge retrieval boundary backed by local curated corpus in the current milestone
 - provider-neutral `ChatModel` request/response
+- trusted server execution boundary for real provider adapters
 - text coach UI response rendering
 
 Authoritative source policy remains explicit:
@@ -219,7 +220,9 @@ This model supports future replay, serialization, and portability without coupli
 
 ## Why credentials require a server boundary
 
-Any variable bundled by Vite into client code is public. Provider keys and model credentials must therefore remain server-only. The server mediates model calls, applies timeouts/retries later, and shields secrets from the browser.
+Any variable bundled by Vite into client code is public. Provider keys and model credentials must therefore remain server-only. The server mediates model calls, applies timeout controls, maps provider/transport failures to provider-neutral categories, and shields secrets from the browser.
+
+Current real-provider slice uses OpenAI-compatible chat-completions protocol through trusted server configuration. Browser clients cannot supply arbitrary upstream provider URLs.
 
 ## Why provider-neutral AI contracts
 
