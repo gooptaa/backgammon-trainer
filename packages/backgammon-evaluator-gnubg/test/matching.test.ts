@@ -106,7 +106,10 @@ describe("GNU move matching", () => {
 
   it("matches collapsed notation when GNU combines multiple die-steps into one token", () => {
     const parsed = parseGnuBgMoveNotation("8/5", "white");
-    const outcomes = [createOutcome(WHITE_ORDINARY_MOVE), createOutcome(WHITE_REVERSED_ORDINARY_MOVE)];
+    const outcomes = [
+      createOutcome(WHITE_ORDINARY_MOVE),
+      createOutcome(WHITE_REVERSED_ORDINARY_MOVE)
+    ];
 
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) {

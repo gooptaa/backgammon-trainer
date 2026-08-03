@@ -4,11 +4,13 @@ Date: 2026-08-03 17:06 (local)
 Milestone: Real GNU Evaluator Integration
 
 ## Scope and objective
+
 - Integrate a real GNU Backgammon evaluator path through existing provider-neutral architecture.
 - Keep recommendation authority in analysis/coach layers; evaluator remains factual scorer only.
 - Keep browser runtime free of GNU adapter and server-only process/executable concerns.
 
 ## Prework closure reference
+
 - Prework milestone commit already present before this work:
   - `89ac078e987b2855b01b6775ff3764b26b4bb947`
   - `chore: add local environment integration`
@@ -16,6 +18,7 @@ Milestone: Real GNU Evaluator Integration
   - `89ac078e987b2855b01b6775ff3764b26b4bb947`
 
 ## Implementation summary
+
 - GNU evaluator package:
   - Added default real invocation factory in evaluator adapter using a python bridge request path.
   - Added `pythonBridgeScriptPath` option and default bridge script resolution.
@@ -41,6 +44,7 @@ Milestone: Real GNU Evaluator Integration
   - Preserved explicit fixture warning where appropriate.
 
 ## Docs and architecture updates
+
 - Updated env/config and usage docs:
   - `.env.example`
   - `README.md`
@@ -57,6 +61,7 @@ Milestone: Real GNU Evaluator Integration
   - `docs/adr/0011-real-evaluator-server-boundary.md`
 
 ## Test and validation matrix
+
 - Focused package/app runs:
   - `CI=1 pnpm --filter @backgammon-trainer/backgammon-engine test`
   - `CI=1 pnpm --filter @backgammon-trainer/backgammon-analysis test`
@@ -79,22 +84,27 @@ Milestone: Real GNU Evaluator Integration
   - Browser artifact scan for server-only key leakage in `apps/web/dist` and `apps/web/dev-dist`.
 
 Result summary:
+
 - All required test/check/build gates passed after formatting and type/lint fixes.
 - GNU smoke route integration executed against isolated gnubg-mode server and returned unavailable status because GNU Backgammon executable is not installed in this environment.
 
 ## Deviations from initial plan
+
 - `pnpm smoke:gnubg` at root initially failed because the live server evaluator mode was `none`; smoke script expects `gnubg` mode.
 - Smoke was then rerun against an isolated server started with `EVALUATOR_PROVIDER=gnubg` and confirmed environment-level unavailability of GNU executable.
 
 ## Limitations and unresolved items
+
 - Real checker-play execution remains environment-dependent on local GNU Backgammon installation with python bridge support.
 - In this environment, real GNU execution could not be completed end-to-end due to missing executable.
 
 ## Deferred capabilities
+
 - Additional GNU analyzer tuning/profile flags and richer multi-ply controls were not introduced in this milestone.
 - Optional stronger smoke automation that self-bootstraps server mode is deferred.
 
 ## Files touched for this milestone
+
 - `apps/server/scripts/gnubgSmoke.mjs`
 - `apps/server/src/config.ts`
 - `apps/server/src/evaluatorProvider.ts`
