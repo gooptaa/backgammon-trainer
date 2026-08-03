@@ -15,6 +15,10 @@
 - [Legal move outcomes](analysis/legal-move-outcomes.md)
 - [Position features contract](analysis/position-features.md)
 
+## Coach
+
+- [Conversation foundation](coach/conversation-foundation.md)
+
 ## Engine
 
 - [Engine API](engine-api.md)
@@ -29,6 +33,7 @@
 
 - [Historical ADR set](architecture/adr)
 - [Architecture guardrail ADR set](adr)
+- [Text-first coaching ADR](adr/0007-text-first-provider-neutral-coaching.md)
 
 ## Roadmap
 

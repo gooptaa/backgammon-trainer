@@ -23,6 +23,10 @@ This repository enforces architectural boundaries with lightweight checks in exi
 - `@backgammon-trainer/backgammon-engine` must not depend on `@backgammon-trainer/web`.
 - `@backgammon-trainer/backgammon-analysis` must not depend on `@backgammon-trainer/web`.
 - `@backgammon-trainer/backgammon-analysis` must not depend on `@backgammon-trainer/backgammon-analysis-session`.
+- `@backgammon-trainer/backgammon-engine` must not depend on `@backgammon-trainer/backgammon-coach`.
+- `@backgammon-trainer/backgammon-analysis` must not depend on `@backgammon-trainer/backgammon-coach`.
+- `@backgammon-trainer/backgammon-analysis-session` must not depend on `@backgammon-trainer/backgammon-coach`.
+- `@backgammon-trainer/ai-contracts` must not depend on any backgammon domain package.
 - `@backgammon-trainer/web` must not depend on `@backgammon-trainer/backgammon-evaluator-gnubg`.
 
 ## Runtime boundary checks

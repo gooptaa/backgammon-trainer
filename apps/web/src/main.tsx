@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import { createFixturePositionEvaluator } from "@backgammon-trainer/backgammon-analysis/fixture";
+import { createFixtureChatModel } from "@backgammon-trainer/ai-contracts/fixture";
 
 import App from "./App";
 
@@ -22,6 +23,14 @@ const devAnalysisCaptureRuntime = {
   now: () => new Date().toISOString()
 };
 
+const devFixtureCoachModel = import.meta.env.DEV
+  ? createFixtureChatModel({
+      mode: "success",
+      responseText:
+        "Fixture coach response. This response is development fixture output and not strategic advice."
+    })
+  : undefined;
+
 const devAnalysisCaptureMetadata = {
   analysisFormat: "ranked-legal-move-analysis",
   analysisVersion: 1,
@@ -39,6 +48,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       analysisCaptureEnabled={import.meta.env.DEV}
       analysisCaptureRuntime={devAnalysisCaptureRuntime}
       analysisCaptureMetadata={devAnalysisCaptureMetadata}
+      coachFixtureEnabled={devFixtureCoachModel !== undefined}
+      {...(devFixtureCoachModel === undefined ? {} : { coachModel: devFixtureCoachModel })}
       {...(devFixtureEvaluator === undefined ? {} : { moveEvaluator: devFixtureEvaluator })}
     />
   </React.StrictMode>

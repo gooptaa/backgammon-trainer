@@ -2,7 +2,18 @@
 
 ## Purpose
 
-The web app is a development sandbox for deterministic backgammon gameplay, factual legal-move inspection, and fixture-backed analysis-capture orchestration.
+The web app is a development sandbox for deterministic backgammon gameplay, factual legal-move inspection, fixture-backed analysis-capture orchestration, and text-first coaching conversation flow.
+
+## Coach panel behavior
+
+- Coach chat is text-only and in-memory.
+- A single conversation is scoped to one active game lineage.
+- New game and imported lineage replacement start a fresh empty conversation.
+- Browser reload restores deterministic game snapshot but starts an empty conversation.
+- One pending coach request is allowed at a time; gameplay stays enabled while pending.
+- Fixture warning is explicit: `Development fixture coach - responses are not strategic advice.`
+- No microphone, voice capture, speech synthesis, or audio-agent behavior is implemented.
+- Coach failures are concise and non-fatal; gameplay and deterministic analysis remain available.
 
 ## Current analysis capture behavior
 

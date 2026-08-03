@@ -1,4 +1,3 @@
-import type { CoachingMode } from "@backgammon-trainer/ai-contracts";
 import type { FastifyPluginAsync } from "fastify";
 
 import { MockModelAdapter } from "../mockAdapter";
@@ -20,7 +19,7 @@ const coachingBodySchema = {
 
 interface CoachingBody {
   sessionId: string;
-  mode: CoachingMode;
+  mode: "critique" | "hint" | "explain-candidates";
   moveNotation: string;
   positionId?: string;
 }
@@ -37,14 +36,20 @@ const coachingRoutes: FastifyPluginAsync = async (app) => {
     },
     async (request, reply) => {
       const response = await adapter.complete({
-        sessionId: request.body.sessionId,
-        mode: request.body.mode,
-        player: "white",
-        gameState: {
-          serializedPosition: request.body.positionId ?? "placeholder-position",
-          playerToMove: "white"
-        },
-        includeStructuredOutput: true
+        requestId: request.body.sessionId,
+        systemInstruction: "Server fixture coaching endpoint.",
+        developerInstructions: [
+          "Return concise fixture output and never present strategic authority."
+        ],
+        messages: [
+          {
+            role: "user",
+            text: `${request.body.mode}: ${request.body.moveNotation}`
+          }
+        ],
+        evidence: {
+          positionId: request.body.positionId ?? "placeholder-position"
+        }
       });
 
       return reply.send({

@@ -1,37 +1,31 @@
 import type {
-  CoachingRequest,
-  CoachingResponse,
-  ModelAdapter,
-  ProviderCapabilities
+  ChatModel,
+  ChatModelRequest,
+  ChatModelResult
 } from "@backgammon-trainer/ai-contracts";
 
-const capabilities: ProviderCapabilities = {
-  text: true,
-  structuredJson: true,
-  streaming: false,
-  toolCalling: false,
-  imageInput: false,
-  selectableModel: true
+const capabilities: ChatModel["capabilities"] = {
+  nonStreamingText: true,
+  supportsSystemInstruction: true,
+  supportsDeveloperInstructions: true,
+  supportsStructuredEvidence: true
 };
 
-export class MockModelAdapter implements ModelAdapter {
+export class MockModelAdapter implements ChatModel {
   public readonly name = "mock-model-adapter";
   public readonly capabilities = capabilities;
 
-  public async complete(request: CoachingRequest): Promise<CoachingResponse> {
+  public async complete(request: ChatModelRequest): Promise<ChatModelResult> {
     return {
-      text: `Mock coaching (${request.mode}): this is a placeholder response with no real model call.`,
-      confidence: "low",
-      hint: {
-        title: "Mock hint",
-        rationale:
-          "Use this endpoint to verify integration boundaries while deterministic move logic is still under construction.",
-        skillFocus: "general",
-        confidence: "low"
+      ok: true,
+      text: `Fixture coach response from server mock adapter for request ${request.requestId}. Not strategic advice.`,
+      model: {
+        provider: "server-mock",
+        model: "mock-v1",
+        adapterVersion: "1.0.0",
+        mode: "fixture"
       },
-      providerMetadata: {
-        model: "mock-v1"
-      }
+      warnings: ["Server fixture response"]
     };
   }
 }

@@ -2,13 +2,14 @@
 
 ## Purpose
 
-Define provider-neutral request/response contracts for coaching-oriented AI interactions without coupling apps to vendor-specific payloads.
+Define provider-neutral chat-model request/response contracts without coupling apps to vendor-specific SDK payloads.
 
 ## Responsibilities
 
 - Type coaching request and response envelopes.
-- Model capability flags for adapter feature negotiation.
-- Define completion and optional streaming adapter interfaces.
+- Model capability flags and result failure taxonomy.
+- Define non-streaming text completion interface.
+- Provide deterministic fixture chat model for development and tests.
 
 ## Allowed Dependencies
 
@@ -22,8 +23,9 @@ Define provider-neutral request/response contracts for coaching-oriented AI inte
 
 ## Public API
 
-- Contract types for coaching inputs/outputs and stream events.
-- Adapter interface definitions (`ModelAdapter`) and capability/options types.
+- Generic chat contracts (`ChatModelRequest`, `ChatModelResult`, message/provenance/usage types).
+- Adapter interface (`ChatModel`) and capability types.
+- Fixture adapter subpath (`@backgammon-trainer/ai-contracts/fixture`).
 
 Why these exports are public:
 
@@ -32,10 +34,10 @@ Why these exports are public:
 ## Non-goals
 
 - Implementing provider SDK integrations.
-- Deciding legal move correctness.
-- Persisting coaching sessions.
+- Defining backgammon strategy or move legality.
+- Persisting conversations.
 
 ## Future Roadmap
 
-- Expand contract coverage as coaching feature requirements harden.
-- Preserve provider neutrality while supporting richer structured outputs.
+- Preserve provider neutrality while adding provider adapters in host layers.
+- Add optional streaming and tool-calling contracts in a dedicated milestone.

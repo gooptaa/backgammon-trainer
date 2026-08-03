@@ -74,6 +74,9 @@ importers:
       "@backgammon-trainer/backgammon-analysis-session":
         specifier: workspace:*
         version: link:../../packages/backgammon-analysis-session
+      "@backgammon-trainer/backgammon-coach":
+        specifier: workspace:*
+        version: link:../../packages/backgammon-coach
       "@backgammon-trainer/backgammon-domain":
         specifier: workspace:*
         version: link:../../packages/backgammon-domain
@@ -131,6 +134,24 @@ importers:
       "@backgammon-trainer/backgammon-analysis":
         specifier: workspace:*
         version: link:../backgammon-analysis
+      "@backgammon-trainer/backgammon-engine":
+        specifier: workspace:*
+        version: link:../backgammon-engine
+
+  packages/backgammon-coach:
+    dependencies:
+      "@backgammon-trainer/ai-contracts":
+        specifier: workspace:*
+        version: link:../ai-contracts
+      "@backgammon-trainer/backgammon-analysis":
+        specifier: workspace:*
+        version: link:../backgammon-analysis
+      "@backgammon-trainer/backgammon-analysis-session":
+        specifier: workspace:*
+        version: link:../backgammon-analysis-session
+      "@backgammon-trainer/backgammon-domain":
+        specifier: workspace:*
+        version: link:../backgammon-domain
       "@backgammon-trainer/backgammon-engine":
         specifier: workspace:*
         version: link:../backgammon-engine

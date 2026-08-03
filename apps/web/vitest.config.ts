@@ -9,6 +9,15 @@ export default defineConfig({
       "@backgammon-trainer/backgammon-analysis/fixture": fileURLToPath(
         new URL("../../packages/backgammon-analysis/src/fixture.ts", import.meta.url)
       ),
+      "@backgammon-trainer/ai-contracts/fixture": fileURLToPath(
+        new URL("../../packages/ai-contracts/src/fixture.ts", import.meta.url)
+      ),
+      "@backgammon-trainer/ai-contracts": fileURLToPath(
+        new URL("../../packages/ai-contracts/src/index.ts", import.meta.url)
+      ),
+      "@backgammon-trainer/backgammon-coach": fileURLToPath(
+        new URL("../../packages/backgammon-coach/src/index.ts", import.meta.url)
+      ),
       "@backgammon-trainer/backgammon-domain": fileURLToPath(
         new URL("../../packages/backgammon-domain/src/index.ts", import.meta.url)
       ),

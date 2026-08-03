@@ -9,6 +9,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./dist/index.js"
+    },
+    "./fixture": {
+      "types": "./src/fixture.ts",
+      "import": "./dist/fixture.js"
     }
   },
   "scripts": {

@@ -13,6 +13,7 @@ Structured deterministic analysis is now a dedicated package boundary:
 
 5. **Position analysis layer** (`packages/backgammon-analysis`)
 6. **Analysis session layer** (`packages/backgammon-analysis-session`)
+7. **Coach conversation layer** (`packages/backgammon-coach`)
 
 A narrow `packages/shared` package holds only small cross-cutting transport types.
 
@@ -21,11 +22,13 @@ A narrow `packages/shared` package holds only small cross-cutting transport type
 Intended dependency direction:
 
 - `apps/web` -> `packages/backgammon-domain`, `packages/backgammon-engine`, `packages/backgammon-analysis`, `packages/backgammon-analysis-session`, `packages/ai-contracts`, `packages/shared`
+- `apps/web` -> `packages/backgammon-coach`
 - `apps/server` -> `packages/ai-contracts`, `packages/shared`, optionally `packages/backgammon-domain`
 - `packages/backgammon-analysis-session` -> `packages/backgammon-analysis`, `packages/backgammon-engine`
 - `packages/backgammon-analysis` -> `packages/backgammon-engine`
+- `packages/backgammon-coach` -> `packages/backgammon-analysis-session`, `packages/backgammon-analysis`, `packages/backgammon-engine`, `packages/ai-contracts`
 - `packages/backgammon-evaluator-gnubg` -> `packages/backgammon-analysis`, `packages/backgammon-engine`, Node standard library
-- `packages/ai-contracts` -> `packages/backgammon-domain` (for typed board/move context)
+- `packages/ai-contracts` -> no backgammon package dependencies
 - `packages/backgammon-domain` -> no app, UI, or provider code
 - `packages/shared` -> no app, UI, or provider code
 
@@ -40,7 +43,23 @@ Move-outcome analysis pipeline boundary is:
 - engine complete legal moves (`getLegalMoves(...)`)
 - analysis move outcomes (apply each legal move through engine + compute factual before/after)
 - evaluator contract layer (provider-neutral score normalization, validation, deterministic ranking)
-- future coaching layer (pedagogy/prose, deferred)
+- coaching layer (`@backgammon-trainer/backgammon-coach`) for conversation context and prompt/evidence orchestration
+
+Text coach pipeline boundary is:
+
+- typed user message
+- explicit question context resolution from app state
+- deterministic evidence bundle generation
+- optional knowledge retrieval boundary (no-op/fixture in current milestone)
+- provider-neutral `ChatModel` request/response
+- text coach UI response rendering
+
+Authoritative source policy remains explicit:
+
+- engine for legal moves and board transitions
+- analysis for factual features and ranked outputs
+- analysis-session for committed-turn-linked interpretation records
+- model output is non-authoritative coaching text
 
 No package under `packages/` depends on React, Fastify, browser APIs, or vendor SDKs.
 

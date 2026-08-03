@@ -55,6 +55,38 @@ export default tseslint.config(
     }
   },
   {
+    files: ["packages/ai-contracts/src/**/*.ts", "packages/ai-contracts/test/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@backgammon-trainer/backgammon-domain",
+              message: "AI contracts must remain provider-neutral and domain-agnostic."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-engine",
+              message: "AI contracts must not import engine contracts."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-analysis",
+              message: "AI contracts must not import analysis contracts."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-analysis-session",
+              message: "AI contracts must not import analysis-session contracts."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-coach",
+              message: "AI contracts must not import coaching-domain contracts."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
     files: ["packages/backgammon-engine/src/**/*.ts", "packages/backgammon-engine/test/**/*.ts"],
     rules: {
       "no-restricted-imports": [
@@ -69,6 +101,10 @@ export default tseslint.config(
             {
               name: "@backgammon-trainer/web",
               message: "Engine must not depend on web application code."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-coach",
+              message: "Engine must not depend on coaching orchestration."
             }
           ]
         }
@@ -93,6 +129,29 @@ export default tseslint.config(
             {
               name: "@backgammon-trainer/web",
               message: "Analysis must not depend on web application code."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-coach",
+              message: "Analysis must not depend on coaching orchestration."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: [
+      "packages/backgammon-analysis-session/src/**/*.ts",
+      "packages/backgammon-analysis-session/test/**/*.ts"
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@backgammon-trainer/backgammon-coach",
+              message: "Analysis-session must remain independent from coaching orchestration."
             }
           ]
         }

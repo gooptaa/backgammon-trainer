@@ -71,16 +71,8 @@ pnpm check
 
 ## Repository map
 
-- `apps/web`: PWA shell, React UI, Vitest/RTL tests, Playwright smoke test
-- `apps/server`: Fastify server, health + mock coaching endpoints
-- `packages/backgammon-domain`: deterministic domain types and small pure helper
-- `packages/backgammon-evaluator-gnubg`: Node-only GNU Backgammon adapter spike, capability detection, transcript parsing, smoke command
-- `packages/ai-contracts`: provider-neutral coaching and adapter interfaces
-- `packages/shared`: narrowly scoped shared envelope/result types
-- `docs/README.md`: documentation index across architecture, analysis, ADRs, and roadmap
-- `docs/architecture`: architecture overview, dependency guardrails, and API audit
-- `docs/adr`: architecture decision records for established repository boundaries
-- `docs/roadmap.md`: ordered milestones
+- `packages/backgammon-coach`: text-first coaching conversation/domain orchestration
+- `docs/coach`: text coach conversation foundation and boundaries
 
 ## Turn flow and staged interaction
 

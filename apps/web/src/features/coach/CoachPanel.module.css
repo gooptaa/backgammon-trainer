@@ -1,0 +1,122 @@
+.panel {
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(17, 63, 90, 0.2);
+  border-radius: 12px;
+  padding: 0.85rem;
+  box-shadow: 0 2px 10px rgba(17, 63, 90, 0.08);
+  display: grid;
+  gap: 0.65rem;
+}
+
+.panel h2 {
+  margin: 0;
+  color: #173346;
+}
+
+.warning {
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  background: #fff2d8;
+  color: #5a3410;
+  border: 1px solid #e9c389;
+  font-size: 0.9rem;
+}
+
+.context {
+  margin: 0;
+  color: #1f3849;
+  font-size: 0.92rem;
+}
+
+.messages {
+  margin: 0;
+  padding: 0.55rem;
+  border-radius: 10px;
+  border: 1px solid rgba(17, 63, 90, 0.18);
+  background: rgba(255, 255, 255, 0.6);
+  min-height: 9rem;
+  max-height: 15rem;
+  overflow: auto;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.message {
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(17, 63, 90, 0.12);
+  background: #fffefb;
+  color: #233340;
+  font-size: 0.9rem;
+}
+
+.userLabel,
+.coachLabel {
+  display: inline-block;
+  margin-right: 0.3rem;
+  font-weight: 800;
+}
+
+.userLabel {
+  color: #173346;
+}
+
+.coachLabel {
+  color: #7a2b12;
+}
+
+.form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 5.7rem;
+  padding: 0.55rem;
+  resize: vertical;
+  border: 1px solid rgba(17, 63, 90, 0.35);
+  border-radius: 10px;
+  background: #fffefb;
+  font-family: "IBM Plex Mono", "Menlo", monospace;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.status {
+  margin: 0;
+  color: #1f3849;
+  min-height: 1.1rem;
+  font-size: 0.9rem;
+}
+
+.failure {
+  margin: 0;
+  color: #7a2b12;
+  font-size: 0.9rem;
+}
+
+.disclosure {
+  border: 1px solid rgba(17, 63, 90, 0.18);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  background: rgba(255, 255, 255, 0.63);
+}
+
+.disclosure summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #173346;
+}
+
+.detailList {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  color: #203241;
+  font-size: 0.88rem;
+}

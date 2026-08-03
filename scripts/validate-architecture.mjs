@@ -26,6 +26,46 @@ const FORBIDDEN_EDGES = [
     reason: "Analysis must remain independent from analysis-session."
   },
   {
+    from: "@backgammon-trainer/backgammon-engine",
+    to: "@backgammon-trainer/backgammon-coach",
+    reason: "Engine must not depend on coaching orchestration."
+  },
+  {
+    from: "@backgammon-trainer/backgammon-analysis",
+    to: "@backgammon-trainer/backgammon-coach",
+    reason: "Analysis must not depend on coaching orchestration."
+  },
+  {
+    from: "@backgammon-trainer/backgammon-analysis-session",
+    to: "@backgammon-trainer/backgammon-coach",
+    reason: "Analysis-session must not depend on coaching orchestration."
+  },
+  {
+    from: "@backgammon-trainer/ai-contracts",
+    to: "@backgammon-trainer/backgammon-domain",
+    reason: "Generic AI contracts must remain domain-neutral."
+  },
+  {
+    from: "@backgammon-trainer/ai-contracts",
+    to: "@backgammon-trainer/backgammon-engine",
+    reason: "Generic AI contracts must not depend on engine-domain rules."
+  },
+  {
+    from: "@backgammon-trainer/ai-contracts",
+    to: "@backgammon-trainer/backgammon-analysis",
+    reason: "Generic AI contracts must not depend on analysis-domain types."
+  },
+  {
+    from: "@backgammon-trainer/ai-contracts",
+    to: "@backgammon-trainer/backgammon-analysis-session",
+    reason: "Generic AI contracts must not depend on analysis-session types."
+  },
+  {
+    from: "@backgammon-trainer/ai-contracts",
+    to: "@backgammon-trainer/backgammon-coach",
+    reason: "Generic AI contracts must not depend on coaching-domain types."
+  },
+  {
     from: "@backgammon-trainer/web",
     to: "@backgammon-trainer/backgammon-evaluator-gnubg",
     reason: "Browser bundle must not depend on the Node-only GNU adapter."

@@ -1,4 +1,5 @@
 import styles from "./App.module.css";
+import type { ChatModel } from "@backgammon-trainer/ai-contracts";
 import {
   analyzeLegalMoveOutcomes,
   evaluateLegalMoves,
@@ -42,10 +43,18 @@ import {
   type DieValue,
   type Player
 } from "@backgammon-trainer/backgammon-domain";
+import {
+  deriveCurrentTurnContext,
+  resolveCoachQuestionContext,
+  type CoachRuntime,
+  type CoachStagedSelectionSummary,
+  type CoachKnowledgeRetriever
+} from "@backgammon-trainer/backgammon-coach";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BackgammonBoard } from "./features/board/BackgammonBoard";
 import { AnalysisSessionPanel } from "./features/analysis-session/AnalysisSessionPanel";
+import { CoachPanel } from "./features/coach/CoachPanel";
 import {
   captureCommittedTurnAnalysis,
   createFixtureAnalysisSessionMetadata,
@@ -106,6 +115,7 @@ type OpeningRollState =
 const DEFAULT_TEST_OPENING_DIE: DieValue = 1;
 const SECOND_TEST_OPENING_DIE: DieValue = 2;
 let fallbackAnalysisSessionCounter = 0;
+let fallbackCoachCounter = 0;
 
 const DEFAULT_ANALYSIS_CAPTURE_RUNTIME: AnalysisCaptureRuntime = {
   createSessionId: () => {
@@ -128,6 +138,18 @@ const DEFAULT_ANALYSIS_CAPTURE_METADATA: FixtureAnalysisSessionMetadataConfig = 
   scoreScale: {
     kind: "relative"
   } satisfies EvaluationScoreScale
+};
+
+const DEFAULT_COACH_RUNTIME: CoachRuntime = {
+  createId: () => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+
+    fallbackCoachCounter += 1;
+    return `coach-${fallbackCoachCounter}`;
+  },
+  now: () => new Date().toISOString()
 };
 
 const getInitialOpeningRollState = (initialGameState?: GameState): OpeningRollState => {
@@ -404,6 +426,10 @@ interface AppProps {
   analysisCaptureEnabled?: boolean;
   analysisCaptureRuntime?: AnalysisCaptureRuntime;
   analysisCaptureMetadata?: FixtureAnalysisSessionMetadataConfig;
+  coachModel?: ChatModel;
+  coachRuntime?: CoachRuntime;
+  coachFixtureEnabled?: boolean;
+  coachKnowledgeRetriever?: CoachKnowledgeRetriever;
 }
 
 type InspectionView = "before" | "after";
@@ -436,7 +462,11 @@ function App({
   moveEvaluator,
   analysisCaptureEnabled = false,
   analysisCaptureRuntime,
-  analysisCaptureMetadata
+  analysisCaptureMetadata,
+  coachModel,
+  coachRuntime,
+  coachFixtureEnabled = false,
+  coachKnowledgeRetriever
 }: AppProps): JSX.Element {
   const snapshotStorage = useMemo(
     () => gameStorage ?? createLocalGameStorage(DEFAULT_GAME_STORAGE_KEY),
@@ -454,6 +484,7 @@ function App({
   );
   const captureRuntime = analysisCaptureRuntime ?? DEFAULT_ANALYSIS_CAPTURE_RUNTIME;
   const captureMetadata = analysisCaptureMetadata ?? DEFAULT_ANALYSIS_CAPTURE_METADATA;
+  const resolvedCoachRuntime = coachRuntime ?? DEFAULT_COACH_RUNTIME;
 
   const [gameState, setGameState] = useState<GameState>(() => initialDurableState.gameState);
   const [openingRollState, setOpeningRollState] = useState<OpeningRollState>(
@@ -798,6 +829,101 @@ function App({
     stagedPrefixResult !== null && stagedPrefixResult.ok
       ? stagedPrefixResult.position
       : gameState.position;
+
+  const coachStagedSelectionSummary = useMemo<CoachStagedSelectionSummary | undefined>(() => {
+    if (selectedSteps.length === 0 && candidateMoves.length === 0) {
+      return undefined;
+    }
+
+    return {
+      selectedSteps: selectedSteps.map((step) => `${step.fromPoint}->${step.toPoint}`),
+      candidateMoveFingerprints: candidateMoves.map((move) => getMoveFingerprint(move)),
+      candidateMoveLabels: candidateMoves.map((move) => formatMoveBreadcrumb(move))
+    };
+  }, [candidateMoves, selectedSteps]);
+
+  const coachCurrentTurnContext = useMemo(
+    () =>
+      deriveCurrentTurnContext({
+        openingResolved,
+        gameComplete: gameStatus.state === "complete",
+        activePlayer: gameState.activePlayer,
+        dice: gameState.dice,
+        legalMoveOutcomesResult: legalMoveOutcomesResult,
+        ...(moveEvaluationResult?.ok ? { rankedAnalysis: moveEvaluationResult.analysis } : {}),
+        ...(coachStagedSelectionSummary === undefined
+          ? {}
+          : { stagedSelection: coachStagedSelectionSummary })
+      }),
+    [
+      coachStagedSelectionSummary,
+      gameState.activePlayer,
+      gameState.dice,
+      gameStatus.state,
+      legalMoveOutcomesResult,
+      moveEvaluationResult,
+      openingResolved
+    ]
+  );
+
+  const selectedAnalysisRecord = useMemo(() => {
+    if (analysisSession === null || inspectedTurn === null) {
+      return undefined;
+    }
+
+    return analysisSession.records.find((record) => record.turnNumber === inspectedTurn.turnNumber);
+  }, [analysisSession, inspectedTurn]);
+
+  const coachContext = useMemo(() => {
+    const selectedMoveOutcome =
+      selectedOutcome === null
+        ? undefined
+        : {
+            moveFingerprint: getMoveFingerprint(selectedOutcome.move),
+            outcome: selectedOutcome
+          };
+
+    const selectedHistoryTurn =
+      inspectedTurn === null
+        ? undefined
+        : selectedAnalysisRecord === undefined
+          ? {
+              turnRecord: inspectedTurn
+            }
+          : {
+              turnRecord: inspectedTurn,
+              analysisRecord: selectedAnalysisRecord
+            };
+
+    return resolveCoachQuestionContext({
+      gameReference: activeGameReference ?? "unresolved-game-reference",
+      snapshot: activeSnapshot,
+      openingResolved,
+      gameComplete: gameStatus.state === "complete",
+      legalMoveOutcomesResult,
+      ...(moveEvaluationResult?.ok ? { rankedAnalysis: moveEvaluationResult.analysis } : {}),
+      ...(coachCurrentTurnContext.stagedSelection === undefined
+        ? {}
+        : { stagedSelection: coachCurrentTurnContext.stagedSelection }),
+      ...(selectedMoveOutcome === undefined ? {} : { selectedMoveOutcome }),
+      ...(selectedHistoryTurn === undefined ? {} : { selectedHistoryTurn }),
+      ...(analysisSession === null ? {} : { analysisSession })
+    });
+  }, [
+    activeGameReference,
+    activeSnapshot,
+    analysisSession,
+    coachCurrentTurnContext.stagedSelection,
+    gameStatus.state,
+    inspectedTurn,
+    legalMoveOutcomesResult,
+    moveEvaluationResult,
+    openingResolved,
+    selectedAnalysisRecord,
+    selectedOutcome
+  ]);
+
+  const coachLineageKey = activeGameReference ?? `lineage-unavailable-${activeSnapshot.savedAt}`;
 
   useEffect(() => {
     if (gameState.dice === null || !legalMovesResult.ok || gameStatus.state === "complete") {
@@ -1786,35 +1912,48 @@ function App({
           />
         </section>
 
-        <EngineSandboxPanel
-          gameState={gameState}
-          gameStatus={gameStatus}
-          dieOne={dieOne}
-          dieTwo={dieTwo}
-          message={message}
-          legalMovesResult={legalMovesResult}
-          onDieOneChange={setDieOne}
-          onDieTwoChange={setDieTwo}
-          openingRollState={openingRollState}
-          openingTurnPending={openingTurnPending}
-          interactionLocked={isReadOnlyInspection}
-          canRollDice={canRollDice}
-          canSetDiceManually={canSetDiceManually}
-          exportSnapshotText={exportSnapshotText}
-          importText={importText}
-          canCopySnapshot={canCopySnapshot}
-          snapshotFormat={GAME_SNAPSHOT_FORMAT}
-          snapshotVersion={GAME_SNAPSHOT_VERSION}
-          onRollForOpening={onRollForOpening}
-          onRollDice={onRollDice}
-          onSetDice={onSetDice}
-          onPassTurn={onPassTurn}
-          onNewGame={onNewGame}
-          onCopyExportSnapshot={onCopyExportSnapshot}
-          onImportTextChange={setImportText}
-          onValidateAndImportSnapshot={onValidateAndImportSnapshot}
-          onClearSavedGame={onClearSavedGame}
-        />
+        <section className={styles.sidebarSection}>
+          <CoachPanel
+            lineageKey={coachLineageKey}
+            context={coachContext}
+            runtime={resolvedCoachRuntime}
+            fixtureEnabled={coachFixtureEnabled}
+            {...(coachModel === undefined ? {} : { model: coachModel })}
+            {...(coachKnowledgeRetriever === undefined
+              ? {}
+              : { knowledgeRetriever: coachKnowledgeRetriever })}
+          />
+
+          <EngineSandboxPanel
+            gameState={gameState}
+            gameStatus={gameStatus}
+            dieOne={dieOne}
+            dieTwo={dieTwo}
+            message={message}
+            legalMovesResult={legalMovesResult}
+            onDieOneChange={setDieOne}
+            onDieTwoChange={setDieTwo}
+            openingRollState={openingRollState}
+            openingTurnPending={openingTurnPending}
+            interactionLocked={isReadOnlyInspection}
+            canRollDice={canRollDice}
+            canSetDiceManually={canSetDiceManually}
+            exportSnapshotText={exportSnapshotText}
+            importText={importText}
+            canCopySnapshot={canCopySnapshot}
+            snapshotFormat={GAME_SNAPSHOT_FORMAT}
+            snapshotVersion={GAME_SNAPSHOT_VERSION}
+            onRollForOpening={onRollForOpening}
+            onRollDice={onRollDice}
+            onSetDice={onSetDice}
+            onPassTurn={onPassTurn}
+            onNewGame={onNewGame}
+            onCopyExportSnapshot={onCopyExportSnapshot}
+            onImportTextChange={setImportText}
+            onValidateAndImportSnapshot={onValidateAndImportSnapshot}
+            onClearSavedGame={onClearSavedGame}
+          />
+        </section>
       </main>
     </div>
   );
