@@ -49,7 +49,8 @@ import {
   type CoachRuntime,
   type CoachStagedSelectionSummary,
   type CoachKnowledgeRetriever,
-  type CoachQuestionContext
+  type CoachQuestionContext,
+  type GameReviewTurnHydrationResult
 } from "@backgammon-trainer/backgammon-coach";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -959,6 +960,68 @@ function App({
       }
 
       return evaluated.analysis;
+    },
+    [moveEvaluator]
+  );
+
+  const resolveGameReviewTurnAnalysis = useCallback(
+    async (input: {
+      question: string;
+      context: Extract<CoachQuestionContext, { kind: "game-review" }>;
+      turnRecord: TurnRecord;
+    }): Promise<GameReviewTurnHydrationResult> => {
+      if (moveEvaluator === undefined) {
+        return {
+          ok: false,
+          status: "unavailable",
+          message: "No evaluator is configured."
+        };
+      }
+
+      if (input.turnRecord.outcome.kind !== "move") {
+        return {
+          ok: false,
+          status: "unavailable",
+          message: "Turn is not a checker-play decision."
+        };
+      }
+
+      const evaluated = await evaluateLegalMoves(
+        {
+          position: input.turnRecord.positionBefore,
+          player: input.turnRecord.player,
+          dice: input.turnRecord.dice,
+          context: {
+            gameMode: "money"
+          }
+        },
+        moveEvaluator
+      );
+
+      if (evaluated.ok) {
+        return {
+          ok: true,
+          rankedAnalysis: evaluated.analysis
+        };
+      }
+
+      if (
+        evaluated.reason === "unavailable" ||
+        evaluated.reason === "unsupported-position" ||
+        evaluated.reason === "timeout"
+      ) {
+        return {
+          ok: false,
+          status: "unavailable",
+          message: evaluated.message
+        };
+      }
+
+      return {
+        ok: false,
+        status: "failed",
+        message: evaluated.message
+      };
     },
     [moveEvaluator]
   );
@@ -1959,6 +2022,8 @@ function App({
             evaluatorConfigured={moveEvaluator !== undefined}
             analysisPending={moveEvaluationPending}
             resolveHistoryTurnAnalysis={resolveHistoryTurnAnalysis}
+            resolveGameReviewTurnAnalysis={resolveGameReviewTurnAnalysis}
+            {...(analysisSession === null ? {} : { analysisSession })}
             {...(coachProviderStatus === undefined ? {} : { providerStatus: coachProviderStatus })}
             {...(coachModel === undefined ? {} : { model: coachModel })}
             {...(coachKnowledgeRetriever === undefined

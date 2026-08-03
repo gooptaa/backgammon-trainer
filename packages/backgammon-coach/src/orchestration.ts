@@ -1,6 +1,11 @@
 import type { ChatModel, ChatModelResult } from "@backgammon-trainer/ai-contracts";
 import type { BackgammonKnowledgeConcept } from "@backgammon-trainer/backgammon-knowledge";
 import type { RankedLegalMoveAnalysis } from "@backgammon-trainer/backgammon-analysis";
+import type {
+  AnalysisRecord,
+  AnalysisSession
+} from "@backgammon-trainer/backgammon-analysis-session";
+import type { TurnRecord } from "@backgammon-trainer/backgammon-engine";
 
 import {
   appendCoachCoachMessage,
@@ -11,15 +16,42 @@ import {
 import { buildCoachEvidence, type CoachEvidenceBundle } from "./evidence";
 import type { CoachKnowledgeRetriever } from "./knowledge";
 import { buildCoachModelRequest, toCoachEvidenceReference, toCoachModelProvenance } from "./prompt";
-import type { CoachQuestionContext } from "./context";
+import type { CoachGameReviewTurnEvidence, CoachQuestionContext } from "./context";
 
 type HistoryTurnContext = Extract<CoachQuestionContext, { kind: "history-turn" }>;
+type GameReviewContext = Extract<CoachQuestionContext, { kind: "game-review" }>;
 
 const LAST_MOVE_REVIEW_PATTERN =
   /\b(last move|that move|what should i have done|why was .* better|review my last move|was that move good)\b/i;
 
+const FULL_GAME_REVIEW_PATTERN =
+  /\b(review (this )?game|review (the )?game so far|how did i play|most important decisions|where did i give up the most|which moves should i study)\b/i;
+
+const TURN_NUMBER_PATTERN = /\bturn\s+([0-9]+)\b/gi;
+
 const isLastMoveReviewQuestion = (question: string): boolean => {
   return LAST_MOVE_REVIEW_PATTERN.test(question);
+};
+
+const isFullGameReviewQuestion = (question: string): boolean => {
+  return FULL_GAME_REVIEW_PATTERN.test(question);
+};
+
+const parseReferencedTurnNumbers = (question: string): readonly number[] => {
+  const referenced = new Set<number>();
+  for (const match of question.matchAll(TURN_NUMBER_PATTERN)) {
+    const raw = match[1];
+    if (raw === undefined) {
+      continue;
+    }
+
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      referenced.add(parsed);
+    }
+  }
+
+  return [...referenced].sort((left, right) => left - right);
 };
 
 const getLatestCommittedMoveTurn = (
@@ -43,19 +75,174 @@ const getLatestCommittedMoveTurn = (
   };
 };
 
+const resolveBaselineReviewTurns = (input: {
+  snapshotTurns: readonly TurnRecord[];
+  analysisSession?: AnalysisSession;
+}): readonly CoachGameReviewTurnEvidence[] => {
+  const analysisByTurn = new Map<number, AnalysisRecord>();
+  for (const record of input.analysisSession?.records ?? []) {
+    analysisByTurn.set(record.turnNumber, record);
+  }
+
+  return input.snapshotTurns.map((turnRecord) => {
+    if (turnRecord.outcome.kind !== "move") {
+      return {
+        turnNumber: turnRecord.turnNumber,
+        turnRecord: structuredClone(turnRecord),
+        analysisSource: "unsupported" as const
+      };
+    }
+
+    const analysisRecord = analysisByTurn.get(turnRecord.turnNumber);
+    if (analysisRecord === undefined) {
+      return {
+        turnNumber: turnRecord.turnNumber,
+        turnRecord: structuredClone(turnRecord),
+        analysisSource: "missing" as const
+      };
+    }
+
+    return {
+      turnNumber: turnRecord.turnNumber,
+      turnRecord: structuredClone(turnRecord),
+      analysisRecord: structuredClone(analysisRecord),
+      rankedAnalysis: structuredClone(analysisRecord.rankedMoveAnalysis),
+      analysisSource: "analysis-record" as const
+    };
+  });
+};
+
+export type GameReviewTurnHydrationResult =
+  | {
+      readonly ok: true;
+      readonly rankedAnalysis: RankedLegalMoveAnalysis;
+    }
+  | {
+      readonly ok: false;
+      readonly status: "unavailable" | "failed";
+      readonly message: string;
+    };
+
+const resolveFullGameReviewContext = async (input: {
+  question: string;
+  context: CoachQuestionContext;
+  analysisSession?: AnalysisSession;
+  resolveGameReviewTurnAnalysis?: (input: {
+    question: string;
+    context: GameReviewContext;
+    turnRecord: TurnRecord;
+  }) => Promise<GameReviewTurnHydrationResult>;
+}): Promise<GameReviewContext> => {
+  const snapshot = structuredClone(input.context.snapshot);
+  const completed = snapshot.turnHistory.at(-1)?.gameStatusAfter.state === "complete";
+  const selectedTurnNumber =
+    input.context.kind === "history-turn" ? input.context.turnNumber : undefined;
+  const referencedTurnNumbers = parseReferencedTurnNumbers(input.question);
+
+  let reviewContext: GameReviewContext = {
+    kind: "game-review",
+    gameReference: input.context.gameReference,
+    snapshot,
+    reviewScope: completed ? "completed-game" : "game-so-far",
+    selectionSource: "explicit-request",
+    committedTurnBoundary: snapshot.turnHistory.length,
+    reviewedPlayerScope: {
+      kind: "all-players",
+      reason: "ownership-ambiguous"
+    },
+    ...(selectedTurnNumber === undefined ? {} : { selectedTurnNumber }),
+    ...(referencedTurnNumbers.length === 0 ? {} : { referencedTurnNumbers }),
+    ...(input.analysisSession === undefined
+      ? {}
+      : { analysisSession: structuredClone(input.analysisSession) }),
+    reviewedTurns: resolveBaselineReviewTurns({
+      snapshotTurns: snapshot.turnHistory,
+      ...(input.analysisSession === undefined ? {} : { analysisSession: input.analysisSession })
+    })
+  };
+
+  if (
+    input.resolveGameReviewTurnAnalysis === undefined ||
+    reviewContext.reviewedTurns === undefined
+  ) {
+    return reviewContext;
+  }
+
+  const hydratedTurns: CoachGameReviewTurnEvidence[] = [];
+  const seenTurns = new Set<number>();
+
+  for (const reviewTurn of reviewContext.reviewedTurns) {
+    if (seenTurns.has(reviewTurn.turnNumber)) {
+      hydratedTurns.push(reviewTurn);
+      continue;
+    }
+    seenTurns.add(reviewTurn.turnNumber);
+
+    if (reviewTurn.analysisSource !== "missing") {
+      hydratedTurns.push(reviewTurn);
+      continue;
+    }
+
+    try {
+      const hydrationResult = await input.resolveGameReviewTurnAnalysis({
+        question: input.question,
+        context: reviewContext,
+        turnRecord: reviewTurn.turnRecord
+      });
+
+      if (hydrationResult.ok) {
+        hydratedTurns.push({
+          ...reviewTurn,
+          rankedAnalysis: structuredClone(hydrationResult.rankedAnalysis),
+          analysisSource: "hydrated"
+        });
+        continue;
+      }
+
+      hydratedTurns.push({
+        ...reviewTurn,
+        analysisSource: hydrationResult.status,
+        analysisIssue: hydrationResult.message
+      });
+    } catch {
+      hydratedTurns.push({
+        ...reviewTurn,
+        analysisSource: "failed",
+        analysisIssue: "Hydration failed unexpectedly."
+      });
+    }
+  }
+
+  reviewContext = {
+    ...reviewContext,
+    reviewedTurns: hydratedTurns
+  };
+
+  return reviewContext;
+};
+
 const resolveSubmissionContext = (
   question: string,
-  context: CoachQuestionContext
-): CoachQuestionContext => {
+  context: CoachQuestionContext,
+  analysisSession?: AnalysisSession
+): Promise<CoachQuestionContext> => {
+  if (isFullGameReviewQuestion(question)) {
+    return resolveFullGameReviewContext({
+      question,
+      context,
+      ...(analysisSession === undefined ? {} : { analysisSession })
+    });
+  }
+
   if (!isLastMoveReviewQuestion(question)) {
-    return context;
+    return Promise.resolve(context);
   }
 
   if (context.kind === "history-turn") {
-    return context;
+    return Promise.resolve(context);
   }
 
-  return getLatestCommittedMoveTurn(context) ?? context;
+  return Promise.resolve(getLatestCommittedMoveTurn(context) ?? context);
 };
 
 const deriveKnowledgeConcepts = (
@@ -162,10 +349,16 @@ export const submitCoachQuestion = async (input: {
   conversation: CoachConversation;
   question: string;
   context: CoachQuestionContext;
+  analysisSession?: AnalysisSession;
   resolveHistoryTurnAnalysis?: (input: {
     question: string;
     context: HistoryTurnContext;
   }) => Promise<RankedLegalMoveAnalysis | undefined>;
+  resolveGameReviewTurnAnalysis?: (input: {
+    question: string;
+    context: GameReviewContext;
+    turnRecord: TurnRecord;
+  }) => Promise<GameReviewTurnHydrationResult>;
   pending: boolean;
 }): Promise<SubmitCoachQuestionResult> => {
   if (input.model === undefined) {
@@ -199,7 +392,22 @@ export const submitCoachQuestion = async (input: {
     };
   }
 
-  let resolvedContext = resolveSubmissionContext(question, input.context);
+  let resolvedContext = await resolveSubmissionContext(
+    question,
+    input.context,
+    input.analysisSession
+  );
+  if (isFullGameReviewQuestion(question) && resolvedContext.kind === "game-review") {
+    resolvedContext = await resolveFullGameReviewContext({
+      question,
+      context: resolvedContext,
+      ...(input.analysisSession === undefined ? {} : { analysisSession: input.analysisSession }),
+      ...(input.resolveGameReviewTurnAnalysis === undefined
+        ? {}
+        : { resolveGameReviewTurnAnalysis: input.resolveGameReviewTurnAnalysis })
+    });
+  }
+
   if (
     resolvedContext.kind === "history-turn" &&
     resolvedContext.turnRecord.outcome.kind === "move" &&

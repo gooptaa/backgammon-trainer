@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { ChatModel } from "@backgammon-trainer/ai-contracts";
 import type { RankedLegalMoveAnalysis } from "@backgammon-trainer/backgammon-analysis";
+import type { AnalysisSession } from "@backgammon-trainer/backgammon-analysis-session";
 import {
   createCoachConversation,
   createLocalCoachKnowledgeRetriever,
@@ -11,7 +12,8 @@ import {
   type CoachKnowledgeExcerpt,
   type CoachKnowledgeRetriever,
   type CoachQuestionContext,
-  type CoachRuntime
+  type CoachRuntime,
+  type GameReviewTurnHydrationResult
 } from "@backgammon-trainer/backgammon-coach";
 import type { CoachProviderStatus } from "./serverChatModel";
 
@@ -27,10 +29,16 @@ interface CoachPanelProps {
   readonly providerStatus?: CoachProviderStatus;
   readonly evaluatorConfigured?: boolean;
   readonly analysisPending?: boolean;
+  readonly analysisSession?: AnalysisSession;
   readonly resolveHistoryTurnAnalysis?: (input: {
     question: string;
     context: Extract<CoachQuestionContext, { kind: "history-turn" }>;
   }) => Promise<RankedLegalMoveAnalysis | undefined>;
+  readonly resolveGameReviewTurnAnalysis?: (input: {
+    question: string;
+    context: Extract<CoachQuestionContext, { kind: "game-review" }>;
+    turnRecord: Extract<CoachQuestionContext, { kind: "history-turn" }>["turnRecord"];
+  }) => Promise<GameReviewTurnHydrationResult>;
 }
 
 interface EvidenceRow {
@@ -153,6 +161,45 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
     }
   }
 
+  if (row.evidence.gameReviewEvidence !== undefined) {
+    const review = row.evidence.gameReviewEvidence;
+    details.push(`Review scope: ${review.reviewScope}`);
+    details.push(`Review source: ${review.selectionSource}`);
+    details.push(`Committed turn boundary: ${review.committedTurnBoundary}`);
+    details.push(`Reviewed player scope: ${review.reviewedPlayerScope}`);
+    details.push(`Ownership status: ${review.ownershipStatus}`);
+    details.push(`Committed turns considered: ${review.committedTurnCount}`);
+    details.push(`Supported checker-play decisions: ${review.supportedCheckerPlayDecisionCount}`);
+    details.push(`Unsupported decisions: ${review.unsupportedDecisionCount}`);
+    details.push(`Evaluated played moves: ${review.evaluatedChosenMoveCount}`);
+    details.push(`Unevaluated played moves: ${review.unevaluatedChosenMoveCount}`);
+    details.push(`Complete coverage count: ${review.completeCoverageCount}`);
+    details.push(`Partial coverage count: ${review.partialCoverageCount}`);
+    details.push(`Missing coverage count: ${review.missingCoverageCount}`);
+    details.push(`Fixture coverage count: ${review.fixtureCoverageCount}`);
+    details.push(`Failed coverage count: ${review.failedCoverageCount}`);
+    details.push(`Unavailable coverage count: ${review.unavailableCoverageCount}`);
+
+    for (const keyDecision of review.keyDecisions) {
+      details.push(`Key decision turn ${keyDecision.turnNumber}: ${keyDecision.playedMove}`);
+      if (keyDecision.normalizedScoreDifference !== undefined) {
+        details.push(
+          `Key decision score difference: ${keyDecision.normalizedScoreDifference.toFixed(3)}`
+        );
+      }
+      if (keyDecision.strongestAlternative !== undefined) {
+        details.push(
+          `Key decision strongest alternative: ${keyDecision.strongestAlternative.moveLabel}`
+        );
+      }
+      details.push(`Key decision note: ${keyDecision.note}`);
+    }
+
+    for (const limitation of review.limitations) {
+      details.push(`Review limitation: ${limitation}`);
+    }
+  }
+
   if (row.evidence.evaluatorProvenance !== undefined) {
     details.push(`Evaluator provider: ${row.evidence.evaluatorProvenance.provider}`);
     details.push(`Evaluator coverage: ${row.evidence.evaluatorCoverage ?? "unknown"}`);
@@ -191,7 +238,9 @@ export function CoachPanel({
   providerStatus,
   evaluatorConfigured = false,
   analysisPending = false,
-  resolveHistoryTurnAnalysis
+  analysisSession,
+  resolveHistoryTurnAnalysis,
+  resolveGameReviewTurnAnalysis
 }: CoachPanelProps): JSX.Element {
   const [conversation, setConversation] = useState(() =>
     createCoachConversation({ id: runtime.createId(), createdAt: runtime.now() })
@@ -247,7 +296,9 @@ export function CoachPanel({
       conversation,
       question: draft,
       context,
+      ...(analysisSession === undefined ? {} : { analysisSession }),
       ...(resolveHistoryTurnAnalysis === undefined ? {} : { resolveHistoryTurnAnalysis }),
+      ...(resolveGameReviewTurnAnalysis === undefined ? {} : { resolveGameReviewTurnAnalysis }),
       pending: false
     })
       .then((result) => {

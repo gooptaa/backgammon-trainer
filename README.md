@@ -12,6 +12,7 @@ Implemented now:
 - factual analysis and evaluator-attributed ranked move evidence
 - analysis-session capture and reconciliation boundaries
 - text-first coach conversation orchestration with evidence version `2`
+- evidence-backed full-game review over immutable committed history snapshots (completed game and game-so-far)
 - recommendation-support authority resolved before model generation for current-position coaching
 - curated project-authored knowledge retrieval and bounded evidence disclosure
 - provider-neutral chat model contracts in `@backgammon-trainer/ai-contracts`

@@ -51,6 +51,17 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Played-move rank/loss claims are emitted only when the played move is evaluator-covered.
 - Partial evaluator coverage is surfaced explicitly and never upgraded to authoritative best-move claims.
 
+## Full Game Review Behavior
+
+- Full-game review is user-initiated from conversation intent and is not auto-triggered by game completion.
+- Review scope resolves to completed game or game-so-far from the submitted snapshot boundary.
+- Committed turns are snapshotted at submit time and remain immutable for that request.
+- Existing analysis-session records are reused first; missing checker-play turns can be hydrated on demand through an optional provider-neutral callback.
+- Per-turn hydration failures remain local and do not fail the entire review.
+- Ownership is never guessed; if learner ownership is ambiguous, evidence is disclosed as all-player coverage.
+- Key decisions are selected deterministically from supported evaluator differences and explicit turn references.
+- Full-game evidence remains bounded and provider-neutral before model generation.
+
 ## Non-goals
 
 - Legal move generation or board transitions.

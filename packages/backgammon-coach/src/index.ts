@@ -60,5 +60,6 @@ export {
   getRecentConversationMessages,
   submitCoachQuestion,
   type CoachRuntime,
+  type GameReviewTurnHydrationResult,
   type SubmitCoachQuestionResult
 } from "./orchestration";

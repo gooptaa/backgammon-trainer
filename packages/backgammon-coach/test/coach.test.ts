@@ -267,7 +267,7 @@ describe("coach context resolution", () => {
     expect(result.turnNumber).toBe(3);
   });
 
-  it("resolves completed game context when no narrower selection exists", () => {
+  it("keeps completed games in current-position context until review is explicitly requested", () => {
     const snapshot = buildSnapshot();
     const result = resolveCoachQuestionContext({
       gameReference: "game-1",
@@ -277,7 +277,11 @@ describe("coach context resolution", () => {
       legalMoveOutcomesResult: null
     });
 
-    expect(result.kind).toBe("game-review");
+    expect(result.kind).toBe("current-position");
+    if (result.kind !== "current-position") {
+      return;
+    }
+    expect(result.currentTurn.status).toBe("game-complete");
   });
 
   it("derives explicit current-turn statuses deterministically", () => {
@@ -1252,6 +1256,231 @@ describe("coach knowledge and orchestration", () => {
     }
     expect(result.context.turnNumber).toBe(1);
     expect(result.context.selectionSource).toBe("latest-committed");
+  });
+
+  it("resolves explicit full-game review questions for in-progress games", async () => {
+    const snapshot = buildSnapshot();
+    const moveTurn = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: {
+        kind: "move",
+        move: {
+          player: "white",
+          steps: [
+            {
+              kind: "point-to-point",
+              fromPoint: 13,
+              toPoint: 12,
+              dieValue: 1,
+              dieIndex: 0,
+              hitsBlot: false
+            },
+            {
+              kind: "point-to-point",
+              fromPoint: 12,
+              toPoint: 10,
+              dieValue: 2,
+              dieIndex: 1,
+              hitsBlot: false
+            }
+          ]
+        }
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: snapshot.gameState.position,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: {
+        ...snapshot,
+        turnHistory: [moveTurn]
+      },
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const ranked = await evaluateLegalMoves(
+      {
+        position: moveTurn.positionBefore,
+        player: moveTurn.player,
+        dice: moveTurn.dice
+      },
+      createFixturePositionEvaluator({ mode: "complete" })
+    );
+
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok) {
+      return;
+    }
+
+    const result = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+      runtime,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      question: "Review this game so far.",
+      context,
+      resolveGameReviewTurnAnalysis: async () => {
+        return {
+          ok: true,
+          rankedAnalysis: ranked.analysis
+        };
+      },
+      pending: false
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.context.kind !== "game-review") {
+      return;
+    }
+
+    expect(result.context.reviewScope).toBe("game-so-far");
+    expect(result.context.selectionSource).toBe("explicit-request");
+    expect(result.context.committedTurnBoundary).toBe(1);
+    expect(result.context.reviewedTurns?.[0]?.analysisSource).toBe("hydrated");
+    expect(result.evidence.gameReviewEvidence?.supportedCheckerPlayDecisionCount).toBe(1);
+  });
+
+  it("keeps full-game review evidence when individual turn hydration fails", async () => {
+    const snapshot = buildSnapshot();
+
+    const firstMove = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: {
+        kind: "move",
+        move: {
+          player: "white",
+          steps: [
+            {
+              kind: "point-to-point",
+              fromPoint: 13,
+              toPoint: 12,
+              dieValue: 1,
+              dieIndex: 0,
+              hitsBlot: false
+            },
+            {
+              kind: "point-to-point",
+              fromPoint: 12,
+              toPoint: 10,
+              dieValue: 2,
+              dieIndex: 1,
+              hitsBlot: false
+            }
+          ]
+        }
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: snapshot.gameState.position,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const secondMove = createTurnRecord({
+      turnNumber: 2,
+      player: "black",
+      dice: { dice: [3, 1] },
+      outcome: {
+        kind: "move",
+        move: {
+          player: "black",
+          steps: [
+            {
+              kind: "point-to-point",
+              fromPoint: 13,
+              toPoint: 10,
+              dieValue: 3,
+              dieIndex: 0,
+              hitsBlot: false
+            },
+            {
+              kind: "point-to-point",
+              fromPoint: 24,
+              toPoint: 23,
+              dieValue: 1,
+              dieIndex: 1,
+              hitsBlot: false
+            }
+          ]
+        }
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: snapshot.gameState.position,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: {
+        ...snapshot,
+        turnHistory: [firstMove, secondMove]
+      },
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const ranked = await evaluateLegalMoves(
+      {
+        position: firstMove.positionBefore,
+        player: firstMove.player,
+        dice: firstMove.dice
+      },
+      createFixturePositionEvaluator({ mode: "partial" })
+    );
+
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok) {
+      return;
+    }
+
+    const result = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+      runtime,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      question: "How did I play this game so far?",
+      context,
+      resolveGameReviewTurnAnalysis: async ({ turnRecord }) => {
+        if (turnRecord.turnNumber === 1) {
+          return {
+            ok: true,
+            rankedAnalysis: ranked.analysis
+          };
+        }
+
+        return {
+          ok: false,
+          status: "failed",
+          message: "provider failed"
+        };
+      },
+      pending: false
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const review = result.evidence.gameReviewEvidence;
+    expect(review).toBeDefined();
+    if (review === undefined) {
+      return;
+    }
+
+    expect(review.supportedCheckerPlayDecisionCount).toBe(2);
+    expect(review.failedCoverageCount).toBe(1);
+    expect(review.fixtureCoverageCount).toBeGreaterThanOrEqual(1);
   });
 
   it("keeps explicit selected history turn as the review target", async () => {

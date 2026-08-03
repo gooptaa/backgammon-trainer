@@ -30,6 +30,16 @@ Historical review evidence now additionally records:
 - strongest evaluated alternative when available
 - explicit limitations for partial, uncovered, fixture, unavailable, or failed evaluation
 
+Full-game review evidence now additionally records:
+
+- submitted lineage and committed-turn boundary
+- review scope (`completed-game` or `game-so-far`)
+- reviewed-player ownership scope (authoritative learner-only vs ambiguous all-players)
+- supported checker-play decision counts
+- complete, partial, missing, fixture, failed, unavailable, and unsupported counts
+- bounded deterministic key decisions with played move, strongest evaluated alternative, and normalized score difference when covered
+- explicit limitations for incomplete or non-authoritative evidence
+
 Current-position evidence now also includes recommendation-support resolution before model generation:
 
 - supported authoritative recommendation (complete trustworthy evaluator coverage)
@@ -102,6 +112,8 @@ Supported outcomes:
 
 The coach layer never constructs or applies a move from user prose.
 
+For full-game review, turn-number references in user text (for example, `turn 12`) are resolved only against committed turns from the submitted snapshot.
+
 ## Evidence selection behavior
 
 For current-position questions, the coach does not send every legal move row by default.
@@ -128,6 +140,8 @@ Each request also records:
 - truncation warnings when bounded selection discards additional relevant rows
 
 Legal move coverage, evaluator coverage, and coach evidence coverage remain separate concepts.
+
+For full-game review, key-decision selection is deterministic and bounded. It prioritizes explicit user references and the largest supported played-vs-best evaluated differences, and may include close/tied decisions for balance.
 
 ## Factual retrieval concepts
 

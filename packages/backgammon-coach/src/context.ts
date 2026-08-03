@@ -33,6 +33,22 @@ export interface CurrentTurnContext {
   readonly stagedSelection?: CoachStagedSelectionSummary;
 }
 
+export interface CoachGameReviewTurnEvidence {
+  readonly turnNumber: number;
+  readonly turnRecord: TurnRecord;
+  readonly analysisRecord?: AnalysisRecord;
+  readonly rankedAnalysis?: RankedLegalMoveAnalysis;
+  readonly analysisSource:
+    "analysis-record" | "hydrated" | "missing" | "failed" | "unavailable" | "unsupported";
+  readonly analysisIssue?: string;
+}
+
+export interface CoachReviewedPlayerScope {
+  readonly kind: "learner-only" | "all-players";
+  readonly player?: Player;
+  readonly reason?: "ownership-ambiguous";
+}
+
 export type CoachQuestionContext =
   | {
       readonly kind: "current-position";
@@ -61,6 +77,13 @@ export type CoachQuestionContext =
       readonly kind: "game-review";
       readonly gameReference: string;
       readonly snapshot: GameSnapshot;
+      readonly reviewScope: "completed-game" | "game-so-far";
+      readonly selectionSource: "explicit-request" | "completed-fallback";
+      readonly committedTurnBoundary: number;
+      readonly reviewedPlayerScope: CoachReviewedPlayerScope;
+      readonly selectedTurnNumber?: number;
+      readonly referencedTurnNumbers?: readonly number[];
+      readonly reviewedTurns?: readonly CoachGameReviewTurnEvidence[];
       readonly analysisSession?: AnalysisSession;
     };
 
@@ -173,17 +196,6 @@ export const resolveCoachQuestionContext = (
     };
   }
 
-  if (input.gameComplete) {
-    return {
-      kind: "game-review",
-      gameReference: input.gameReference,
-      snapshot: structuredClone(input.snapshot),
-      ...(input.analysisSession === undefined
-        ? {}
-        : { analysisSession: structuredClone(input.analysisSession) })
-    };
-  }
-
   return {
     kind: "current-position",
     gameReference: input.gameReference,
@@ -225,5 +237,26 @@ export const formatCoachContextLabel = (context: CoachQuestionContext): string =
     return `Reviewing turn ${context.turnNumber} · pass`;
   }
 
-  return "Context: Completed game";
+  if (context.reviewScope === "completed-game") {
+    const reviewedCheckerPlayTurns =
+      context.reviewedTurns?.filter((turn) => turn.turnRecord.outcome.kind === "move").length ??
+      context.snapshot.turnHistory.filter((turn) => turn.outcome.kind === "move").length;
+
+    const evaluatedTurns =
+      context.reviewedTurns?.filter(
+        (turn) => turn.rankedAnalysis !== undefined && turn.turnRecord.outcome.kind === "move"
+      ).length ?? 0;
+
+    return `Reviewing completed game · ${reviewedCheckerPlayTurns} checker-play turns · ${evaluatedTurns} evaluated`;
+  }
+
+  const reviewedCheckerPlayTurns =
+    context.reviewedTurns?.filter((turn) => turn.turnRecord.outcome.kind === "move").length ??
+    context.snapshot.turnHistory.filter((turn) => turn.outcome.kind === "move").length;
+  const evaluatedTurns =
+    context.reviewedTurns?.filter(
+      (turn) => turn.rankedAnalysis !== undefined && turn.turnRecord.outcome.kind === "move"
+    ).length ?? 0;
+
+  return `Reviewing game so far · ${reviewedCheckerPlayTurns} checker-play turns · ${evaluatedTurns} evaluated`;
 };

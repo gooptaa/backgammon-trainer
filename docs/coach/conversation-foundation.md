@@ -69,14 +69,20 @@ Supported context types:
 - `current-position`
 - `move-outcome` (explicit preview selection)
 - `history-turn` (explicit history inspection selection)
-- `game-review` (completed game fallback)
+- `game-review` (explicit review intent over committed game history)
+
+Full-game review activation policy:
+
+- full-game review is user-initiated through conversation intent
+- completed games are not auto-reviewed on every question
+- game-review context is resolved when the user asks to review the game (for example: "review this game", "how did I play", or "review game so far")
 
 Precedence on submit:
 
 1. explicit selected move outcome
 2. explicit selected history turn
 3. current committed position
-4. completed game review when no narrower context exists
+4. full-game review only when explicit review intent is present
 
 Historical-review extension:
 
@@ -84,6 +90,14 @@ Historical-review extension:
 - explicit selected history turn remains authoritative when present
 - otherwise, the latest committed checker-play turn in the same lineage is selected
 - if no committed checker-play turn exists, history review is not forced and evidence degrades honestly
+
+Full-game review extension:
+
+- review scope is resolved as `completed-game` or `game-so-far` from the submitted snapshot boundary
+- committed turn boundary is captured at submit time and does not expand while the request is pending
+- explicit inspected turn and explicit turn-number references are carried into deterministic key-decision selection
+- if learner ownership is not authoritative, review scope remains all-players and is disclosed as ambiguous ownership
+- unsupported non-checker decisions are excluded from checker-play grading and counted explicitly
 
 Hover state, selected checker state, and uncommitted staged board projection are never treated as committed context.
 
@@ -219,6 +233,12 @@ Historical review request capture:
 - the resolved committed-turn identity is fixed at submit time
 - subsequent move play does not retarget that request
 - selecting another turn later affects only future requests
+
+Full-game review request capture:
+
+- committed turns are snapshotted from the submitted lineage only
+- new committed moves after submit do not alter in-flight full-game review evidence
+- changing selected history turn after submit does not retarget the submitted full-game review
 
 Stale policy:
 

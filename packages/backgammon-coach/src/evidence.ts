@@ -12,7 +12,28 @@ import {
 } from "@backgammon-trainer/backgammon-analysis-session";
 
 import type { CoachConversation } from "./conversation";
-import type { CoachQuestionContext } from "./context";
+import type { CoachGameReviewTurnEvidence, CoachQuestionContext } from "./context";
+
+interface CoachGameReviewDecisionEvidence {
+  readonly turnNumber: number;
+  readonly player: "white" | "black";
+  readonly playedMove: string;
+  readonly analysisSource:
+    "analysis-record" | "hydrated" | "missing" | "failed" | "unavailable" | "unsupported";
+  readonly coverage?: "complete" | "partial";
+  readonly playedMoveEvaluated: boolean;
+  readonly playedMoveRank?: number;
+  readonly playedMoveNormalizedScore?: number;
+  readonly strongestAlternative?: {
+    moveFingerprint: string;
+    moveLabel: string;
+    evaluatorRank: number;
+    normalizedScore: number;
+  };
+  readonly normalizedScoreDifference?: number;
+  readonly isTieForHighestEvaluation?: boolean;
+  readonly note: string;
+}
 
 export interface CoachEvidenceWarning {
   readonly code:
@@ -23,7 +44,8 @@ export interface CoachEvidenceWarning {
     | "ambiguous-move-reference"
     | "unmatched-move-reference"
     | "move-evidence-truncated"
-    | "warning-limit-reached";
+    | "warning-limit-reached"
+    | "ambiguous-review-ownership";
   readonly message: string;
 }
 
@@ -129,19 +151,35 @@ export interface CoachEvidenceBundle {
     };
   };
   gameReviewEvidence?: {
+    reviewScope: "completed-game" | "game-so-far";
+    selectionSource: "explicit-request" | "completed-fallback";
+    committedTurnBoundary: number;
+    reviewedPlayerScope: "learner-only" | "all-players";
+    reviewedPlayer?: "white" | "black";
+    ownershipStatus: "authoritative" | "ambiguous";
+    selectedTurnNumber?: number;
+    referencedTurnNumbers: readonly number[];
     committedTurnCount: number;
+    supportedCheckerPlayDecisionCount: number;
+    unsupportedDecisionCount: number;
     analyzedTurnNumbers: readonly number[];
     analysisRecordCount: number;
     evaluatedChosenMoveCount: number;
     unevaluatedChosenMoveCount: number;
     completeCoverageCount: number;
     partialCoverageCount: number;
+    missingCoverageCount: number;
+    fixtureCoverageCount: number;
+    failedCoverageCount: number;
+    unavailableCoverageCount: number;
     winner?: "white" | "black";
     evaluatorProvenanceSummary?: {
       provider: string;
       providerVersion: string;
       adapterVersion: string;
     };
+    keyDecisions: readonly CoachGameReviewDecisionEvidence[];
+    limitations: readonly string[];
   };
   evaluatorProvenance?: EvaluatorProvenance;
   evaluatorCoverage?: "complete" | "partial";
@@ -570,6 +608,25 @@ const getSessionProvenanceSummary = (session: AnalysisSession | undefined) => {
   };
 };
 
+const parseReferencedTurnNumbers = (question: string): readonly number[] => {
+  const matches = question.matchAll(/\bturn\s+([0-9]+)\b/gi);
+  const numbers = new Set<number>();
+
+  for (const match of matches) {
+    const raw = match[1];
+    if (raw === undefined) {
+      continue;
+    }
+
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      numbers.add(parsed);
+    }
+  }
+
+  return [...numbers].sort((left, right) => left - right);
+};
+
 export const buildCoachEvidence = (input: {
   question: string;
   context: CoachQuestionContext;
@@ -958,6 +1015,194 @@ export const buildCoachEvidence = (input: {
     const snapshot = input.context.snapshot;
     evidence.positionFacts = analyzePosition(snapshot.gameState.position);
 
+    const reviewedTurns: readonly CoachGameReviewTurnEvidence[] =
+      input.context.reviewedTurns ??
+      snapshot.turnHistory.map((turnRecord) => ({
+        turnNumber: turnRecord.turnNumber,
+        turnRecord: structuredClone(turnRecord),
+        analysisSource:
+          turnRecord.outcome.kind === "move" ? ("missing" as const) : ("unsupported" as const)
+      }));
+
+    let supportedCheckerPlayDecisionCount = 0;
+    let unsupportedDecisionCount = 0;
+    let completeCoverageCount = 0;
+    let partialCoverageCount = 0;
+    let missingCoverageCount = 0;
+    let fixtureCoverageCount = 0;
+    let failedCoverageCount = 0;
+    let unavailableCoverageCount = 0;
+    let evaluatedChosenMoveCount = 0;
+    let unevaluatedChosenMoveCount = 0;
+
+    const limitations: string[] = [];
+    const decisionEvidence: CoachGameReviewDecisionEvidence[] = [];
+
+    for (const reviewedTurn of reviewedTurns) {
+      const turnRecord = reviewedTurn.turnRecord;
+      if (turnRecord.outcome.kind !== "move") {
+        unsupportedDecisionCount += 1;
+        continue;
+      }
+
+      supportedCheckerPlayDecisionCount += 1;
+      const playedMoveLabel = formatMoveLabel(turnRecord.outcome.move);
+
+      if (reviewedTurn.rankedAnalysis?.kind !== "evaluated") {
+        if (reviewedTurn.analysisSource === "failed") {
+          failedCoverageCount += 1;
+          limitations.push(
+            `Turn ${turnRecord.turnNumber} could not be evaluated (${reviewedTurn.analysisIssue ?? "evaluation failed"}).`
+          );
+        } else if (reviewedTurn.analysisSource === "unavailable") {
+          unavailableCoverageCount += 1;
+          limitations.push(
+            `Turn ${turnRecord.turnNumber} had no evaluator available (${reviewedTurn.analysisIssue ?? "unavailable"}).`
+          );
+        } else if (reviewedTurn.analysisSource === "unsupported") {
+          unsupportedDecisionCount += 1;
+        } else {
+          missingCoverageCount += 1;
+        }
+
+        decisionEvidence.push({
+          turnNumber: turnRecord.turnNumber,
+          player: turnRecord.player,
+          playedMove: playedMoveLabel,
+          analysisSource: reviewedTurn.analysisSource,
+          playedMoveEvaluated: false,
+          note: "Decision not fully covered by evaluator evidence."
+        });
+        continue;
+      }
+
+      const rankedAnalysis = reviewedTurn.rankedAnalysis;
+      const playedMoveFingerprint = getMoveFingerprint(turnRecord.outcome.move);
+      const playedRanked = rankedAnalysis.rankedMoves.find(
+        (row) => row.moveFingerprint === playedMoveFingerprint
+      );
+      const topRanked = rankedAnalysis.rankedMoves[0];
+      const fixture = isFixtureEvaluator(rankedAnalysis.provenance.provider);
+
+      if (fixture) {
+        fixtureCoverageCount += 1;
+      } else if (rankedAnalysis.coverage === "complete") {
+        completeCoverageCount += 1;
+      } else {
+        partialCoverageCount += 1;
+      }
+
+      if (playedRanked === undefined) {
+        unevaluatedChosenMoveCount += 1;
+      } else {
+        evaluatedChosenMoveCount += 1;
+      }
+
+      const normalizedScoreDifference = playedRanked?.lossFromBest;
+      const topMoveDiffers =
+        topRanked !== undefined && topRanked.moveFingerprint !== playedMoveFingerprint;
+
+      decisionEvidence.push({
+        turnNumber: turnRecord.turnNumber,
+        player: turnRecord.player,
+        playedMove: playedMoveLabel,
+        analysisSource: reviewedTurn.analysisSource,
+        coverage: rankedAnalysis.coverage,
+        playedMoveEvaluated: playedRanked !== undefined,
+        ...(playedRanked === undefined ? {} : { playedMoveRank: playedRanked.rank }),
+        ...(playedRanked === undefined
+          ? {}
+          : { playedMoveNormalizedScore: playedRanked.normalizedScore }),
+        ...(topRanked === undefined || !topMoveDiffers
+          ? {}
+          : {
+              strongestAlternative: {
+                moveFingerprint: topRanked.moveFingerprint,
+                moveLabel: formatMoveLabel(topRanked.outcome.move),
+                evaluatorRank: topRanked.rank,
+                normalizedScore: topRanked.normalizedScore
+              }
+            }),
+        ...(normalizedScoreDifference === undefined ? {} : { normalizedScoreDifference }),
+        isTieForHighestEvaluation: playedRanked?.rank === 1,
+        note:
+          playedRanked?.rank === 1
+            ? "Played move tied for highest evaluated rank."
+            : playedRanked === undefined
+              ? "Played move was not evaluated in ranked output."
+              : topMoveDiffers
+                ? "Played move ranked lower than the strongest evaluated alternative."
+                : "Played move remained among strongest evaluated candidates."
+      });
+    }
+
+    const explicitTurnNumbers = new Set<number>([
+      ...(input.context.selectedTurnNumber === undefined ? [] : [input.context.selectedTurnNumber]),
+      ...(input.context.referencedTurnNumbers ?? parseReferencedTurnNumbers(input.question))
+    ]);
+
+    const keyDecisions: CoachGameReviewDecisionEvidence[] = [];
+    const seenDecisionTurns = new Set<number>();
+
+    const pushDecision = (decision: CoachGameReviewDecisionEvidence): void => {
+      if (seenDecisionTurns.has(decision.turnNumber)) {
+        return;
+      }
+
+      if (keyDecisions.length >= limits.maxLegalMoves) {
+        return;
+      }
+
+      seenDecisionTurns.add(decision.turnNumber);
+      keyDecisions.push(decision);
+    };
+
+    const scoredDecisions = decisionEvidence
+      .filter(
+        (decision) =>
+          decision.playedMoveEvaluated && decision.normalizedScoreDifference !== undefined
+      )
+      .sort((left, right) => {
+        const leftDiff = left.normalizedScoreDifference ?? -1;
+        const rightDiff = right.normalizedScoreDifference ?? -1;
+        if (leftDiff !== rightDiff) {
+          return rightDiff - leftDiff;
+        }
+        return left.turnNumber - right.turnNumber;
+      });
+
+    for (const decision of decisionEvidence) {
+      if (explicitTurnNumbers.has(decision.turnNumber)) {
+        pushDecision(decision);
+      }
+    }
+
+    for (const decision of scoredDecisions) {
+      if ((decision.normalizedScoreDifference ?? 0) > 0) {
+        pushDecision(decision);
+      }
+      if (keyDecisions.length >= limits.maxLegalMoves) {
+        break;
+      }
+    }
+
+    const tieDecisions = scoredDecisions.filter((decision) => decision.isTieForHighestEvaluation);
+    for (const decision of tieDecisions) {
+      pushDecision(decision);
+      if (keyDecisions.length >= limits.maxLegalMoves) {
+        break;
+      }
+    }
+
+    if (keyDecisions.length === 0) {
+      const firstCovered = decisionEvidence
+        .filter((decision) => decision.playedMoveEvaluated)
+        .sort((left, right) => left.turnNumber - right.turnNumber)[0];
+      if (firstCovered !== undefined) {
+        pushDecision(firstCovered);
+      }
+    }
+
     const summary =
       input.context.analysisSession === undefined
         ? null
@@ -966,18 +1211,51 @@ export const buildCoachEvidence = (input: {
 
     const lastTurn = snapshot.turnHistory.at(-1);
     evidence.gameReviewEvidence = {
+      reviewScope: input.context.reviewScope,
+      selectionSource: input.context.selectionSource,
+      committedTurnBoundary: input.context.committedTurnBoundary,
+      reviewedPlayerScope: input.context.reviewedPlayerScope.kind,
+      ...(input.context.reviewedPlayerScope.player === undefined
+        ? {}
+        : { reviewedPlayer: input.context.reviewedPlayerScope.player }),
+      ownershipStatus:
+        input.context.reviewedPlayerScope.kind === "learner-only" ? "authoritative" : "ambiguous",
+      ...(input.context.selectedTurnNumber === undefined
+        ? {}
+        : { selectedTurnNumber: input.context.selectedTurnNumber }),
+      referencedTurnNumbers: input.context.referencedTurnNumbers ?? [],
       committedTurnCount: snapshot.turnHistory.length,
+      supportedCheckerPlayDecisionCount,
+      unsupportedDecisionCount,
       analyzedTurnNumbers: summary?.analyzedTurnNumbers ?? [],
       analysisRecordCount: summary?.recordCount ?? 0,
-      evaluatedChosenMoveCount: summary?.evaluatedChosenMoves ?? 0,
-      unevaluatedChosenMoveCount: summary?.unevaluatedChosenMoves ?? 0,
-      completeCoverageCount: summary?.completeCoverageCount ?? 0,
-      partialCoverageCount: summary?.partialCoverageCount ?? 0,
+      evaluatedChosenMoveCount,
+      unevaluatedChosenMoveCount,
+      completeCoverageCount,
+      partialCoverageCount,
+      missingCoverageCount,
+      fixtureCoverageCount,
+      failedCoverageCount,
+      unavailableCoverageCount,
       ...(lastTurn === undefined || lastTurn.gameStatusAfter.state !== "complete"
         ? {}
         : { winner: lastTurn.gameStatusAfter.winner }),
-      ...(provenanceSummary === undefined ? {} : { evaluatorProvenanceSummary: provenanceSummary })
+      ...(provenanceSummary === undefined ? {} : { evaluatorProvenanceSummary: provenanceSummary }),
+      keyDecisions,
+      limitations: [...new Set(limitations)]
     };
+
+    evidence.recommendationSupport = {
+      status: "not-supported",
+      reason: "non-decision-state"
+    };
+
+    if (input.context.reviewedPlayerScope.kind === "all-players") {
+      warnings.push({
+        code: "ambiguous-review-ownership",
+        message: "Reviewed-player ownership is ambiguous; evidence includes all committed players."
+      });
+    }
   }
 
   const cappedWarnings = capWarnings(warnings, limits.maxWarnings);
