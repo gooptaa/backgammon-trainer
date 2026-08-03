@@ -22,11 +22,32 @@ Backgammon Trainer can now execute real non-streaming coach completions through 
 - Browser does not send arbitrary upstream provider URLs.
 - Provider-specific request/response parsing stays in server adapter internals.
 
+## Deployment access boundary and spend risk
+
+`POST /api/coach/complete` is intentionally provider-neutral, but it is still a provider-backed route.
+
+- A fixed upstream destination protects against unrestricted forwarding and SSRF-style abuse.
+- A fixed upstream destination does not by itself prevent unauthorized callers from spending the configured provider key.
+
+Current threat model for real-provider mode:
+
+- local development
+- trusted private network
+- or deployment behind external access control (for example gateway authentication, VPN, or equivalent trusted boundary)
+
+Current implementation does not provide built-in end-user authentication or per-user spend controls.
+
+Operational requirement:
+
+- do not expose provider-backed routes as unauthenticated public internet endpoints
+
 ## Runtime modes
 
 - `MODEL_PROVIDER=none`: no provider configured, coach send unavailable.
 - `MODEL_PROVIDER=mock`: fixture adapter mode.
 - `MODEL_PROVIDER=openai-compatible`: real provider mode.
+
+If `MODEL_PROVIDER` is unset or invalid, server runtime falls back to `mock` (fixture mode), not real-provider mode.
 
 Browser mode is controlled by `VITE_COACH_MODEL_MODE`:
 

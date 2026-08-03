@@ -42,6 +42,21 @@ Optional:
 - Request/response payloads are not persisted by server routes.
 - Error mapping is normalized and avoids exposing raw provider internals by default.
 
+## Deployment and spend-risk boundary
+
+Provider-backed routes are not safe to expose publicly without an external access boundary.
+
+- Keeping the upstream destination fixed prevents arbitrary forwarding.
+- Keeping the upstream destination fixed does not prevent unauthenticated callers from spending the configured provider key.
+
+Deploy real-provider mode only in one of these contexts:
+
+- local development
+- trusted private network
+- behind external authentication/access control (gateway, VPN, reverse proxy policy, equivalent)
+
+Built-in end-user authentication and per-user spend controls are not part of this milestone.
+
 ## Compatibility surface
 
 Implemented now:

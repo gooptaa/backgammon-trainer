@@ -306,22 +306,84 @@ Verified starting commit:
 
 - `c48321c678c24533297af0b838a97c4501ca1766`
 
+Relationship to previous audited milestone:
+
+- previous audited milestone ended at `dbf6bc3e15bf1e77594d7e334645a534d67182d8`
+- `dbf6bc3e15bf1e77594d7e334645a534d67182d8` is an ancestor of `c48321c678c24533297af0b838a97c4501ca1766`
+- intervening commit: `c48321c` (`docs: complete curated retrieval milestone closure`)
+
 Milestone implementation commit:
 
-- pending
+- `f7df805` (`feat: add openai-compatible coach provider`)
+
+Closure correction commit:
+
+- none
 
 Final HEAD:
 
-- pending
+- `f7df80589f010a58c2e09e44d604199ae023f30c`
 
 Branch and push status:
 
-- pending
+- `main`
+- `origin/main` up to date with `HEAD`
+- milestone implementation commit pushed to `origin/main`
 
 Final Git status:
 
-- pending
+- working tree clean
+
+Provider-boundary and spend-risk assessment:
+
+- provider credentials remain server-side and are not returned by status/completion routes
+- browser cannot choose upstream destination
+- completion route is not an unrestricted forwarding proxy
+- fixed upstream destination alone does not prevent spend abuse by unauthorized callers
+- real-provider mode requires trusted/private deployment boundary or external access control
+- documentation was corrected to make this operational limitation explicit
+
+Compatibility and mode verification:
+
+- supported OpenAI-compatible slice remains non-streaming chat-completions text generation
+- fixture/server/none behavior remains distinct
+- no silent fallback from failed real-provider path to fixture output
+- provider/model provenance remains explicit in successful coach responses
+
+Credential and browser-bundle verification:
+
+- `.env.example` contains placeholders only
+- repository scan found no committed real credentials
+- production browser build scan found no `OPENAI_COMPAT_*`, `MODEL_PROVIDER`, or bearer-token leakage in `apps/web/dist`
 
 Validation results:
 
-- pending full matrix
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-engine test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-analysis test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-analysis-session test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/ai-contracts test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-knowledge test` passed
+- `pnpm --filter @backgammon-trainer/backgammon-knowledge knowledge:check` passed
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-coach test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-evaluator-gnubg test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/server test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/web test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/web build` passed
+- `CI=1 pnpm check` passed
+- `CI=1 pnpm test` passed
+- `git diff --check` passed
+
+Manual smoke test:
+
+- not performed in closure audit (no live provider credentials used)
+
+Unresolved limitations:
+
+- OpenAI-compatible scope remains intentionally narrow (non-streaming text)
+- no built-in end-user authentication or per-user spend controls in this milestone
+- real-provider deployments require external access control boundary
+
+Closure decision:
+
+- milestone closure audit passed with documentation corrections
+- repository is safe to proceed to the next milestone after this closure
