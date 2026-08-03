@@ -5,12 +5,13 @@ import { matchGnuBgMoveToLegalOutcome, parseGnuBgMoveNotation } from "../src/mat
 import {
   AMBIGUOUS_COORDINATE_MOVE_A,
   AMBIGUOUS_COORDINATE_MOVE_B,
+  createPosition,
   WHITE_BAR_ENTRY_MOVE,
   WHITE_BEAR_OFF_MOVE,
   WHITE_DOUBLES_MOVE,
-  WHITE_HIT_MOVE,
   WHITE_ORDINARY_MOVE,
   WHITE_REVERSED_ORDINARY_MOVE,
+  WHITE_HIT_MOVE,
   createOutcome
 } from "./fixtures/testData";
 
@@ -103,12 +104,56 @@ describe("GNU move matching", () => {
     expect((firstMatch.ok && firstMatch.moveFingerprint) || "").not.toBe("8/7 7/5");
   });
 
-  it("rejects unknown and ambiguous GNU moves rather than choosing arbitrarily", () => {
+  it("matches collapsed notation when GNU combines multiple die-steps into one token", () => {
+    const parsed = parseGnuBgMoveNotation("8/5", "white");
+    const outcomes = [createOutcome(WHITE_ORDINARY_MOVE), createOutcome(WHITE_REVERSED_ORDINARY_MOVE)];
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) {
+      return;
+    }
+
+    const match = matchGnuBgMoveToLegalOutcome(parsed.move, outcomes);
+
+    expect(match).toEqual(
+      expect.objectContaining({
+        ok: true,
+        moveFingerprint: getMoveFingerprint(WHITE_REVERSED_ORDINARY_MOVE)
+      })
+    );
+  });
+
+  it("rejects unknown moves and remains strict when equally-shaped candidates lead to different positions", () => {
     const unknown = parseGnuBgMoveNotation("24/20", "white");
     const ambiguous = parseGnuBgMoveNotation("8/7 7/6", "white");
+    const ambiguousOutcomeA = createOutcome(AMBIGUOUS_COORDINATE_MOVE_A);
+    const ambiguousOutcomeB = createOutcome(AMBIGUOUS_COORDINATE_MOVE_B);
     const ambiguousOutcomes = [
-      createOutcome(AMBIGUOUS_COORDINATE_MOVE_A),
-      createOutcome(AMBIGUOUS_COORDINATE_MOVE_B)
+      {
+        ...ambiguousOutcomeA,
+        positionAfter: createPosition({
+          points: {
+            6: { player: "white", checkerCount: 1 }
+          },
+          borneOff: {
+            white: 14,
+            black: 15
+          }
+        })
+      },
+      {
+        ...ambiguousOutcomeB,
+        positionAfter: createPosition({
+          points: {
+            6: { player: "white", checkerCount: 1 },
+            2: { player: "black", checkerCount: 1 }
+          },
+          borneOff: {
+            white: 14,
+            black: 14
+          }
+        })
+      }
     ];
 
     expect(unknown.ok && ambiguous.ok).toBe(true);

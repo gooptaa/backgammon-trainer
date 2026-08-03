@@ -160,18 +160,100 @@ const stepMatches = (
   );
 };
 
-export const matchGnuBgMoveToLegalOutcome = (
-  parsedMove: GnuBgParsedMove,
-  legalOutcomes: readonly LegalMoveOutcome[]
-): MatchGnuBgMoveToLegalOutcomeResult => {
-  const matchingOutcomes = legalOutcomes.filter((outcome) => {
-    if (outcome.move.steps.length !== parsedMove.steps.length) {
+const positionsEqual = (
+  left: LegalMoveOutcome["positionAfter"],
+  right: LegalMoveOutcome["positionAfter"]
+): boolean => {
+  if (left.bar.white !== right.bar.white || left.bar.black !== right.bar.black) {
+    return false;
+  }
+
+  if (
+    left.borneOff.white !== right.borneOff.white ||
+    left.borneOff.black !== right.borneOff.black
+  ) {
+    return false;
+  }
+
+  for (let point = 1; point <= 24; point += 1) {
+    const key = point as keyof typeof left.points;
+    const leftOccupancy = left.points[key];
+    const rightOccupancy = right.points[key];
+
+    if (leftOccupancy === null || rightOccupancy === null) {
+      if (leftOccupancy !== rightOccupancy) {
+        return false;
+      }
+
+      continue;
+    }
+
+    if (
+      leftOccupancy.player !== rightOccupancy.player ||
+      leftOccupancy.checkerCount !== rightOccupancy.checkerCount
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const canCollapseMatch = (
+  candidateSteps: readonly LegalMoveOutcome["move"]["steps"][number][],
+  parsedSteps: readonly GnuBgParsedMoveStep[]
+): boolean => {
+  let candidateIndex = 0;
+
+  for (const parsedStep of parsedSteps) {
+    if (candidateIndex >= candidateSteps.length) {
       return false;
     }
 
-    return outcome.move.steps.every((step, index) => stepMatches(step, parsedMove.steps[index]!));
-  });
+    const groupStart = candidateIndex;
+    if (candidateSteps[groupStart]!.fromPoint !== parsedStep.fromPoint) {
+      return false;
+    }
 
+    let foundGroup = false;
+    let sawIntermediateHit = false;
+
+    for (let groupEnd = groupStart; groupEnd < candidateSteps.length; groupEnd += 1) {
+      const step = candidateSteps[groupEnd]!;
+
+      if (groupEnd > groupStart && candidateSteps[groupEnd - 1]!.toPoint !== step.fromPoint) {
+        break;
+      }
+
+      if (groupEnd > groupStart && step.hitsBlot) {
+        sawIntermediateHit = true;
+      }
+
+      if (step.toPoint !== parsedStep.toPoint) {
+        continue;
+      }
+
+      if (sawIntermediateHit || step.hitsBlot !== parsedStep.hitsBlot) {
+        continue;
+      }
+
+      candidateIndex = groupEnd + 1;
+      foundGroup = true;
+      break;
+    }
+
+    if (!foundGroup) {
+      return false;
+    }
+  }
+
+  return candidateIndex === candidateSteps.length;
+};
+
+const resolveCandidateOutcome = (
+  parsedMove: GnuBgParsedMove,
+  matchingOutcomes: readonly LegalMoveOutcome[]
+): MatchGnuBgMoveToLegalOutcomeResult => {
   if (matchingOutcomes.length === 0) {
     return {
       ok: false,
@@ -182,17 +264,52 @@ export const matchGnuBgMoveToLegalOutcome = (
   }
 
   if (matchingOutcomes.length > 1) {
-    return {
-      ok: false,
-      reason: "ambiguous-move",
-      message: `GNU move is ambiguous against canonical legal moves: ${parsedMove.notation}.`,
-      candidateFingerprints: matchingOutcomes.map((outcome) => getMoveFingerprint(outcome.move))
-    };
+    const [firstOutcome, ...restOutcomes] = matchingOutcomes;
+    const allEquivalent = restOutcomes.every((outcome) =>
+      positionsEqual(outcome.positionAfter, firstOutcome!.positionAfter)
+    );
+
+    if (!allEquivalent) {
+      return {
+        ok: false,
+        reason: "ambiguous-move",
+        message: `GNU move is ambiguous against canonical legal moves: ${parsedMove.notation}.`,
+        candidateFingerprints: matchingOutcomes.map((outcome) => getMoveFingerprint(outcome.move))
+      };
+    }
   }
+
+  const orderedMatches = [...matchingOutcomes].sort((left, right) => {
+    return getMoveFingerprint(left.move).localeCompare(getMoveFingerprint(right.move));
+  });
+  const selected = orderedMatches[0]!;
 
   return {
     ok: true,
-    moveFingerprint: getMoveFingerprint(matchingOutcomes[0]!.move),
-    outcome: matchingOutcomes[0]!
+    moveFingerprint: getMoveFingerprint(selected.move),
+    outcome: selected
   };
+};
+
+export const matchGnuBgMoveToLegalOutcome = (
+  parsedMove: GnuBgParsedMove,
+  legalOutcomes: readonly LegalMoveOutcome[]
+): MatchGnuBgMoveToLegalOutcomeResult => {
+  const strictMatches = legalOutcomes.filter((outcome) => {
+    if (outcome.move.steps.length !== parsedMove.steps.length) {
+      return false;
+    }
+
+    return outcome.move.steps.every((step, index) => stepMatches(step, parsedMove.steps[index]!));
+  });
+
+  if (strictMatches.length > 0) {
+    return resolveCandidateOutcome(parsedMove, strictMatches);
+  }
+
+  const collapsedMatches = legalOutcomes.filter((outcome) => {
+    return canCollapseMatch(outcome.move.steps, parsedMove.steps);
+  });
+
+  return resolveCandidateOutcome(parsedMove, collapsedMatches);
 };

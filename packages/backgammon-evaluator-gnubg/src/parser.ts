@@ -153,6 +153,10 @@ export const parseGnuBgEvaluationOutput = (
     const rowMatch = MOVE_ROW_PATTERN.exec(line);
 
     if (rowMatch === null) {
+      if (!formatSeen) {
+        continue;
+      }
+
       return {
         ok: false,
         message: `GNU Backgammon output line is not recognized: ${line}.`

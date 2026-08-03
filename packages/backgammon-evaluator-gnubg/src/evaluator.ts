@@ -87,9 +87,10 @@ const getSafeExecutableIdentity = (executable: string): string => {
 };
 
 const toSimpleBoardNotation = (board: GnuBgBoardState): string => {
+  const pointsAscending = [...board.points].sort((left, right) => left.gnuPoint - right.gnuPoint);
   const values = [
     board.rollerBar,
-    ...board.points.map((point) =>
+    ...pointsAscending.map((point) =>
       point.rollerCheckerCount > 0 ? point.rollerCheckerCount : -point.opponentCheckerCount
     ),
     -board.opponentBar

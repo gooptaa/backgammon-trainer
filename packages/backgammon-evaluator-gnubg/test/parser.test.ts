@@ -93,6 +93,27 @@ describe("parseGnuBgEvaluationOutput", () => {
     }
   });
 
+  it("ignores non-bridge preamble lines before format markers", () => {
+    const withPreamble = [
+      "GNU Backgammon 1.08.003",
+      "Copyright (C) 2004-2024 the AUTHORS.",
+      "Random startup line",
+      readFixture("success-white-complete.txt")
+    ].join("\n");
+
+    const result = parseGnuBgEvaluationOutput(withPreamble, {
+      playerOnRoll: "white"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.evaluation.coverage).toBe("complete");
+    expect(result.evaluation.rows.length).toBeGreaterThan(0);
+  });
+
   it("rejects malformed, non-finite, duplicate, empty, and unknown-format output", () => {
     expect(
       parseGnuBgEvaluationOutput(readFixture("malformed-row.txt"), { playerOnRoll: "white" })

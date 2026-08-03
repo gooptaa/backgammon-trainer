@@ -1,3 +1,8 @@
+import {
+  analyzeLegalMoveOutcomes,
+  getMoveFingerprint
+} from "@backgammon-trainer/backgammon-analysis";
+
 const requireOptIn = () => {
   if (process.env.ALLOW_GNUBG_SMOKE !== "true") {
     throw new Error("GNU evaluator smoke test is opt-in. Set ALLOW_GNUBG_SMOKE=true.");
@@ -22,235 +27,53 @@ const buildEmptyPoints = () => {
   return Object.fromEntries(entries);
 };
 
-const SMOKE_REQUEST = {
-  position: {
-    points: {
-      ...buildEmptyPoints(),
-      8: { player: "white", checkerCount: 1 },
-      6: { player: "white", checkerCount: 1 },
-      24: { player: "black", checkerCount: 1 }
-    },
-    bar: {
-      white: 0,
-      black: 0
-    },
-    borneOff: {
-      white: 13,
-      black: 14
-    }
+const SMOKE_POSITION = {
+  points: {
+    ...buildEmptyPoints(),
+    8: { player: "white", checkerCount: 1 },
+    6: { player: "white", checkerCount: 1 },
+    24: { player: "black", checkerCount: 1 }
   },
-  player: "white",
-  dice: {
-    dice: [1, 2]
+  bar: {
+    white: 0,
+    black: 0
   },
-  legalOutcomes: [
-    {
-      move: {
-        player: "white",
-        steps: [
-          {
-            kind: "point-to-point",
-            fromPoint: 8,
-            toPoint: 7,
-            dieValue: 1,
-            dieIndex: 0,
-            hitsBlot: false
-          },
-          {
-            kind: "point-to-point",
-            fromPoint: 7,
-            toPoint: 5,
-            dieValue: 2,
-            dieIndex: 1,
-            hitsBlot: false
-          }
-        ]
-      },
-      positionAfter: {
-        points: {
-          ...buildEmptyPoints(),
-          5: { player: "white", checkerCount: 1 },
-          6: { player: "white", checkerCount: 1 },
-          24: { player: "black", checkerCount: 1 }
-        },
-        bar: {
-          white: 0,
-          black: 0
-        },
-        borneOff: {
-          white: 13,
-          black: 14
-        }
-      },
-      analysisAfter: {
-        pointCountByPlayer: {
-          white: 2,
-          black: 1
-        },
-        pipCountByPlayer: {
-          white: 11,
-          black: 24
-        },
-        blotCountByPlayer: {
-          white: 1,
-          black: 1
-        },
-        madePointCountByPlayer: {
-          white: 0,
-          black: 0
-        },
-        highestOccupiedPointByPlayer: {
-          white: 6,
-          black: 24
-        },
-        checkerOnBarCountByPlayer: {
-          white: 0,
-          black: 0
-        },
-        borneOffCountByPlayer: {
-          white: 13,
-          black: 14
-        },
-        relationship: {
-          contactStatus: "contact",
-          pipCountLeader: "white",
-          pipCountDifferenceWhiteMinusBlack: -13
-        }
-      },
-      featureDelta: {
-        white: {
-          pipCountDelta: -3,
-          blotCountDelta: 0,
-          madePointCountDelta: 0,
-          barCountDelta: 0,
-          borneOffCountDelta: 0
-        },
-        black: {
-          pipCountDelta: 0,
-          blotCountDelta: 0,
-          madePointCountDelta: 0,
-          barCountDelta: 0,
-          borneOffCountDelta: 0
-        },
-        relationship: {
-          contactStatusBefore: "contact",
-          contactStatusAfter: "contact",
-          pipCountLeaderBefore: "white",
-          pipCountLeaderAfter: "white",
-          pipCountDifferenceWhiteMinusBlackDelta: -3
-        }
-      }
-    },
-    {
-      move: {
-        player: "white",
-        steps: [
-          {
-            kind: "point-to-point",
-            fromPoint: 8,
-            toPoint: 6,
-            dieValue: 2,
-            dieIndex: 1,
-            hitsBlot: false
-          },
-          {
-            kind: "point-to-point",
-            fromPoint: 6,
-            toPoint: 5,
-            dieValue: 1,
-            dieIndex: 0,
-            hitsBlot: false
-          }
-        ]
-      },
-      positionAfter: {
-        points: {
-          ...buildEmptyPoints(),
-          5: { player: "white", checkerCount: 1 },
-          6: { player: "white", checkerCount: 1 },
-          24: { player: "black", checkerCount: 1 }
-        },
-        bar: {
-          white: 0,
-          black: 0
-        },
-        borneOff: {
-          white: 13,
-          black: 14
-        }
-      },
-      analysisAfter: {
-        pointCountByPlayer: {
-          white: 2,
-          black: 1
-        },
-        pipCountByPlayer: {
-          white: 11,
-          black: 24
-        },
-        blotCountByPlayer: {
-          white: 1,
-          black: 1
-        },
-        madePointCountByPlayer: {
-          white: 0,
-          black: 0
-        },
-        highestOccupiedPointByPlayer: {
-          white: 6,
-          black: 24
-        },
-        checkerOnBarCountByPlayer: {
-          white: 0,
-          black: 0
-        },
-        borneOffCountByPlayer: {
-          white: 13,
-          black: 14
-        },
-        relationship: {
-          contactStatus: "contact",
-          pipCountLeader: "white",
-          pipCountDifferenceWhiteMinusBlack: -13
-        }
-      },
-      featureDelta: {
-        white: {
-          pipCountDelta: -3,
-          blotCountDelta: 0,
-          madePointCountDelta: 0,
-          barCountDelta: 0,
-          borneOffCountDelta: 0
-        },
-        black: {
-          pipCountDelta: 0,
-          blotCountDelta: 0,
-          madePointCountDelta: 0,
-          barCountDelta: 0,
-          borneOffCountDelta: 0
-        },
-        relationship: {
-          contactStatusBefore: "contact",
-          contactStatusAfter: "contact",
-          pipCountLeaderBefore: "white",
-          pipCountLeaderAfter: "white",
-          pipCountDifferenceWhiteMinusBlackDelta: -3
-        }
-      }
-    }
-  ],
-  context: {
-    gameMode: "money"
+  borneOff: {
+    white: 13,
+    black: 14
   }
+};
+
+const SMOKE_PLAYER = "white";
+const SMOKE_DICE = {
+  dice: [1, 2]
 };
 
 const fail = (message) => {
   throw new Error(message);
 };
 
+const buildSmokeRequest = () => {
+  const factual = analyzeLegalMoveOutcomes(SMOKE_POSITION, SMOKE_PLAYER, SMOKE_DICE);
+  if (!factual.ok) {
+    fail(`Failed to generate canonical legal outcomes for GNU smoke request: ${factual.message}`);
+  }
+
+  return {
+    position: SMOKE_POSITION,
+    player: SMOKE_PLAYER,
+    dice: SMOKE_DICE,
+    legalOutcomes: factual.analysis.outcomes,
+    context: {
+      gameMode: "money"
+    }
+  };
+};
+
 const run = async () => {
   requireOptIn();
   const apiBaseUrl = readApiBaseUrl();
+  const smokeRequest = buildSmokeRequest();
 
   const statusResponse = await fetch(`${apiBaseUrl}/api/evaluator/status`, { method: "GET" });
   if (!statusResponse.ok) {
@@ -278,7 +101,7 @@ const run = async () => {
     headers: {
       "content-type": "application/json"
     },
-    body: JSON.stringify(SMOKE_REQUEST)
+    body: JSON.stringify(smokeRequest)
   });
 
   const evaluateBody = await evaluateResponse.json().catch(() => ({}));
@@ -299,13 +122,24 @@ const run = async () => {
     fail("Evaluator provenance does not identify gnubg.");
   }
 
-  const fingerprints = new Set(result.scores.map((row) => row.moveFingerprint));
-  if (fingerprints.size !== result.scores.length) {
+  const candidateFingerprints = new Set(
+    smokeRequest.legalOutcomes.map((outcome) => getMoveFingerprint(outcome.move))
+  );
+  const scoredFingerprints = result.scores.map((row) => row.moveFingerprint);
+  if (new Set(scoredFingerprints).size !== scoredFingerprints.length) {
     fail("Evaluator returned duplicate move fingerprints.");
+  }
+
+  if (scoredFingerprints.some((fingerprint) => !candidateFingerprints.has(fingerprint))) {
+    fail("Evaluator returned at least one score for a move outside canonical legal candidates.");
   }
 
   if (result.coverage !== "complete" && result.coverage !== "partial") {
     fail("Evaluator returned unsupported coverage value.");
+  }
+
+  if (candidateFingerprints.size === 0) {
+    fail("GNU smoke request unexpectedly had no legal candidates.");
   }
 
   console.log("gnubg smoke passed");
@@ -316,6 +150,7 @@ const run = async () => {
   console.log(`provider version: ${String(result.provenance.providerVersion ?? "unknown")}`);
   console.log(`coverage: ${result.coverage}`);
   console.log(`scored moves: ${result.scores.length}`);
+  console.log(`legal candidates: ${smokeRequest.legalOutcomes.length}`);
 };
 
 run().catch((error) => {

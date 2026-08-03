@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 
 import json
+import os
 import sys
+from contextlib import contextmanager
+from typing import Any, Dict, List
 
 
 def fail(message: str) -> None:
@@ -42,6 +45,32 @@ def normalize_version_line(text: str) -> str:
     return f"GNU Backgammon {first_line}"
 
 
+@contextmanager
+def suppress_native_stdout() -> None:
+    saved_stdout_fd = os.dup(1)
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+
+    try:
+        os.dup2(devnull_fd, 1)
+        yield
+    finally:
+        os.dup2(saved_stdout_fd, 1)
+        os.close(saved_stdout_fd)
+        os.close(devnull_fd)
+
+
+def normalize_hints(raw_hints: object) -> List[Dict[str, Any]]:
+    if isinstance(raw_hints, list):
+        return [row for row in raw_hints if isinstance(row, dict)]
+
+    if isinstance(raw_hints, dict):
+        rows = raw_hints.get("hint")
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+
+    fail("gnubg python bridge expected hint list output")
+
+
 payload = read_payload()
 
 board_simple = payload.get("boardSimple")
@@ -64,23 +93,24 @@ if not isinstance(expected_moves, int) or expected_moves < 0:
 die_one, die_two = dice
 
 gnubg.command("new game")
-gnubg.command(f"set board simple {board_simple}")
-gnubg.command("set turn 0")
-gnubg.command(f"set dice {die_one} {die_two}")
-
-max_moves = expected_moves if expected_moves > 0 else 1
-hints = gnubg.hint(max_moves)
-
-if not isinstance(hints, list):
-    fail("gnubg python bridge expected hint list output")
-
 version_line = "GNU Backgammon unknown"
-try:
-    shown = gnubg.show("version")
-    if isinstance(shown, str):
-        version_line = normalize_version_line(shown)
-except Exception:
-    version_line = "GNU Backgammon unknown"
+max_moves = expected_moves if expected_moves > 0 else 1
+
+with suppress_native_stdout():
+    gnubg.command(f"set board simple {board_simple}")
+    gnubg.command("set turn 1")
+    gnubg.command(f"set dice {die_one} {die_two}")
+
+    raw_hints = gnubg.hint(max_moves)
+
+    try:
+        shown = gnubg.show("version")
+        if isinstance(shown, str):
+            version_line = normalize_version_line(shown)
+    except Exception:
+        version_line = "GNU Backgammon unknown"
+
+hints = normalize_hints(raw_hints)
 
 print(version_line)
 print("format: checker-play-v1")
@@ -94,9 +124,6 @@ if len(hints) < expected_moves:
     print("warning: provider returned only top candidates")
 
 for index, hint in enumerate(hints, start=1):
-    if not isinstance(hint, dict):
-        fail("gnubg python bridge received non-object hint row")
-
     move = hint.get("move")
     equity = hint.get("equity")
 

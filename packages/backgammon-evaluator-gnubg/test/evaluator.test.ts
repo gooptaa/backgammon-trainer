@@ -16,6 +16,7 @@ import {
   BLACK_SIMPLE_POSITION,
   DICE,
   WHITE_SIMPLE_POSITION,
+  createPosition,
   createOutcome
 } from "./fixtures/testData";
 
@@ -321,8 +322,31 @@ describe("createGnuBgPositionEvaluator", () => {
       player: "white",
       dice: DICE,
       legalOutcomes: [
-        createOutcome(AMBIGUOUS_COORDINATE_MOVE_A),
-        createOutcome(AMBIGUOUS_COORDINATE_MOVE_B)
+        {
+          ...createOutcome(AMBIGUOUS_COORDINATE_MOVE_A),
+          positionAfter: createPosition({
+            points: {
+              6: { player: "white", checkerCount: 1 }
+            },
+            borneOff: {
+              white: 14,
+              black: 15
+            }
+          })
+        },
+        {
+          ...createOutcome(AMBIGUOUS_COORDINATE_MOVE_B),
+          positionAfter: createPosition({
+            points: {
+              6: { player: "white", checkerCount: 1 },
+              2: { player: "black", checkerCount: 1 }
+            },
+            borneOff: {
+              white: 14,
+              black: 14
+            }
+          })
+        }
       ]
     });
 
