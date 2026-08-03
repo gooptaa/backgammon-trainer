@@ -67,7 +67,7 @@ export interface CoachLegalMoveSelectionSummary {
 }
 
 export interface CoachEvidenceBundle {
-  evidenceVersion: 1;
+  evidenceVersion: 2;
   questionContext: {
     kind: CoachQuestionContext["kind"];
   };
@@ -544,7 +544,7 @@ export const buildCoachEvidence = (input: {
   }
 
   const evidence: CoachEvidenceBundle = {
-    evidenceVersion: 1,
+    evidenceVersion: 2,
     questionContext: {
       kind: input.context.kind
     },

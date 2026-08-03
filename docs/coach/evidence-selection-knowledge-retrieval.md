@@ -98,6 +98,8 @@ Instead it deterministically selects a bounded subset based on:
 
 Each selected row records explicit selection reasons.
 
+The public coach evidence bundle version is now `2` to reflect the added selection, coverage, and retrieval semantics.
+
 Each request also records:
 
 - total legal move count

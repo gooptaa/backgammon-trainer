@@ -153,6 +153,10 @@ Omitted move rows are not described as illegal.
 
 Instructions now explicitly require the model to keep deterministic facts, evaluator output, and curated guidance separate.
 
+## Evidence contract impact
+
+- `CoachEvidenceBundle.evidenceVersion` was bumped from `1` to `2` because the public evidence payload now includes move-selection coverage, move-reference resolution details, and curated-knowledge-facing semantics.
+
 ## Web transparency
 
 The Coach panel remains conversation-first and now discloses, per response:
