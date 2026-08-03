@@ -276,3 +276,91 @@ Full matrix is recorded after milestone completion.
 - full-game coaching review
 - habit detection and learner modeling
 - streaming and real provider adapters
+
+## Closure audit
+
+Verified starting commit:
+
+- `37a9f8ab06b5752e6c00f0d243c402b2bc69f5b7`
+
+Milestone implementation commit:
+
+- `a59942d` (`feat: add curated coach knowledge retrieval`)
+
+Closure correction commit:
+
+- `dbf6bc3` (`fix: bump coach evidence contract version`)
+
+Final HEAD:
+
+- `dbf6bc3e15bf1e77594d7e334645a534d67182d8`
+
+Branch and push status:
+
+- `main`
+- `origin/main` is up to date with `HEAD`
+
+Final Git status:
+
+- working tree clean
+
+Architectural verification:
+
+- generic AI contracts remain domain-neutral
+- engine, analysis, and analysis-session do not depend on coaching or curated knowledge
+- knowledge stays browser-safe and independent from coach orchestration
+- coach composes deterministic evidence and curated knowledge through permitted dependencies only
+- browser code does not access Markdown at runtime and does not import the GNU adapter
+
+Retrieval-boundary verification:
+
+- callers continue to depend on the durable `CoachKnowledgeRetriever` boundary
+- the current local lexical matcher is replaceable without changing coach orchestration, prompt construction, or web disclosure behavior
+- internal scoring and normalization details remain inside the knowledge package
+
+Knowledge-source verification:
+
+- canonical markdown source remains under `packages/backgammon-knowledge/content/`
+- generated TypeScript corpus remains checked in at `packages/backgammon-knowledge/src/generated/corpus.ts`
+- generated output is labeled as generated and is deterministic from the markdown source
+- `pnpm --filter @backgammon-trainer/backgammon-knowledge knowledge:check` passed and confirmed the corpus is current
+
+Evidence-version verification:
+
+- `CoachEvidenceBundle.evidenceVersion` is `2`
+- all coach request and fixture consumers use the versioned evidence reference path or safely serialize the bundle without stale version-1 assumptions
+
+Context-kind behavior:
+
+- `current-position` uses question-aware bounded legal-move selection
+- `move-outcome` still exposes the inspected move outcome directly
+- `history-turn` still exposes committed turn evidence and missing-analysis warnings
+- `game-review` still exposes review aggregates and analysis-session provenance when available
+
+Validation results:
+
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-engine test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-analysis test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-analysis-session test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/ai-contracts test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-knowledge test` passed
+- `pnpm --filter @backgammon-trainer/backgammon-knowledge knowledge:check` passed
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-coach test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/backgammon-evaluator-gnubg test` passed via `pnpm test`
+- `CI=1 pnpm --filter @backgammon-trainer/web test` passed
+- `CI=1 pnpm --filter @backgammon-trainer/web build` passed
+- `CI=1 pnpm --filter @backgammon-trainer/server test` passed
+- `CI=1 pnpm check` passed
+- `CI=1 pnpm test` passed
+- `git diff --check` passed
+
+Residual limits:
+
+- local lexical retrieval only
+- beginner-oriented corpus only
+- no semantic ranking or embeddings yet
+- move-reference parsing remains notation-oriented
+
+Closure result:
+
+- the milestone is safe to proceed from
