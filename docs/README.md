@@ -18,6 +18,7 @@
 ## Coach
 
 - [Conversation foundation](coach/conversation-foundation.md)
+- [Evidence selection and knowledge retrieval](coach/evidence-selection-knowledge-retrieval.md)
 
 ## Engine
 
@@ -34,6 +35,7 @@
 - [Historical ADR set](architecture/adr)
 - [Architecture guardrail ADR set](adr)
 - [Text-first coaching ADR](adr/0007-text-first-provider-neutral-coaching.md)
+- [Curated knowledge retrieval ADR](adr/0008-curated-knowledge-retrieval-boundary.md)
 
 ## Roadmap
 
@@ -43,6 +45,7 @@
 ## Knowledge
 
 - [Knowledge architecture summary](knowledge/architecture.md)
+- [Knowledge authoring guide](knowledge/authoring-guide.md)
 - [Deep research report](knowledge/deep-research-report.md)
 
 ## Developer Guides

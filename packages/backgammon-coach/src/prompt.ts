@@ -86,9 +86,16 @@ export const buildCoachModelRequest = (
     .map((entry) => ({
       id: entry.id,
       title: entry.title,
+      summary: entry.summary ?? entry.text.slice(0, 160),
       text: entry.text,
       source: entry.source,
-      tags: [...entry.tags]
+      track: entry.track ?? "general",
+      concepts: [...(entry.concepts ?? [])],
+      selectionReasons: (entry.selectionReasons ?? []).map((reason) => ({ ...reason })),
+      provenance: {
+        kind: entry.provenance?.kind ?? "project-authored",
+        label: entry.provenance?.label ?? entry.source
+      }
     }));
   const serializedEvidence = JSON.parse(JSON.stringify(request.evidence)) as JsonValue;
 
@@ -97,11 +104,16 @@ export const buildCoachModelRequest = (
     systemInstruction:
       "You are a backgammon coach assistant. Answer the user question using only supplied evidence. Do not invent legal moves, board facts, evaluator scores, committed history, or long-term patterns.",
     developerInstructions: [
-      "Treat deterministic evidence as authoritative.",
-      "Distinguish known facts from uncertainty.",
+      "Treat engine-derived and deterministic analysis evidence as authoritative for board facts and legal move facts.",
+      "Keep deterministic facts, evaluator-attributed evidence, and curated general guidance clearly separated.",
+      "Curated knowledge is general instructional guidance and does not prove that any legal move is best in this position.",
+      "Omitted legal move rows may still represent legal moves; do not describe omitted rows as illegal.",
+      "Evaluator coverage and coach evidence coverage are different. Do not infer missing evaluator scores.",
       "If evaluator provenance is fixture/synthetic, state that clearly and do not present it as expert advice.",
       "Never claim GNU or expert evaluation unless provenance explicitly supports it.",
       "Do not perform result-based reasoning or hidden board reconstruction.",
+      "Acknowledge insufficient evidence when the supplied facts do not settle the question.",
+      "Long-term player patterns are not available yet.",
       "Remain concise unless the user asks for more detail.",
       "Do not reveal internal JSON schema details unless explicitly requested."
     ],
@@ -113,8 +125,8 @@ export const buildCoachModelRequest = (
         verbosity: request.responsePreferences.verbosity
       },
       contextKind: request.context.kind,
-      evidence: serializedEvidence,
-      knowledge: boundedKnowledge,
+      deterministicEvidence: serializedEvidence,
+      curatedKnowledge: boundedKnowledge,
       truncation: {
         maxConversationMessages: resolvedLimits.maxConversationMessages,
         maxMessageChars: resolvedLimits.maxMessageChars,

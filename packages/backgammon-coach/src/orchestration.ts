@@ -1,4 +1,5 @@
 import type { ChatModel, ChatModelResult } from "@backgammon-trainer/ai-contracts";
+import type { BackgammonKnowledgeConcept } from "@backgammon-trainer/backgammon-knowledge";
 
 import {
   appendCoachCoachMessage,
@@ -10,6 +11,77 @@ import { buildCoachEvidence, type CoachEvidenceBundle } from "./evidence";
 import type { CoachKnowledgeRetriever } from "./knowledge";
 import { buildCoachModelRequest, toCoachEvidenceReference, toCoachModelProvenance } from "./prompt";
 import type { CoachQuestionContext } from "./context";
+
+const deriveKnowledgeConcepts = (
+  context: CoachQuestionContext,
+  evidence: CoachEvidenceBundle
+): readonly BackgammonKnowledgeConcept[] => {
+  const concepts = new Set<BackgammonKnowledgeConcept>();
+
+  if (context.kind === "current-position") {
+    concepts.add("current-position");
+    if (context.currentTurn.stagedSelection !== undefined) {
+      concepts.add("candidate-comparison");
+    }
+
+    for (const outcome of context.currentTurn.legalMoveOutcomes?.outcomes ?? []) {
+      if (outcome.move.steps.some((step) => step.hitsBlot)) {
+        concepts.add("hits");
+        concepts.add("blots");
+      }
+
+      if (outcome.move.steps.some((step) => step.kind === "enter-from-bar")) {
+        concepts.add("bar-entry");
+      }
+
+      if (outcome.move.steps.some((step) => step.kind === "bear-off")) {
+        concepts.add("bearing-off");
+      }
+
+      if (
+        outcome.featureDelta.white.madePointCountDelta > 0 ||
+        outcome.featureDelta.black.madePointCountDelta > 0
+      ) {
+        concepts.add("made-points");
+      }
+    }
+  }
+
+  if (context.kind === "history-turn" || context.kind === "game-review") {
+    concepts.add("move-review");
+  }
+
+  if (evidence.positionFacts?.relationship.contactStatus === "contact") {
+    concepts.add("contact");
+  }
+
+  if (evidence.positionFacts?.relationship.contactStatus === "race") {
+    concepts.add("race");
+  }
+
+  if (
+    (evidence.positionFacts?.white.checkersOnBar ?? 0) > 0 ||
+    (evidence.positionFacts?.black.checkersOnBar ?? 0) > 0
+  ) {
+    concepts.add("bar-entry");
+  }
+
+  if (
+    (evidence.positionFacts?.white.madeHomeBoardPointCount ?? 0) > 0 ||
+    (evidence.positionFacts?.black.madeHomeBoardPointCount ?? 0) > 0
+  ) {
+    concepts.add("inner-board");
+  }
+
+  if (
+    (evidence.positionFacts?.white.checkersBorneOff ?? 0) > 0 ||
+    (evidence.positionFacts?.black.checkersBorneOff ?? 0) > 0
+  ) {
+    concepts.add("bearing-off");
+  }
+
+  return [...concepts].sort();
+};
 
 export interface CoachRuntime {
   createId(): string;
@@ -24,6 +96,7 @@ export type SubmitCoachQuestionResult =
       readonly context: CoachQuestionContext;
       readonly evidence: CoachEvidenceBundle;
       readonly response: ChatModelResult;
+      readonly knowledge: readonly import("./knowledge").CoachKnowledgeExcerpt[];
       readonly knowledgeWarning?: string;
     }
   | {
@@ -104,6 +177,12 @@ export const submitCoachQuestion = async (input: {
   }
 
   let knowledgeWarning: string | undefined;
+  const evidenceResult = buildCoachEvidence({
+    question,
+    context: input.context,
+    conversation: appendUserResult.conversation
+  });
+
   const knowledgeRetriever = input.knowledgeRetriever;
   const knowledgeResult =
     knowledgeRetriever === undefined
@@ -114,6 +193,10 @@ export const submitCoachQuestion = async (input: {
       : await knowledgeRetriever.retrieve({
           question,
           contextKind: input.context.kind,
+          ...(() => {
+            const concepts = deriveKnowledgeConcepts(input.context, evidenceResult.evidence);
+            return concepts.length === 0 ? {} : { concepts };
+          })(),
           maxItems: 4
         });
 
@@ -121,12 +204,6 @@ export const submitCoachQuestion = async (input: {
   if (!knowledgeResult.ok) {
     knowledgeWarning = knowledgeResult.message;
   }
-
-  const evidenceResult = buildCoachEvidence({
-    question,
-    context: input.context,
-    conversation: appendUserResult.conversation
-  });
 
   const requestId = input.runtime.createId();
   const modelRequest = buildCoachModelRequest({
@@ -191,6 +268,7 @@ export const submitCoachQuestion = async (input: {
     context: input.context,
     evidence: evidenceResult.evidence,
     response,
+    knowledge: knowledgeEntries,
     ...(knowledgeWarning === undefined ? {} : { knowledgeWarning })
   };
 };

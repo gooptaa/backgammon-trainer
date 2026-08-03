@@ -127,6 +127,10 @@ export default tseslint.config(
                 "Analysis must remain independent from analysis-session persistence orchestration."
             },
             {
+              name: "@backgammon-trainer/backgammon-knowledge",
+              message: "Analysis must remain independent from curated teaching content."
+            },
+            {
               name: "@backgammon-trainer/web",
               message: "Analysis must not depend on web application code."
             },
@@ -152,6 +156,52 @@ export default tseslint.config(
             {
               name: "@backgammon-trainer/backgammon-coach",
               message: "Analysis-session must remain independent from coaching orchestration."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-knowledge",
+              message: "Analysis-session must remain independent from curated teaching content."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: [
+      "packages/backgammon-knowledge/src/**/*.ts",
+      "packages/backgammon-knowledge/test/**/*.ts"
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@backgammon-trainer/backgammon-coach",
+              message: "Curated knowledge must remain independent from coach orchestration."
+            },
+            {
+              name: "@backgammon-trainer/web",
+              message: "Curated knowledge must remain independent from web UI code."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-engine",
+              message: "Curated knowledge must not depend on rules-engine code."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-analysis",
+              message: "Curated knowledge must not depend on factual analysis code."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-analysis-session",
+              message: "Curated knowledge must not depend on analysis-session code."
+            }
+          ],
+          patterns: [
+            {
+              group: ["node:*"],
+              message:
+                "Browser-facing knowledge source must not import Node built-in modules from src/test."
             }
           ]
         }
@@ -176,6 +226,10 @@ export default tseslint.config(
             {
               name: "@backgammon-trainer/backgammon-evaluator-gnubg/testing",
               message: "Browser bundles must not import GNU adapter testing helpers."
+            },
+            {
+              name: "@backgammon-trainer/backgammon-knowledge/scripts/knowledge-source.mjs",
+              message: "Browser bundles must not import Node-only knowledge authoring helpers."
             }
           ],
           patterns: [

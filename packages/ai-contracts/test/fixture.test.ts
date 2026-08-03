@@ -8,9 +8,15 @@ const REQUEST = {
   developerInstructions: ["developer"],
   messages: [{ role: "user", text: "What should I do?" }],
   evidence: {
-    questionContext: {
-      kind: "current-position"
-    }
+    contextKind: "current-position",
+    deterministicEvidence: {
+      legalMoveSelection: {
+        totalLegalMoves: 5,
+        selectedLegalMoves: 2
+      },
+      warnings: [{ code: "fixture", message: "fixture" }]
+    },
+    curatedKnowledge: [{ id: "k1", title: "Blots, Hits, and Tempo" }]
   }
 } as const;
 
@@ -39,6 +45,8 @@ describe("fixture chat model", () => {
 
     expect(first.model.mode).toBe("fixture");
     expect(first.text).toContain("not strategic advice");
+    expect(first.text).toContain("Selected move evidence: 2/5");
+    expect(first.text).toContain("Curated knowledge: 1");
   });
 
   it("maps unavailable mode", async () => {

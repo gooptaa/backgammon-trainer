@@ -9,7 +9,8 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Define immutable in-memory coaching conversation/message contracts.
 - Resolve explicit coaching question context from application state.
 - Build bounded deterministic evidence bundles from trusted game and analysis data.
-- Define knowledge-retriever boundary with no-op and fixture implementations.
+- Select bounded question-relevant legal move evidence without introducing strategic verdicts.
+- Define knowledge-retriever boundary with no-op, fixture, and local curated-content implementations.
 - Build provider-neutral chat-model requests from conversation + evidence.
 - Orchestrate single-request coaching submission flow with explicit failure handling.
 
@@ -19,6 +20,7 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - `@backgammon-trainer/backgammon-engine`
 - `@backgammon-trainer/backgammon-analysis`
 - `@backgammon-trainer/backgammon-analysis-session`
+- `@backgammon-trainer/backgammon-knowledge`
 
 ## Forbidden Dependencies
 
@@ -32,7 +34,7 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Context model + resolver (`resolveCoachQuestionContext`, `deriveCurrentTurnContext`).
 - Evidence builder (`buildCoachEvidence`) with bounded deterministic output.
 - Prompt builder (`buildCoachModelRequest`) for `ChatModel`.
-- Knowledge interfaces (`CoachKnowledgeRetriever`) and fixture/no-op retrievers.
+- Knowledge interfaces (`CoachKnowledgeRetriever`) and local/fixture/no-op retrievers.
 - Submission orchestration (`submitCoachQuestion`) for host-layer integration.
 
 ## Non-goals

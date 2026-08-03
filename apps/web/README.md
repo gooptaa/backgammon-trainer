@@ -11,6 +11,8 @@ The web app is a development sandbox for deterministic backgammon gameplay, fact
 - New game and imported lineage replacement start a fresh empty conversation.
 - Browser reload restores deterministic game snapshot but starts an empty conversation.
 - One pending coach request is allowed at a time; gameplay stays enabled while pending.
+- Current coach requests use selected legal move evidence rather than a broad move dump when current-turn legal outcomes exist.
+- Current coach requests may include a small project-authored curated knowledge subset chosen deterministically from the question and trusted evidence.
 - Fixture warning is explicit: `Development fixture coach - responses are not strategic advice.`
 - No microphone, voice capture, speech synthesis, or audio-agent behavior is implemented.
 - Coach failures are concise and non-fatal; gameplay and deterministic analysis remain available.

@@ -51,20 +51,98 @@ const wait = async (delayMs: number): Promise<void> => {
   });
 };
 
+const hasStringTitle = (value: unknown): value is { title: string } => {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "title" in value &&
+    typeof value.title === "string"
+  );
+};
+
 const buildFixtureText = (request: ChatModelRequest): string => {
-  const contextKind =
+  const coachEnvelope =
     request.evidence !== undefined &&
     typeof request.evidence === "object" &&
-    request.evidence !== null &&
-    "questionContext" in request.evidence &&
-    typeof request.evidence.questionContext === "object" &&
-    request.evidence.questionContext !== null &&
-    "kind" in request.evidence.questionContext &&
-    typeof request.evidence.questionContext.kind === "string"
-      ? request.evidence.questionContext.kind
-      : "unknown";
+    request.evidence !== null
+      ? request.evidence
+      : null;
 
-  return `Fixture coach response. Context: ${contextKind}. This response is development fixture output and not strategic advice.`;
+  const contextKind =
+    coachEnvelope !== null &&
+    "contextKind" in coachEnvelope &&
+    typeof coachEnvelope.contextKind === "string"
+      ? coachEnvelope.contextKind
+      : coachEnvelope !== null &&
+          "questionContext" in coachEnvelope &&
+          typeof coachEnvelope.questionContext === "object" &&
+          coachEnvelope.questionContext !== null &&
+          "kind" in coachEnvelope.questionContext &&
+          typeof coachEnvelope.questionContext.kind === "string"
+        ? coachEnvelope.questionContext.kind
+        : "unknown";
+
+  const deterministicEvidence =
+    coachEnvelope !== null &&
+    "deterministicEvidence" in coachEnvelope &&
+    typeof coachEnvelope.deterministicEvidence === "object" &&
+    coachEnvelope.deterministicEvidence !== null
+      ? coachEnvelope.deterministicEvidence
+      : coachEnvelope;
+
+  const knowledgeEntries =
+    coachEnvelope !== null &&
+    "curatedKnowledge" in coachEnvelope &&
+    Array.isArray(coachEnvelope.curatedKnowledge)
+      ? coachEnvelope.curatedKnowledge
+      : [];
+
+  const totalLegalMoves =
+    deterministicEvidence !== null &&
+    typeof deterministicEvidence === "object" &&
+    "legalMoveSelection" in deterministicEvidence &&
+    typeof deterministicEvidence.legalMoveSelection === "object" &&
+    deterministicEvidence.legalMoveSelection !== null &&
+    "totalLegalMoves" in deterministicEvidence.legalMoveSelection &&
+    typeof deterministicEvidence.legalMoveSelection.totalLegalMoves === "number"
+      ? deterministicEvidence.legalMoveSelection.totalLegalMoves
+      : deterministicEvidence !== null &&
+          typeof deterministicEvidence === "object" &&
+          "legalMoveEvidence" in deterministicEvidence &&
+          Array.isArray(deterministicEvidence.legalMoveEvidence)
+        ? deterministicEvidence.legalMoveEvidence.length
+        : 0;
+
+  const selectedLegalMoves =
+    deterministicEvidence !== null &&
+    typeof deterministicEvidence === "object" &&
+    "legalMoveSelection" in deterministicEvidence &&
+    typeof deterministicEvidence.legalMoveSelection === "object" &&
+    deterministicEvidence.legalMoveSelection !== null &&
+    "selectedLegalMoves" in deterministicEvidence.legalMoveSelection &&
+    typeof deterministicEvidence.legalMoveSelection.selectedLegalMoves === "number"
+      ? deterministicEvidence.legalMoveSelection.selectedLegalMoves
+      : deterministicEvidence !== null &&
+          typeof deterministicEvidence === "object" &&
+          "legalMoveEvidence" in deterministicEvidence &&
+          Array.isArray(deterministicEvidence.legalMoveEvidence)
+        ? deterministicEvidence.legalMoveEvidence.length
+        : 0;
+
+  const knowledgeTitles = knowledgeEntries
+    .filter(hasStringTitle)
+    .map((entry) => entry.title)
+    .slice(0, 3);
+
+  const warningCount =
+    deterministicEvidence !== null &&
+    typeof deterministicEvidence === "object" &&
+    "warnings" in deterministicEvidence &&
+    Array.isArray(deterministicEvidence.warnings)
+      ? deterministicEvidence.warnings.length
+      : 0;
+
+  return `Fixture coach response. Context: ${contextKind}. Selected move evidence: ${selectedLegalMoves}/${totalLegalMoves}. Curated knowledge: ${knowledgeEntries.length}${knowledgeTitles.length === 0 ? "" : ` (${knowledgeTitles.join(", ")})`}. Warnings: ${warningCount}. This response is development fixture output and not strategic advice.`;
 };
 
 const failureResult = (

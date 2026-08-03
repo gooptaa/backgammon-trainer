@@ -413,5 +413,6 @@ describe("CoachPanel", () => {
 
     expect(screen.getByTestId("coach-evidence-row")).toBeInTheDocument();
     expect(screen.getByText(/Context kind/)).toBeInTheDocument();
+    expect(screen.getByText(/Curated knowledge entries/)).toBeInTheDocument();
   });
 });

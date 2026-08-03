@@ -41,6 +41,21 @@ const FORBIDDEN_EDGES = [
     reason: "Analysis-session must not depend on coaching orchestration."
   },
   {
+    from: "@backgammon-trainer/backgammon-engine",
+    to: "@backgammon-trainer/backgammon-knowledge",
+    reason: "Engine must remain independent from curated teaching content."
+  },
+  {
+    from: "@backgammon-trainer/backgammon-analysis",
+    to: "@backgammon-trainer/backgammon-knowledge",
+    reason: "Analysis must remain factual and independent from curated teaching content."
+  },
+  {
+    from: "@backgammon-trainer/backgammon-analysis-session",
+    to: "@backgammon-trainer/backgammon-knowledge",
+    reason: "Analysis-session must remain independent from curated teaching content."
+  },
+  {
     from: "@backgammon-trainer/ai-contracts",
     to: "@backgammon-trainer/backgammon-domain",
     reason: "Generic AI contracts must remain domain-neutral."
@@ -69,6 +84,16 @@ const FORBIDDEN_EDGES = [
     from: "@backgammon-trainer/web",
     to: "@backgammon-trainer/backgammon-evaluator-gnubg",
     reason: "Browser bundle must not depend on the Node-only GNU adapter."
+  },
+  {
+    from: "@backgammon-trainer/backgammon-knowledge",
+    to: "@backgammon-trainer/backgammon-coach",
+    reason: "Curated knowledge must remain independent from coach orchestration."
+  },
+  {
+    from: "@backgammon-trainer/backgammon-knowledge",
+    to: "@backgammon-trainer/web",
+    reason: "Curated knowledge package must remain browser-safe domain content, not UI code."
   }
 ];
 

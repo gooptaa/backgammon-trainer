@@ -41,3 +41,8 @@ Why these exports are public:
 
 - Preserve provider neutrality while adding provider adapters in host layers.
 - Add optional streaming and tool-calling contracts in a dedicated milestone.
+
+## Fixture model note
+
+- The fixture chat model may summarize context kind, selected legal move evidence counts, curated knowledge counts/titles, and warning counts for development visibility.
+- Fixture output remains explicitly labeled as development fixture output and not strategic advice.

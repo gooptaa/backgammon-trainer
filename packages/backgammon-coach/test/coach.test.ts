@@ -20,6 +20,7 @@ import {
   buildCoachModelRequest,
   createCoachConversation,
   createFixtureCoachKnowledgeRetriever,
+  createLocalCoachKnowledgeRetriever,
   createNoopCoachKnowledgeRetriever,
   deriveCurrentTurnContext,
   resolveCoachQuestionContext,
@@ -422,6 +423,59 @@ describe("coach evidence and prompt", () => {
     expect(() => JSON.stringify(evidence.evidence)).not.toThrow();
   });
 
+  it("selects a clearly referenced legal move and records coverage details", () => {
+    const snapshot = buildSnapshot();
+    const legal = analyzeLegalMoveOutcomes(snapshot.gameState.position, "white", { dice: [1, 2] });
+    expect(legal.ok).toBe(true);
+    if (!legal.ok) {
+      return;
+    }
+
+    const referencedOutcome = legal.analysis.outcomes[0];
+    expect(referencedOutcome).toBeDefined();
+    if (referencedOutcome === undefined) {
+      return;
+    }
+
+    const question = `Why not ${referencedOutcome.move.steps.map((step) => `${step.fromPoint}/${step.toPoint}`).join(", ")}?`;
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: {
+        ...snapshot,
+        gameState: {
+          ...snapshot.gameState,
+          dice: { dice: [1, 2] }
+        }
+      },
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: legal
+    });
+
+    expect(context.kind).toBe("current-position");
+    if (context.kind !== "current-position") {
+      return;
+    }
+
+    const result = buildCoachEvidence({
+      question,
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    });
+
+    expect(result.evidence.legalMoveSelection?.totalLegalMoves).toBe(
+      legal.analysis.outcomes.length
+    );
+    expect(result.evidence.legalMoveSelection?.questionMoveReferences[0]).toMatchObject({
+      resolution: "clear"
+    });
+    expect(
+      result.evidence.legalMoveEvidence?.[0]?.selectionReasons.some(
+        (reason) => reason.code === "question-reference-clear"
+      )
+    ).toBe(true);
+  });
+
   it("builds historical evidence with warning for missing analysis", () => {
     const snapshot = buildSnapshot();
     const turnRecord: TurnRecord = createTurnRecord({
@@ -504,9 +558,16 @@ describe("coach evidence and prompt", () => {
           {
             id: "k1",
             title: "Anchor",
+            summary: "Anchor summary",
             text: "Use context evidence only",
             source: "fixture",
-            tags: ["context"]
+            track: "making-points",
+            concepts: ["anchors"],
+            selectionReasons: [{ kind: "concept", value: "anchors" }],
+            provenance: {
+              kind: "project-authored",
+              label: "fixture"
+            }
           }
         ],
         responsePreferences: {
@@ -523,6 +584,7 @@ describe("coach evidence and prompt", () => {
 
     expect(request.messages).toHaveLength(1);
     expect(request.systemInstruction).toContain("Do not invent legal moves");
+    expect(JSON.stringify(request)).toContain("curatedKnowledge");
     expect(JSON.stringify(request)).not.toContain("apiKey");
   });
 });
@@ -545,16 +607,30 @@ describe("coach knowledge and orchestration", () => {
         {
           id: "k1",
           title: "A",
+          summary: "A summary",
           text: "T",
           source: "fixture",
-          tags: []
+          track: "general",
+          concepts: [],
+          selectionReasons: [],
+          provenance: {
+            kind: "project-authored",
+            label: "fixture"
+          }
         },
         {
           id: "k2",
           title: "B",
+          summary: "B summary",
           text: "T",
           source: "fixture",
-          tags: []
+          track: "general",
+          concepts: [],
+          selectionReasons: [],
+          provenance: {
+            kind: "project-authored",
+            label: "fixture"
+          }
         }
       ]
     });
@@ -577,6 +653,31 @@ describe("coach knowledge and orchestration", () => {
     }
 
     expect(first.entries).toHaveLength(1);
+  });
+
+  it("local retriever returns project-authored knowledge with reasons", async () => {
+    const retriever = createLocalCoachKnowledgeRetriever();
+    const result = await retriever.retrieve({
+      question: "Should I be thinking about hitting here?",
+      contextKind: "current-position",
+      concepts: ["hits", "contact"],
+      maxItems: 2
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.entries[0]?.id).toBe("kg.blots-hits-and-tempo");
+    const firstEntry = result.entries[0];
+    expect(firstEntry).toBeDefined();
+    if (firstEntry === undefined) {
+      return;
+    }
+
+    expect(firstEntry.provenance?.kind).toBe("project-authored");
+    expect(firstEntry.selectionReasons?.length ?? 0).toBeGreaterThan(0);
   });
 
   it("submits through model and preserves immutable conversation state", async () => {

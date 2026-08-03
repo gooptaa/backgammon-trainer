@@ -1,0 +1,22 @@
+{
+  "name": "@backgammon-trainer/backgammon-knowledge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src test --ext .ts",
+    "test": "vitest run",
+    "knowledge:generate": "node scripts/generate-knowledge.mjs",
+    "knowledge:check": "node scripts/validate-knowledge.mjs"
+  }
+}

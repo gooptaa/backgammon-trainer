@@ -2,6 +2,26 @@
 
 ## Packages
 
+### backgammon-knowledge
+
+Curated browser-safe educational content and retrieval helpers.
+
+Responsibilities:
+
+- canonical project-authored coaching knowledge
+- controlled taxonomy for teaching concepts
+- deterministic source validation
+- browser-safe generated corpus export
+- deterministic local retrieval helpers
+
+Does not contain:
+
+- React components
+- game rules
+- factual board analysis
+- provider SDKs
+- remote retrieval
+
 ### backgammon-engine
 
 Pure game rules.
@@ -39,6 +59,12 @@ Responsibilities:
 Never implements game rules.
 
 Always delegates to the engine.
+
+Current knowledge boundaries:
+
+- the browser consumes curated guidance through `@backgammon-trainer/backgammon-coach`
+- authored markdown is canonical source, while generated TypeScript is the browser-safe delivery artifact
+- no runtime filesystem access is used in browser coaching flows
 
 Current analysis-capture boundaries:
 

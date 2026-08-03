@@ -1,6 +1,6 @@
 # Public API Audit
 
-Date: 2026-07-31
+Date: 2026-08-03
 
 Scope: workspace packages under `packages/*`.
 
@@ -52,6 +52,12 @@ No unintended package exports were found in this audit. Public surfaces are curr
 - Public symbols: conversation model, context resolver, evidence builder, knowledge retriever boundary, prompt builder, and host orchestration helpers.
 - Why public: host layers need a deterministic coaching-domain API without importing UI or provider SDK types.
 
+### `@backgammon-trainer/backgammon-knowledge`
+
+- Export surface: root entry only.
+- Public symbols: curated knowledge taxonomy/model types, generated browser-safe corpus, deterministic retrieval helper, and corpus validation API.
+- Why public: coach-domain code needs a durable browser-safe knowledge dependency that remains independent from coaching orchestration and future retrieval mechanics.
+
 ### `@backgammon-trainer/shared`
 
 - Export surface: root entry only.
@@ -60,8 +66,9 @@ No unintended package exports were found in this audit. Public surfaces are curr
 
 ## Changes made in this milestone
 
-- No package exports were removed or added.
-- Guardrails were strengthened through architecture checks and README responsibility sections.
+- Added `@backgammon-trainer/backgammon-knowledge` root export.
+- `@backgammon-trainer/backgammon-coach` root export added local curated retriever and richer knowledge metadata types.
+- Guardrails were strengthened through architecture checks, lint restrictions, and explicit curated-knowledge validation.
 
 ## Follow-up trigger
 

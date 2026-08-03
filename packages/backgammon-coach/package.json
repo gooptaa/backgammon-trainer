@@ -21,6 +21,7 @@
     "@backgammon-trainer/ai-contracts": "workspace:*",
     "@backgammon-trainer/backgammon-analysis": "workspace:*",
     "@backgammon-trainer/backgammon-analysis-session": "workspace:*",
+    "@backgammon-trainer/backgammon-knowledge": "workspace:*",
     "@backgammon-trainer/backgammon-domain": "workspace:*",
     "@backgammon-trainer/backgammon-engine": "workspace:*"
   }

@@ -59,6 +59,7 @@ pnpm --filter @backgammon-trainer/server dev
 ## Validation commands
 
 ```bash
+pnpm knowledge:check
 pnpm format
 pnpm format:check
 pnpm lint
@@ -71,8 +72,10 @@ pnpm check
 
 ## Repository map
 
+- `packages/backgammon-knowledge`: curated browser-safe teaching content, taxonomy, and deterministic retrieval helpers
 - `packages/backgammon-coach`: text-first coaching conversation/domain orchestration
 - `docs/coach`: text coach conversation foundation and boundaries
+- `docs/knowledge`: curated knowledge architecture and authoring guides
 
 ## Turn flow and staged interaction
 

@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import type { ChatModel } from "@backgammon-trainer/ai-contracts";
 import {
   createCoachConversation,
-  createNoopCoachKnowledgeRetriever,
+  createLocalCoachKnowledgeRetriever,
   formatCoachContextLabel,
   submitCoachQuestion,
   type CoachContextKind,
   type CoachEvidenceBundle,
+  type CoachKnowledgeExcerpt,
   type CoachKnowledgeRetriever,
   type CoachQuestionContext,
   type CoachRuntime
@@ -27,6 +28,8 @@ interface EvidenceRow {
   readonly id: string;
   readonly contextKind: CoachContextKind;
   readonly evidence: CoachEvidenceBundle;
+  readonly knowledge: readonly CoachKnowledgeExcerpt[];
+  readonly knowledgeWarning?: string;
 }
 
 const toFailureMessage = (reason: string): string => {
@@ -65,13 +68,40 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
     );
   }
 
-  if (row.evidence.legalMoveEvidence !== undefined) {
-    details.push(`Legal move rows: ${row.evidence.legalMoveEvidence.length}`);
+  if (row.evidence.legalMoveSelection !== undefined) {
+    details.push(`Legal moves total: ${row.evidence.legalMoveSelection.totalLegalMoves}`);
+    details.push(`Selected move rows: ${row.evidence.legalMoveSelection.selectedLegalMoves}`);
+    details.push(`Omitted legal moves: ${row.evidence.legalMoveSelection.omittedLegalMoves}`);
+    details.push(
+      `Coach evidence coverage: ${row.evidence.legalMoveSelection.coachEvidenceCoverage}`
+    );
+
+    for (const reference of row.evidence.legalMoveSelection.questionMoveReferences) {
+      details.push(`Question move reference ${reference.notation}: ${reference.resolution}`);
+    }
+  } else if (row.evidence.legalMoveEvidence !== undefined) {
+    details.push(`Selected move rows: ${row.evidence.legalMoveEvidence.length}`);
   }
 
   if (row.evidence.evaluatorProvenance !== undefined) {
     details.push(`Evaluator provider: ${row.evidence.evaluatorProvenance.provider}`);
     details.push(`Evaluator coverage: ${row.evidence.evaluatorCoverage ?? "unknown"}`);
+  }
+
+  if (row.knowledge.length > 0) {
+    details.push(`Curated knowledge entries: ${row.knowledge.length}`);
+    for (const entry of row.knowledge) {
+      details.push(`Knowledge: ${entry.id} - ${entry.title}`);
+      details.push(
+        `Knowledge reasons: ${(entry.selectionReasons ?? []).map((reason) => `${reason.kind}:${reason.value}`).join(", ")}`
+      );
+    }
+  } else {
+    details.push("Curated knowledge entries: 0");
+  }
+
+  if (row.knowledgeWarning !== undefined) {
+    details.push(`Knowledge warning: ${row.knowledgeWarning}`);
   }
 
   if (row.evidence.evaluatorProvenance?.provider.includes("fixture")) {
@@ -127,7 +157,7 @@ export function CoachPanel({
     setFailure(null);
     setStatusText("Sending coach request...");
 
-    const retriever = knowledgeRetriever ?? createNoopCoachKnowledgeRetriever();
+    const retriever = knowledgeRetriever ?? createLocalCoachKnowledgeRetriever();
 
     void submitCoachQuestion({
       model,
@@ -161,7 +191,11 @@ export function CoachPanel({
           {
             id: result.requestId,
             contextKind: result.context.kind,
-            evidence: result.evidence
+            evidence: result.evidence,
+            knowledge: result.knowledge,
+            ...(result.knowledgeWarning === undefined
+              ? {}
+              : { knowledgeWarning: result.knowledgeWarning })
           }
         ]);
         setDraft("");
@@ -262,8 +296,8 @@ export function CoachPanel({
             <div key={row.id} data-testid="coach-evidence-row">
               <p className={styles.status}>Request {row.id}</p>
               <ul className={styles.detailList}>
-                {summarizeEvidence(row).map((detail) => (
-                  <li key={`${row.id}-${detail}`}>{detail}</li>
+                {summarizeEvidence(row).map((detail, detailIndex) => (
+                  <li key={`${row.id}-${detailIndex}-${detail}`}>{detail}</li>
                 ))}
               </ul>
             </div>

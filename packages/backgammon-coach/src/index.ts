@@ -34,11 +34,14 @@ export {
 
 export {
   createFixtureCoachKnowledgeRetriever,
+  createLocalCoachKnowledgeRetriever,
   createNoopCoachKnowledgeRetriever,
   type CoachKnowledgeExcerpt,
+  type CoachKnowledgeProvenance,
   type CoachKnowledgeRequest,
   type CoachKnowledgeResult,
-  type CoachKnowledgeRetriever
+  type CoachKnowledgeRetriever,
+  type CoachKnowledgeSelectionReason
 } from "./knowledge";
 
 export {

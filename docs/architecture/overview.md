@@ -14,6 +14,7 @@ Structured deterministic analysis is now a dedicated package boundary:
 5. **Position analysis layer** (`packages/backgammon-analysis`)
 6. **Analysis session layer** (`packages/backgammon-analysis-session`)
 7. **Coach conversation layer** (`packages/backgammon-coach`)
+8. **Curated knowledge layer** (`packages/backgammon-knowledge`)
 
 A narrow `packages/shared` package holds only small cross-cutting transport types.
 
@@ -23,10 +24,12 @@ Intended dependency direction:
 
 - `apps/web` -> `packages/backgammon-domain`, `packages/backgammon-engine`, `packages/backgammon-analysis`, `packages/backgammon-analysis-session`, `packages/ai-contracts`, `packages/shared`
 - `apps/web` -> `packages/backgammon-coach`
+- `packages/backgammon-coach` -> `packages/backgammon-knowledge`
 - `apps/server` -> `packages/ai-contracts`, `packages/shared`, optionally `packages/backgammon-domain`
 - `packages/backgammon-analysis-session` -> `packages/backgammon-analysis`, `packages/backgammon-engine`
 - `packages/backgammon-analysis` -> `packages/backgammon-engine`
 - `packages/backgammon-coach` -> `packages/backgammon-analysis-session`, `packages/backgammon-analysis`, `packages/backgammon-engine`, `packages/ai-contracts`
+- `packages/backgammon-knowledge` -> no app, UI, provider, or rules dependencies
 - `packages/backgammon-evaluator-gnubg` -> `packages/backgammon-analysis`, `packages/backgammon-engine`, Node standard library
 - `packages/ai-contracts` -> no backgammon package dependencies
 - `packages/backgammon-domain` -> no app, UI, or provider code
@@ -49,8 +52,8 @@ Text coach pipeline boundary is:
 
 - typed user message
 - explicit question context resolution from app state
-- deterministic evidence bundle generation
-- optional knowledge retrieval boundary (no-op/fixture in current milestone)
+- deterministic evidence bundle generation with selected legal move rows
+- optional replaceable knowledge retrieval boundary backed by local curated corpus in the current milestone
 - provider-neutral `ChatModel` request/response
 - text coach UI response rendering
 
@@ -59,6 +62,7 @@ Authoritative source policy remains explicit:
 - engine for legal moves and board transitions
 - analysis for factual features and ranked outputs
 - analysis-session for committed-turn-linked interpretation records
+- curated knowledge for general instructional guidance only
 - model output is non-authoritative coaching text
 
 No package under `packages/` depends on React, Fastify, browser APIs, or vendor SDKs.
@@ -70,6 +74,12 @@ GNU Backgammon process execution is a stricter runtime boundary:
 - `apps/web` remains limited to no evaluator or explicit synthetic fixture evaluators
 
 The factual analysis APIs intentionally remain machine-readable and non-prescriptive. Ranked outputs are isolated behind the evaluator contract boundary and require explicit evaluator provenance. Coaching prose generation remains out of scope.
+
+Curated knowledge remains separate from deterministic facts:
+
+- `packages/backgammon-knowledge` owns project-authored educational prose, taxonomy, validation, and deterministic local retrieval helpers
+- `packages/backgammon-coach` owns which factual retrieval concepts are passed into the retriever and how retrieved guidance is combined with evidence
+- future semantic retrieval can replace the current local matcher behind the coach retriever boundary without changing the coaching pipeline
 
 ## Architectural flow diagrams
 

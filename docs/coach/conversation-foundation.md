@@ -8,6 +8,10 @@ Backgammon Trainer now includes a text-first coaching conversation foundation al
 - Conversation is the primary coaching interface.
 - The model receives structured evidence from trusted layers.
 
+Current extension:
+
+- selected legal move evidence and curated knowledge retrieval are documented in `docs/coach/evidence-selection-knowledge-retrieval.md`
+
 Explicitly excluded in this milestone:
 
 - live voice-agent architecture
@@ -96,7 +100,8 @@ Evidence includes:
 
 - context summary kind
 - factual position features from analysis package
-- bounded legal move evidence rows with canonical fingerprints
+- bounded selected legal move evidence rows with canonical fingerprints
+- legal move selection coverage and question-reference summaries for current-position requests
 - optional ranked fields (`evaluatorRank`, `normalizedScore`, `lossFromTopScoredMove`)
 - evaluator provenance and coverage when available
 - historical turn facts and optional analysis linkage
@@ -121,6 +126,7 @@ Included in milestone:
 
 - no-op retriever
 - deterministic fixture retriever
+- deterministic local curated-content retriever backed by `@backgammon-trainer/backgammon-knowledge`
 
 Out of scope:
 
@@ -141,7 +147,7 @@ Current bounds:
 - max conversation messages included: 8
 - max message chars per included message: 800
 - max knowledge excerpts included: 4
-- max legal move rows in evidence: 24
+- max selected legal move rows in evidence: 8
 - max evidence warnings included: 8
 
 Instruction policy includes:
