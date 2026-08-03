@@ -20,7 +20,7 @@ Live validation outcomes:
 - `pnpm config:check`: passed.
 - GNU executable availability check: found and version reported.
 - `ALLOW_GNUBG_SMOKE=true pnpm smoke:gnubg` against isolated `EVALUATOR_PROVIDER=gnubg` server: passed.
-- `ALLOW_LIVE_PROVIDER_SMOKE=true pnpm smoke:live-provider` against isolated production provider mode server: provider status reachable; bounded completion returned non-success due external rate limiting in this environment.
+- `ALLOW_LIVE_PROVIDER_SMOKE=true pnpm smoke:live-provider` against isolated production provider mode server: passed after removing unsupported explicit `temperature: 0` from smoke request settings for this provider/model.
 
 ## Last Move Review starting commit
 
@@ -137,11 +137,11 @@ Additional scoped repair gates executed during GNU closure:
 
 ## Deviations
 
-- Live model-provider smoke did not produce successful completion due provider-side rate limiting in this environment after provider status validation succeeded.
+- None for this milestone scope after live smoke compatibility fix.
 
 ## Unresolved limitations
 
-- Full live provider end-to-end success is environment-dependent on external provider quota/rate limits.
+- Full live provider end-to-end success remains environment-dependent on external provider availability, quota, and model-specific request constraints.
 - Historical review currently detects last-move prompts using bounded pattern matching rather than a broader intent parser.
 
 ## Deferred capabilities

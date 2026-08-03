@@ -68,7 +68,6 @@ const run = async () => {
         contextKind: "smoke-check"
       },
       settings: {
-        temperature: 0,
         maxOutputChars: 120
       }
     })
