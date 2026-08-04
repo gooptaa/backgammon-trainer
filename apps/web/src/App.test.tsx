@@ -900,6 +900,37 @@ describe("App staged move projection", () => {
     expectPointCheckerCount(2, "black", 1);
   });
 
+  it("commits black oversized bear-offs with interchangeable 4-5 die order", () => {
+    const position = createPosition({
+      points: {
+        1: { player: "white", checkerCount: 8 },
+        23: { player: "black", checkerCount: 5 }
+      },
+      borneOff: {
+        white: 7,
+        black: 10
+      }
+    });
+
+    renderApp({
+      initialGameState: createGameState(position, "black"),
+      initialOpeningRollState: resolvedOpeningState("black")
+    });
+
+    setDiceManually("4", "5");
+    selectSourcePoint(23);
+    fireEvent.click(screen.getByRole("button", { name: /Select destination off for black/i }));
+    selectSourcePoint(23);
+    fireEvent.click(screen.getByRole("button", { name: /Select destination off for black/i }));
+
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
+    expect(screen.getAllByText("Active player: white").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeEnabled();
+    expect(screen.getByTestId("borne-off-counts")).toHaveTextContent(
+      "Borne off: white 7, black 12"
+    );
+  });
+
   it("keeps hover preview separate from staged position", () => {
     renderApp({ randomSource: createRandomSource([0.7, 0.4]) });
 

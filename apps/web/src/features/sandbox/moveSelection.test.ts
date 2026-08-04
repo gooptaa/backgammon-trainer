@@ -119,6 +119,60 @@ describe("moveSelection helper", () => {
     expect(getSingleCompletedMove(candidates, selectedSteps)).toEqual(LEGAL_MOVES[0]);
   });
 
+  it("completes visibly identical bear-offs that differ only by die order", () => {
+    const candidates: readonly Move[] = [
+      {
+        player: "black",
+        steps: [
+          {
+            kind: "bear-off",
+            fromPoint: 23,
+            toPoint: "off",
+            dieValue: 4,
+            dieIndex: 0,
+            hitsBlot: false
+          },
+          {
+            kind: "bear-off",
+            fromPoint: 23,
+            toPoint: "off",
+            dieValue: 5,
+            dieIndex: 1,
+            hitsBlot: false
+          }
+        ]
+      },
+      {
+        player: "black",
+        steps: [
+          {
+            kind: "bear-off",
+            fromPoint: 23,
+            toPoint: "off",
+            dieValue: 5,
+            dieIndex: 1,
+            hitsBlot: false
+          },
+          {
+            kind: "bear-off",
+            fromPoint: 23,
+            toPoint: "off",
+            dieValue: 4,
+            dieIndex: 0,
+            hitsBlot: false
+          }
+        ]
+      }
+    ];
+
+    expect(
+      getSingleCompletedMove(candidates, [
+        { fromPoint: 23, toPoint: "off" },
+        { fromPoint: 23, toPoint: "off" }
+      ])
+    ).toBe(candidates[0]);
+  });
+
   it("does not treat a shorter completion as final when longer candidates remain", () => {
     const syntheticCandidates: readonly Move[] = [
       {

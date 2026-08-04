@@ -90,12 +90,16 @@ export const getSingleCompletedMove = (
 ): Move | null => {
   const completedMoves = candidates.filter((move) => move.steps.length === selectedSteps.length);
 
-  if (completedMoves.length !== 1) {
+  if (completedMoves.length === 0) {
     return null;
   }
 
   const hasLongerAlternative = candidates.some((move) => move.steps.length > selectedSteps.length);
 
+  // Multiple engine moves can represent the same visible checker play when the
+  // dice may be consumed in either order (especially oversized bear-offs).
+  // Candidates have already been filtered by the selected source/destination
+  // prefix, so either completed move produces the selected board transition.
   return hasLongerAlternative ? null : (completedMoves[0] ?? null);
 };
 
