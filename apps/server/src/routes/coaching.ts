@@ -14,7 +14,7 @@ const completionBodySchema = {
     systemInstruction: { type: "string", minLength: 1, maxLength: 5000 },
     developerInstructions: {
       type: "array",
-      maxItems: 24,
+      maxItems: 40,
       items: {
         type: "string",
         maxLength: 2000

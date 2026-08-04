@@ -147,6 +147,35 @@ describe("server routes", () => {
     });
   });
 
+  it("accepts bounded intent-specific coach instruction sets", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/coach/complete",
+      payload: {
+        requestId: "request-intent-instructions",
+        systemInstruction: "system",
+        developerInstructions: Array.from(
+          { length: 30 },
+          (_, index) => `bounded instruction ${index + 1}`
+        ),
+        messages: [{ role: "user", text: "Explain this move" }],
+        evidence: {
+          contextKind: "history-turn"
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: {
+        result: {
+          ok: true,
+          text: "ok:request-intent-instructions"
+        }
+      }
+    });
+  });
+
   it("rejects malformed completion payloads", async () => {
     const response = await app.inject({
       method: "POST",
