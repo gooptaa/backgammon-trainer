@@ -130,7 +130,7 @@ export const buildCoachModelRequest = (
     ? "Move classifications in deterministic evidence are authoritative policy outputs. Do not strengthen, weaken, or replace any supplied label. If a move is unclassified, explain the limitation and do not assign a substitute label."
     : null;
   const progressInstruction = hasProgressEvidence
-    ? "Progress counts and trend fields in deterministic evidence are authoritative. Do not invent additional observations, causes, ratings, or improvement claims beyond supplied deterministic trend support."
+    ? "Progress and pattern fields in deterministic evidence are authoritative. Do not invent additional occurrences, hidden motives, skill ratings, confidence claims, or improvement claims beyond supplied deterministic support."
     : null;
 
   return {
@@ -151,7 +151,6 @@ export const buildCoachModelRequest = (
       "Never claim GNU or expert evaluation unless provenance explicitly supports it.",
       "Do not perform result-based reasoning or hidden board reconstruction.",
       "Acknowledge insufficient evidence when the supplied facts do not settle the question.",
-      "Long-term player patterns are not available yet.",
       "Remain concise unless the user asks for more detail.",
       "Do not reveal internal JSON schema details unless explicitly requested."
     ],

@@ -128,7 +128,7 @@ Instead it deterministically selects a bounded subset based on:
 
 Each selected row records explicit selection reasons.
 
-The public coach evidence bundle version is now `4` to reflect deterministic learner-progress evidence for explicit progress-profile questions in addition to deterministic move-classification outputs.
+The public coach evidence bundle version is now `5` to reflect deterministic learner-pattern evidence within explicit progress-profile questions in addition to deterministic move-classification outputs.
 
 Each request also records:
 
@@ -164,7 +164,15 @@ Progress-profile evidence is deterministic coaching policy derived from local le
 - includes full-profile and recent-window counts (`best`, `reasonable`, `mistake`, `major mistake`, `unclassified`)
 - includes classified coverage ratios, games represented, and bounded limitations
 - includes conservative trend fields only when deterministic sample-size rules are satisfied
+- includes deterministic pattern policy identity/version, bounded pattern summaries, and deterministic main-pattern selection (`supported`, `tied`, or `insufficient-evidence`)
 - never invents ratings, strategic causes, or habit labels
+
+Pattern detectors are policy-owned interpretation, not evaluator output and not model output:
+
+- detectors are versioned and centralized in coach policy
+- detectors consume committed factual played-vs-stronger move comparisons
+- detector signals are bounded, idempotent, and reconciled per committed-turn identity
+- ties and insufficient evidence are represented explicitly rather than guessed
 
 For full-game review, key-decision selection is deterministic and bounded. It prioritizes explicit user references and the largest supported played-vs-best evaluated differences, and may include close/tied decisions for balance.
 

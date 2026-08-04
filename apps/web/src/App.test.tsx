@@ -1820,6 +1820,9 @@ describe("App learner profile", () => {
     expect(screen.getByTestId("recent-progress-best-reasonable")).toHaveTextContent(
       "Best/reasonable: 0"
     );
+    expect(screen.getByTestId("recent-progress-main-pattern")).toHaveTextContent(
+      "Main pattern: not enough evidence yet"
+    );
     expect(screen.getByTestId("profile-storage-status")).toHaveTextContent("local persisted");
   });
 

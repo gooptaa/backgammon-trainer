@@ -31,6 +31,8 @@ interface EngineSandboxPanelProps {
   recentMistakeCount: number;
   recentMajorMistakeCount: number;
   recentUnclassifiedCount: number;
+  recentMainPatternLabel: string;
+  recentMainPatternDetail?: string;
   profileGamesRepresented: number;
   profileStorageStatus: "ready" | "memory-only" | "lineage-memory-only";
   profileMessage: string | null;
@@ -106,6 +108,8 @@ export function EngineSandboxPanel({
   recentMistakeCount,
   recentMajorMistakeCount,
   recentUnclassifiedCount,
+  recentMainPatternLabel,
+  recentMainPatternDetail,
   profileGamesRepresented,
   profileStorageStatus,
   profileMessage,
@@ -232,6 +236,14 @@ export function EngineSandboxPanel({
           <p className={styles.meta} data-testid="recent-progress-unclassified">
             Unclassified: {recentUnclassifiedCount}
           </p>
+          <p className={styles.meta} data-testid="recent-progress-main-pattern">
+            Main pattern: {recentMainPatternLabel}
+          </p>
+          {recentMainPatternDetail !== undefined ? (
+            <p className={styles.meta} data-testid="recent-progress-main-pattern-detail">
+              {recentMainPatternDetail}
+            </p>
+          ) : null}
           <p className={styles.meta} data-testid="profile-games-represented">
             Games represented: {profileGamesRepresented}
           </p>

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createFixturePositionEvaluator } from "@backgammon-trainer/backgammon-analysis/fixture";
 import {
+  analyzePosition,
   evaluateLegalMoves,
+  getMoveFingerprint,
   type RankedLegalMoveAnalysis
 } from "@backgammon-trainer/backgammon-analysis";
 import { STANDARD_STARTING_POSITION } from "@backgammon-trainer/backgammon-domain";
@@ -90,6 +92,210 @@ const getEvaluatedAnalysis = async (): Promise<RankedLegalMoveAnalysis> => {
       provider: "gnubg"
     }
   };
+};
+
+const withPoint = (
+  player: "white" | "black",
+  checkerCount: number
+): { readonly player: "white" | "black"; readonly checkerCount: number } => {
+  return { player, checkerCount };
+};
+
+const createPatternTestPositions = () => {
+  const positionBefore = structuredClone(STANDARD_STARTING_POSITION);
+  const playedPositionAfter = {
+    ...positionBefore,
+    points: {
+      ...positionBefore.points,
+      6: withPoint("white", 1),
+      8: withPoint("white", 1),
+      13: withPoint("white", 8),
+      24: withPoint("white", 5)
+    }
+  };
+
+  const strongerPositionAfter = {
+    ...positionBefore,
+    points: {
+      ...positionBefore.points,
+      6: withPoint("white", 2),
+      8: withPoint("white", 1),
+      13: withPoint("white", 8),
+      24: withPoint("white", 4)
+    }
+  };
+
+  return {
+    positionBefore,
+    playedPositionAfter,
+    strongerPositionAfter
+  };
+};
+
+const createTrustedRankedAnalysis = (options?: {
+  strongerHits?: boolean;
+}): Extract<RankedLegalMoveAnalysis, { kind: "evaluated" }> => {
+  const positions = createPatternTestPositions();
+  const playedMove = {
+    player: "white" as const,
+    steps: [
+      {
+        kind: "point-to-point" as const,
+        fromPoint: 13 as const,
+        toPoint: 12 as const,
+        dieValue: 1,
+        dieIndex: 0,
+        hitsBlot: false
+      },
+      {
+        kind: "point-to-point" as const,
+        fromPoint: 8 as const,
+        toPoint: 6 as const,
+        dieValue: 2,
+        dieIndex: 1,
+        hitsBlot: false
+      }
+    ]
+  } as const;
+
+  const strongerMove = {
+    player: "white" as const,
+    steps: [
+      {
+        kind: "point-to-point" as const,
+        fromPoint: 13 as const,
+        toPoint: 11 as const,
+        dieValue: 2,
+        dieIndex: 1,
+        hitsBlot: options?.strongerHits ?? false
+      },
+      {
+        kind: "point-to-point" as const,
+        fromPoint: 8 as const,
+        toPoint: 7 as const,
+        dieValue: 1,
+        dieIndex: 0,
+        hitsBlot: false
+      }
+    ]
+  } as const;
+
+  const playedOutcome = {
+    move: playedMove,
+    positionAfter: positions.playedPositionAfter,
+    analysisAfter: analyzePosition(positions.playedPositionAfter),
+    featureDelta: {
+      white: {
+        pipCountDelta: 0,
+        blotCountDelta: 1,
+        madePointCountDelta: -1,
+        madeHomeBoardPointCountDelta: -1,
+        barCountDelta: 0,
+        borneOffCountDelta: 0,
+        occupiedPointCountDelta: 1
+      },
+      black: {
+        pipCountDelta: 0,
+        blotCountDelta: 0,
+        madePointCountDelta: 0,
+        madeHomeBoardPointCountDelta: 0,
+        barCountDelta: 0,
+        borneOffCountDelta: 0,
+        occupiedPointCountDelta: 0
+      },
+      relationship: {
+        pipCountDifferenceWhiteMinusBlackDelta: 0,
+        contactStatusBefore: "contact" as const,
+        contactStatusAfter: "contact" as const,
+        pipCountLeaderBefore: "tied" as const,
+        pipCountLeaderAfter: "tied" as const
+      }
+    }
+  };
+
+  const strongerOutcome = {
+    move: strongerMove,
+    positionAfter: positions.strongerPositionAfter,
+    analysisAfter: analyzePosition(positions.strongerPositionAfter),
+    featureDelta: playedOutcome.featureDelta
+  };
+
+  const playedFingerprint = getMoveFingerprint(playedMove);
+  const strongerFingerprint = getMoveFingerprint(strongerMove);
+
+  return {
+    kind: "evaluated",
+    player: "white",
+    dice: { dice: [1, 2] },
+    positionBefore: analyzePosition(positions.positionBefore),
+    factualOutcomes: [playedOutcome, strongerOutcome],
+    scoreScale: {
+      kind: "equity",
+      unit: "points"
+    },
+    provenance: {
+      provider: "trusted-evaluator",
+      providerVersion: "1.0.0",
+      adapterVersion: "1.0.0",
+      settings: {}
+    },
+    coverage: "complete",
+    rankedMoves: [
+      {
+        rank: 1,
+        normalizedScore: 0.4,
+        lossFromBest: 0,
+        moveFingerprint: strongerFingerprint,
+        outcome: strongerOutcome
+      },
+      {
+        rank: 2,
+        normalizedScore: 0.26,
+        lossFromBest: 0.14,
+        moveFingerprint: playedFingerprint,
+        outcome: playedOutcome
+      }
+    ],
+    unevaluatedMoves: [],
+    warnings: []
+  };
+};
+
+const createPatternTurn = (turnNumber: number) => {
+  const positions = createPatternTestPositions();
+  return createTurnRecord({
+    turnNumber,
+    player: "white",
+    dice: { dice: [1, 2] },
+    outcome: {
+      kind: "move",
+      move: {
+        player: "white",
+        steps: [
+          {
+            kind: "point-to-point",
+            fromPoint: 13,
+            toPoint: 12,
+            dieValue: 1,
+            dieIndex: 0,
+            hitsBlot: false
+          },
+          {
+            kind: "point-to-point",
+            fromPoint: 8,
+            toPoint: 6,
+            dieValue: 2,
+            dieIndex: 1,
+            hitsBlot: false
+          }
+        ]
+      }
+    },
+    positionBefore: positions.positionBefore,
+    positionAfter: positions.playedPositionAfter,
+    gameStatusAfter: { state: "in-progress" },
+    phase: "normal"
+  });
 };
 
 describe("learner profile", () => {
@@ -277,5 +483,82 @@ describe("learner profile", () => {
     }
 
     expect(decoded.profile).toEqual(profile);
+  });
+
+  it("emits deterministic pattern signals for avoidable blot exposure and missed point making", () => {
+    const profile = createLearnerProfile({ updatedAt: NOW });
+    const ingested = ingestCommittedLearnerObservation({
+      profile,
+      lineageId: "lineage-pattern-1",
+      ownershipMode: "white",
+      committedTurn: createPatternTurn(1),
+      rankedAnalysis: createTrustedRankedAnalysis(),
+      observedAt: NOW
+    });
+
+    expect(ingested.ingested).toBe(true);
+    expect(ingested.profile.observations).toHaveLength(1);
+    const signals = ingested.profile.observations[0]?.patternSignals ?? [];
+    expect(signals.some((signal) => signal.detectorId === "avoidable-blot-exposure")).toBe(true);
+    expect(signals.some((signal) => signal.detectorId === "missed-point-making-opportunity")).toBe(
+      true
+    );
+  });
+
+  it("emits deterministic missed-hit signals only when stronger move includes additional hits", () => {
+    const profile = createLearnerProfile({ updatedAt: NOW });
+    const withoutHit = ingestCommittedLearnerObservation({
+      profile,
+      lineageId: "lineage-pattern-2",
+      ownershipMode: "white",
+      committedTurn: createPatternTurn(1),
+      rankedAnalysis: createTrustedRankedAnalysis({ strongerHits: false }),
+      observedAt: NOW
+    });
+    const withoutHitSignals = withoutHit.profile.observations[0]?.patternSignals ?? [];
+    expect(withoutHitSignals.some((signal) => signal.detectorId === "missed-hit-opportunity")).toBe(
+      false
+    );
+
+    const withHit = ingestCommittedLearnerObservation({
+      profile,
+      lineageId: "lineage-pattern-3",
+      ownershipMode: "white",
+      committedTurn: createPatternTurn(1),
+      rankedAnalysis: createTrustedRankedAnalysis({ strongerHits: true }),
+      observedAt: NOW
+    });
+    const withHitSignals = withHit.profile.observations[0]?.patternSignals ?? [];
+    expect(withHitSignals.some((signal) => signal.detectorId === "missed-hit-opportunity")).toBe(
+      true
+    );
+  });
+
+  it("keeps tied recurring pattern leaders explicit instead of forcing a single winner", () => {
+    let profile = createLearnerProfile({ updatedAt: NOW });
+    const rankedAnalysis = createTrustedRankedAnalysis();
+
+    for (let turnNumber = 1; turnNumber <= 4; turnNumber += 1) {
+      profile = ingestCommittedLearnerObservation({
+        profile,
+        lineageId: `lineage-pattern-main-${turnNumber}`,
+        ownershipMode: "white",
+        committedTurn: createPatternTurn(turnNumber),
+        rankedAnalysis,
+        observedAt: `2026-08-04T00:00:0${turnNumber}.000Z`
+      }).profile;
+    }
+
+    const summary = summarizeLearnerProgress(profile, { recentWindowSize: 20 });
+    expect(summary.patterns.mainPattern.status).toBe("tied");
+    if (summary.patterns.mainPattern.status !== "tied") {
+      return;
+    }
+
+    expect(
+      summary.patterns.mainPattern.tiedPatterns.some(
+        (pattern) => pattern.detectorId === "avoidable-blot-exposure"
+      )
+    ).toBe(true);
   });
 });

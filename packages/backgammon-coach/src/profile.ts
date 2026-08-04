@@ -10,6 +10,13 @@ import {
   type CoachMoveClassificationLabel,
   type CoachMoveClassificationUnclassifiedReason
 } from "./classification";
+import {
+  deriveLearnerPatternSignals,
+  PATTERN_DETECTION_POLICY,
+  summarizeLearnerPatterns,
+  type LearnerPatternSignal,
+  type LearnerPatternSummary
+} from "./patterns";
 
 export const LEARNER_PROFILE_FORMAT = "backgammon-trainer-learner-profile";
 export const LEARNER_PROFILE_VERSION = 1;
@@ -50,6 +57,9 @@ export interface LearnerDecisionObservation {
   readonly source: "committed-turn";
   readonly policyId: typeof MOVE_CLASSIFICATION_POLICY.id;
   readonly policyVersion: string;
+  readonly patternPolicyId: string;
+  readonly patternPolicyVersion: string;
+  readonly patternSignals: readonly LearnerPatternSignal[];
   readonly classification: LearnerObservationClassification;
   readonly analysisKind: "evaluated" | "no-legal-moves" | "missing";
   readonly evaluatorCoverage?: "complete" | "partial";
@@ -126,6 +136,7 @@ export interface LearnerProgressSnapshot {
     readonly recentWindowClassifiedRatio: number;
   };
   readonly trend: LearnerProgressTrend;
+  readonly patterns: LearnerPatternSummary;
   readonly limitations: readonly string[];
 }
 
@@ -195,6 +206,17 @@ const observationSortKey = (observation: LearnerDecisionObservation): string => 
   return `${observation.observedAt}|${observation.observationId}`;
 };
 
+const normalizePatternSignals = (
+  signals: readonly LearnerPatternSignal[]
+): readonly LearnerPatternSignal[] => {
+  const byId = new Map<string, LearnerPatternSignal>();
+  for (const signal of signals) {
+    byId.set(signal.signalId, signal);
+  }
+
+  return [...byId.values()].sort((left, right) => left.signalId.localeCompare(right.signalId));
+};
+
 const sortObservationsAscending = (
   observations: readonly LearnerDecisionObservation[]
 ): readonly LearnerDecisionObservation[] => {
@@ -250,10 +272,10 @@ const toObservationClassification = (
 
 const observationPreference = (observation: LearnerDecisionObservation): number => {
   if (observation.classification.status === "classified") {
-    return 2;
+    return 100 + observation.patternSignals.length;
   }
 
-  return 1;
+  return observation.patternSignals.length;
 };
 
 const choosePreferredObservation = (
@@ -538,6 +560,149 @@ const parseObservation = (value: unknown): LearnerDecisionObservation | null => 
     };
   })();
 
+  const patternPolicyId =
+    typeof value.patternPolicyId === "string" ? value.patternPolicyId : PATTERN_DETECTION_POLICY.id;
+  const patternPolicyVersion =
+    typeof value.patternPolicyVersion === "string"
+      ? value.patternPolicyVersion
+      : PATTERN_DETECTION_POLICY.version;
+  const patternSignals = (() => {
+    if (!Array.isArray(value.patternSignals)) {
+      return [] as LearnerPatternSignal[];
+    }
+
+    const signals: LearnerPatternSignal[] = [];
+    for (const signal of value.patternSignals) {
+      if (!isRecord(signal)) {
+        return null;
+      }
+
+      const detectorId = signal.detectorId;
+      const skillArea = signal.skillArea;
+      if (!isRecord(signal.evidence)) {
+        return null;
+      }
+      const evidenceValue = signal.evidence;
+      const evidenceKind = evidenceValue.kind;
+      if (
+        detectorId !== "avoidable-blot-exposure" &&
+        detectorId !== "missed-point-making-opportunity" &&
+        detectorId !== "missed-hit-opportunity"
+      ) {
+        return null;
+      }
+      if (
+        skillArea !== "safety-versus-risk" &&
+        skillArea !== "making-points" &&
+        skillArea !== "hitting-and-tempo"
+      ) {
+        return null;
+      }
+
+      if (
+        !isNonEmptyString(signal.signalId) ||
+        !isNonEmptyString(signal.observationId) ||
+        signal.observationId !== value.observationId ||
+        signal.detectorVersion !== "1.0.0" ||
+        !isNonEmptyString(signal.displayName) ||
+        !isNonEmptyString(signal.lineageId) ||
+        !isPositiveInteger(signal.turnNumber) ||
+        (signal.actingSide !== "white" && signal.actingSide !== "black") ||
+        !isNonEmptyString(signal.playedMoveFingerprint) ||
+        !isNonEmptyString(signal.strongerMoveFingerprint) ||
+        (signal.moveClassificationLabel !== "mistake" &&
+          signal.moveClassificationLabel !== "major mistake") ||
+        !isFiniteNonNegativeNumber(signal.normalizedLossFromBest) ||
+        !isIsoTimestamp(signal.observedAt) ||
+        !Array.isArray(signal.limitations)
+      ) {
+        return null;
+      }
+
+      if (detectorId !== evidenceKind) {
+        return null;
+      }
+
+      let evidence: LearnerPatternSignal["evidence"];
+      if (evidenceKind === "avoidable-blot-exposure") {
+        if (
+          !isFiniteNonNegativeNumber(evidenceValue.playedBlotCount) ||
+          !isFiniteNonNegativeNumber(evidenceValue.strongerBlotCount) ||
+          !isFiniteNonNegativeNumber(evidenceValue.additionalExposedBlots)
+        ) {
+          return null;
+        }
+
+        evidence = {
+          kind: "avoidable-blot-exposure",
+          playedBlotCount: evidenceValue.playedBlotCount,
+          strongerBlotCount: evidenceValue.strongerBlotCount,
+          additionalExposedBlots: evidenceValue.additionalExposedBlots
+        };
+      } else if (evidenceKind === "missed-point-making-opportunity") {
+        if (
+          !isFiniteNonNegativeNumber(evidenceValue.playedMadePointCount) ||
+          !isFiniteNonNegativeNumber(evidenceValue.strongerMadePointCount) ||
+          !isFiniteNonNegativeNumber(evidenceValue.playedHomeBoardPointCount) ||
+          !isFiniteNonNegativeNumber(evidenceValue.strongerHomeBoardPointCount) ||
+          !isFiniteNonNegativeNumber(evidenceValue.additionalMadePoints) ||
+          !isFiniteNonNegativeNumber(evidenceValue.additionalHomeBoardPoints)
+        ) {
+          return null;
+        }
+
+        evidence = {
+          kind: "missed-point-making-opportunity",
+          playedMadePointCount: evidenceValue.playedMadePointCount,
+          strongerMadePointCount: evidenceValue.strongerMadePointCount,
+          playedHomeBoardPointCount: evidenceValue.playedHomeBoardPointCount,
+          strongerHomeBoardPointCount: evidenceValue.strongerHomeBoardPointCount,
+          additionalMadePoints: evidenceValue.additionalMadePoints,
+          additionalHomeBoardPoints: evidenceValue.additionalHomeBoardPoints
+        };
+      } else {
+        if (
+          !isFiniteNonNegativeNumber(evidenceValue.playedHitCount) ||
+          !isFiniteNonNegativeNumber(evidenceValue.strongerHitCount) ||
+          !isFiniteNonNegativeNumber(evidenceValue.missedHits)
+        ) {
+          return null;
+        }
+
+        evidence = {
+          kind: "missed-hit-opportunity",
+          playedHitCount: evidenceValue.playedHitCount,
+          strongerHitCount: evidenceValue.strongerHitCount,
+          missedHits: evidenceValue.missedHits
+        };
+      }
+
+      signals.push({
+        signalId: signal.signalId,
+        observationId: signal.observationId,
+        detectorId,
+        detectorVersion: signal.detectorVersion,
+        displayName: signal.displayName,
+        skillArea,
+        lineageId: signal.lineageId,
+        turnNumber: signal.turnNumber,
+        actingSide: signal.actingSide,
+        playedMoveFingerprint: signal.playedMoveFingerprint,
+        strongerMoveFingerprint: signal.strongerMoveFingerprint,
+        moveClassificationLabel: signal.moveClassificationLabel,
+        normalizedLossFromBest: signal.normalizedLossFromBest,
+        observedAt: signal.observedAt,
+        evidence,
+        limitations: signal.limitations.filter((item): item is string => typeof item === "string")
+      });
+    }
+
+    return normalizePatternSignals(signals);
+  })();
+  if (patternSignals === null) {
+    return null;
+  }
+
   return {
     observationId: value.observationId,
     lineageId: value.lineageId,
@@ -550,6 +715,9 @@ const parseObservation = (value: unknown): LearnerDecisionObservation | null => 
     source: "committed-turn",
     policyId: MOVE_CLASSIFICATION_POLICY.id,
     policyVersion: value.policyVersion,
+    patternPolicyId,
+    patternPolicyVersion,
+    patternSignals,
     classification,
     analysisKind,
     ...(evaluatorCoverage === undefined ? {} : { evaluatorCoverage }),
@@ -729,6 +897,20 @@ export const ingestCommittedLearnerObservation = (input: {
     source: "committed-turn",
     policyId: classification.policyId,
     policyVersion: classification.policyVersion,
+    patternPolicyId: PATTERN_DETECTION_POLICY.id,
+    patternPolicyVersion: PATTERN_DETECTION_POLICY.version,
+    patternSignals: normalizePatternSignals(
+      deriveLearnerPatternSignals({
+        observationId,
+        lineageId,
+        turnNumber: input.committedTurn.turnNumber,
+        actingSide: input.committedTurn.player,
+        observedAt: input.observedAt,
+        playedMoveFingerprint,
+        classification,
+        ...(input.rankedAnalysis === undefined ? {} : { rankedAnalysis: input.rankedAnalysis })
+      })
+    ),
     classification: toObservationClassification(classification),
     analysisKind:
       input.rankedAnalysis === undefined
@@ -825,6 +1007,30 @@ export const summarizeLearnerProgress = (
     limitations.push("No formally classified learner decisions are available yet.");
   }
 
+  const patterns = summarizeLearnerPatterns({
+    observations: compatible.map((observation) => ({
+      lineageId: observation.lineageId,
+      turnNumber: observation.turnNumber,
+      actingSide: observation.actingSide,
+      observedAt: observation.observedAt,
+      classification:
+        observation.classification.status === "classified"
+          ? {
+              status: "classified" as const,
+              label: observation.classification.label
+            }
+          : {
+              status: "unclassified" as const
+            },
+      patternPolicyId: observation.patternPolicyId,
+      patternPolicyVersion: observation.patternPolicyVersion,
+      patternSignals: observation.patternSignals
+    })),
+    recentWindowSize
+  });
+
+  limitations.push(...patterns.limitations);
+
   return {
     policyId: MOVE_CLASSIFICATION_POLICY.id,
     policyVersion: MOVE_CLASSIFICATION_POLICY.version,
@@ -848,6 +1054,7 @@ export const summarizeLearnerProgress = (
       previous,
       recentWindowSize
     }),
+    patterns,
     limitations
   };
 };

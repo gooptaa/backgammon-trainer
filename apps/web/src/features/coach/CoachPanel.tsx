@@ -252,6 +252,21 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
     details.push(`Recent classified decisions: ${progress.counts.recentWindow.totalClassified}`);
     details.push(`Recent games represented: ${progress.gamesRepresented.recentWindow}`);
     details.push(`Trend status: ${progress.trend.status}`);
+    details.push(
+      `Pattern policy: ${progress.patterns.policyId} ${progress.patterns.policyVersion}`
+    );
+    if (progress.patterns.mainPattern.status === "supported") {
+      details.push(`Main pattern: ${progress.patterns.mainPattern.displayName}`);
+      details.push(`Main pattern occurrences: ${progress.patterns.mainPattern.occurrenceCount}`);
+    } else if (progress.patterns.mainPattern.status === "tied") {
+      details.push(
+        `Main pattern: tie (${progress.patterns.mainPattern.tiedPatterns
+          .map((pattern) => pattern.displayName)
+          .join(", ")})`
+      );
+    } else {
+      details.push(`Main pattern: insufficient (${progress.patterns.mainPattern.reason})`);
+    }
     for (const limitation of progress.limitations) {
       details.push(`Progress limitation: ${limitation}`);
     }

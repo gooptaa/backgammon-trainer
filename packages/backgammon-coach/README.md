@@ -12,6 +12,7 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Select bounded question-relevant legal move evidence without introducing strategic verdicts.
 - Resolve recommendation-support authority from evaluator evidence before model generation.
 - Apply deterministic versioned move-quality classification for committed historical checker-play decisions before model generation.
+- Apply deterministic versioned skill-pattern detection for committed learner decisions using factual played-vs-stronger move comparisons.
 - Own deterministic learner-profile contracts (schema/versioning, ownership mapping, observation ingestion, reconciliation, aggregation, and trend-limited progress evidence).
 - Define knowledge-retriever boundary with no-op, fixture, and local curated-content implementations.
 - Build provider-neutral chat-model requests from conversation + evidence.
@@ -42,6 +43,7 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Recommendation-support evidence (`recommendationSupport`) for current-position claims.
 - Deterministic move classification policy (`MOVE_CLASSIFICATION_POLICY`) and review evidence classification outputs.
 - Deterministic learner-profile APIs (`createLearnerProfile`, `setLineageOwnership`, `ingestCommittedLearnerObservation`, `summarizeLearnerProgress`, parse/encode/decode).
+- Deterministic pattern-policy APIs (`PATTERN_DETECTION_POLICY`, `MAIN_PATTERN_SUPPORT_RULES`, `deriveLearnerPatternSignals`, `summarizeLearnerPatterns`).
 - Historical review evidence (`historicalReviewEvidence`) with deterministic played-move coverage limits.
 - Knowledge interfaces (`CoachKnowledgeRetriever`) and local/fixture/no-op retrievers.
 - Submission orchestration (`submitCoachQuestion`) for host-layer integration, including optional on-demand history-turn ranked-analysis hydration.
@@ -80,6 +82,19 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
   - `major mistake` > `0.2`
 
 These thresholds are product pedagogy defaults and may evolve under new policy versions. They are not universal skill ratings.
+
+## Deterministic Pattern Policy
+
+- Policy id/version: `deterministic-committed-move-patterns` / `1.0.0`
+- Main-pattern support rules (v1):
+  - minimum eligible decisions in recent window: `4`
+  - minimum recurring occurrences for a supported main pattern: `2`
+- Initial detector taxonomy:
+  - `avoidable-blot-exposure`
+  - `missed-point-making-opportunity`
+  - `missed-hit-opportunity`
+
+Pattern signals are emitted only for committed learner-owned checker-play decisions with trustworthy non-fixture evaluated evidence and deterministic move classification compatibility. The model explains supplied pattern evidence and must not invent additional occurrences, motives, or diagnoses.
 
 ## Non-goals
 

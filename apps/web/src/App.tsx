@@ -737,6 +737,27 @@ function App({
     return summarizeLearnerProgress(learnerProfile, { recentWindowSize: 20 });
   }, [learnerProfile]);
 
+  const recentMainPatternSummary = useMemo(() => {
+    const mainPattern = learnerProgress.patterns.mainPattern;
+    if (mainPattern.status === "supported") {
+      return {
+        label: mainPattern.displayName,
+        detail: `Observed in ${mainPattern.occurrenceCount} of the last ${learnerProgress.recentWindowSize} eligible learner decisions across ${mainPattern.gamesRepresented} game${mainPattern.gamesRepresented === 1 ? "" : "s"}.`
+      };
+    }
+
+    if (mainPattern.status === "tied") {
+      return {
+        label: "tied patterns",
+        detail: mainPattern.tiedPatterns.map((pattern) => pattern.displayName).join(", ")
+      };
+    }
+
+    return {
+      label: "not enough evidence yet"
+    };
+  }, [learnerProgress]);
+
   const progressContext = useMemo<Extract<CoachQuestionContext, { kind: "progress-profile" }>>(
     () => ({
       kind: "progress-profile",
@@ -2331,6 +2352,10 @@ function App({
             recentMistakeCount={learnerProgress.counts.recentWindow.mistake}
             recentMajorMistakeCount={learnerProgress.counts.recentWindow.majorMistake}
             recentUnclassifiedCount={learnerProgress.counts.recentWindow.unclassified}
+            recentMainPatternLabel={recentMainPatternSummary.label}
+            {...(recentMainPatternSummary.detail === undefined
+              ? {}
+              : { recentMainPatternDetail: recentMainPatternSummary.detail })}
             profileGamesRepresented={learnerProgress.gamesRepresented.fullProfile}
             profileStorageStatus={
               profileWritable ? (lineageWritable ? "ready" : "lineage-memory-only") : "memory-only"

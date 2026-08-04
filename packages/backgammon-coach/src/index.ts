@@ -43,6 +43,20 @@ export {
 } from "./classification";
 
 export {
+  MAIN_PATTERN_SUPPORT_RULES,
+  PATTERN_DETECTION_POLICY,
+  deriveLearnerPatternSignals,
+  mapPatternSkillAreaToKnowledgeConcept,
+  summarizeLearnerPatterns,
+  type LearnerMainPatternSelection,
+  type LearnerPatternAggregate,
+  type LearnerPatternDetectorId,
+  type LearnerPatternSignal,
+  type LearnerPatternSkillArea,
+  type LearnerPatternSummary
+} from "./patterns";
+
+export {
   LEARNER_PROFILE_FORMAT,
   LEARNER_PROFILE_VERSION,
   DEFAULT_MAX_OBSERVATIONS,

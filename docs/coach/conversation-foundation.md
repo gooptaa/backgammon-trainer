@@ -88,6 +88,7 @@ Precedence on submit:
 Progress-profile activation policy:
 
 - progress-profile is user-initiated through conversation intent (for example: "How am I doing?", "Show my recent progress")
+- recurring-pattern questions are also user-initiated through deterministic progress-profile intent (for example: "What do I keep doing wrong?", "What is my main pattern?")
 - explicit move-outcome/history-turn/full-game-review precedence is preserved
 - progress-profile does not silently replace explicit selected-turn review questions
 
@@ -163,6 +164,14 @@ Learner profile authority is also separated from generation:
 - only committed learner checker-play decisions are eligible for learner observations
 - profile aggregation preserves classification-policy identity/version compatibility
 - trend fields are deterministic and conservative; insufficient evidence is explicit
+
+Pattern attribution authority is also separated from generation:
+
+- recurring-skill patterns are assigned only by deterministic, versioned pattern detectors
+- pattern detectors compare committed played moves with supported stronger evaluated alternatives
+- pattern signals are persisted as bounded structured evidence tied to committed-turn identity
+- main-pattern selection is deterministic, with explicit tie and insufficient-evidence outcomes
+- the language model may explain supplied pattern evidence but may not invent counts, motives, or diagnoses
 
 Historical review authority remains deterministic before generation:
 

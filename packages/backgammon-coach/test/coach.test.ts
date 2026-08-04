@@ -1988,4 +1988,97 @@ describe("coach knowledge and orchestration", () => {
     expect(result.context.kind).toBe("progress-profile");
     expect(result.evidence.progressEvidence).toBeDefined();
   });
+
+  it("routes recurring-pattern questions to deterministic progress-profile context when available", async () => {
+    const snapshot = buildSnapshot();
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const progressContext = {
+      kind: "progress-profile" as const,
+      gameReference: "game-1",
+      snapshot,
+      progress: summarizeLearnerProgress(createLearnerProfile({ updatedAt: NOW }), {
+        recentWindowSize: 20
+      })
+    };
+
+    const result = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+      runtime,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      question: "What do I keep doing wrong?",
+      context,
+      progressContext,
+      pending: false
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.context.kind).toBe("progress-profile");
+    expect(result.evidence.progressEvidence).toBeDefined();
+  });
+
+  it("instructs the model not to invent pattern diagnoses for progress evidence", () => {
+    const snapshot = buildSnapshot();
+    const progressContext = {
+      kind: "progress-profile" as const,
+      gameReference: "game-1",
+      snapshot,
+      progress: summarizeLearnerProgress(createLearnerProfile({ updatedAt: NOW }), {
+        recentWindowSize: 20
+      })
+    };
+
+    const conversation = createCoachConversation({ id: "conversation-1", createdAt: NOW });
+    const appended = appendUserCoachMessage({
+      conversation,
+      id: "m1",
+      createdAt: NOW,
+      text: "What do I keep doing wrong?",
+      contextReference: {
+        kind: "progress-profile",
+        gameReference: "game-1"
+      }
+    });
+    expect(appended.ok).toBe(true);
+    if (!appended.ok) {
+      return;
+    }
+
+    const evidence = buildCoachEvidence({
+      question: "What do I keep doing wrong?",
+      context: progressContext,
+      conversation: appended.conversation
+    }).evidence;
+
+    const request = buildCoachModelRequest({
+      requestId: "request-1",
+      conversationId: "conversation-1",
+      userMessageId: "m1",
+      question: "What do I keep doing wrong?",
+      context: progressContext,
+      conversation: appended.conversation,
+      evidence,
+      knowledge: [],
+      responsePreferences: {
+        explanationLevel: "beginner",
+        verbosity: "normal"
+      }
+    });
+
+    expect((request.developerInstructions ?? []).join("\n")).toContain(
+      "Do not invent additional occurrences"
+    );
+    expect((request.developerInstructions ?? []).join("\n")).toContain("hidden motives");
+  });
 });

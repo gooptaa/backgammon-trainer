@@ -15,6 +15,7 @@ import {
 } from "./conversation";
 import { buildCoachEvidence, type CoachEvidenceBundle } from "./evidence";
 import type { CoachKnowledgeRetriever } from "./knowledge";
+import { mapPatternSkillAreaToKnowledgeConcept } from "./patterns";
 import { buildCoachModelRequest, toCoachEvidenceReference, toCoachModelProvenance } from "./prompt";
 import type { CoachGameReviewTurnEvidence, CoachQuestionContext } from "./context";
 
@@ -30,6 +31,9 @@ const FULL_GAME_REVIEW_PATTERN =
 const PROGRESS_PROFILE_PATTERN =
   /\b(how am i doing|how have i been playing|recent progress|show (me )?my progress|how many (serious )?mistakes|am i improving|how many major mistakes)\b/i;
 
+const PATTERN_PROFILE_PATTERN =
+  /\b(what do i keep doing wrong|main pattern|focus on next|same kind of mistake|where am i losing the most|recurring pattern|repeating the same mistakes)\b/i;
+
 const TURN_NUMBER_PATTERN = /\bturn\s+([0-9]+)\b/gi;
 
 const isLastMoveReviewQuestion = (question: string): boolean => {
@@ -42,6 +46,10 @@ const isFullGameReviewQuestion = (question: string): boolean => {
 
 const isProgressProfileQuestion = (question: string): boolean => {
   return PROGRESS_PROFILE_PATTERN.test(question);
+};
+
+const isPatternProfileQuestion = (question: string): boolean => {
+  return PATTERN_PROFILE_PATTERN.test(question);
 };
 
 const parseReferencedTurnNumbers = (question: string): readonly number[] => {
@@ -243,7 +251,10 @@ const resolveSubmissionContext = (
   }
 
   if (!isLastMoveReviewQuestion(question)) {
-    if (isProgressProfileQuestion(question) && context.kind === "current-position") {
+    if (
+      (isProgressProfileQuestion(question) || isPatternProfileQuestion(question)) &&
+      context.kind === "current-position"
+    ) {
       return Promise.resolve(progressContext ?? context);
     }
 
@@ -294,6 +305,19 @@ const deriveKnowledgeConcepts = (
 
   if (context.kind === "history-turn" || context.kind === "game-review") {
     concepts.add("move-review");
+  }
+
+  if (context.kind === "progress-profile") {
+    concepts.add("move-review");
+    const mainPattern = context.progress.patterns.mainPattern;
+    if (mainPattern.status === "supported") {
+      concepts.add(mapPatternSkillAreaToKnowledgeConcept(mainPattern.skillArea));
+    }
+    if (mainPattern.status === "tied") {
+      for (const pattern of mainPattern.tiedPatterns) {
+        concepts.add(mapPatternSkillAreaToKnowledgeConcept(pattern.skillArea));
+      }
+    }
   }
 
   if (evidence.positionFacts?.relationship.contactStatus === "contact") {
