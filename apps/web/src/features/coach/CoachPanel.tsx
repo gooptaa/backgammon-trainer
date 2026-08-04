@@ -128,6 +128,18 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
     if (chosen?.lossFromTopScoredMove !== undefined) {
       details.push(`Played move loss from best: ${chosen.lossFromTopScoredMove}`);
     }
+
+    const committedClassification = row.evidence.committedTurnEvidence.moveClassification;
+    if (committedClassification?.status === "classified") {
+      details.push(`Move classification: ${committedClassification.label}`);
+      details.push(
+        `Move classification loss from best: ${committedClassification.normalizedLossFromBest.toFixed(3)}`
+      );
+      details.push(`Move classification policy: ${committedClassification.policyVersion}`);
+    } else if (committedClassification?.status === "unclassified") {
+      details.push(`Move classification: unclassified (${committedClassification.reason})`);
+      details.push(`Move classification policy: ${committedClassification.policyVersion}`);
+    }
   }
 
   if (row.evidence.historicalReviewEvidence !== undefined) {
@@ -156,6 +168,21 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
       details.push(`Best evaluated normalized score: ${best.normalizedScore}`);
     }
 
+    if (row.evidence.historicalReviewEvidence.moveClassification?.status === "classified") {
+      const historicalClassification = row.evidence.historicalReviewEvidence.moveClassification;
+      details.push(`Historical classification: ${historicalClassification.label}`);
+      details.push(
+        `Historical loss from best: ${historicalClassification.normalizedLossFromBest.toFixed(3)}`
+      );
+      details.push(`Historical classification policy: ${historicalClassification.policyVersion}`);
+    } else if (
+      row.evidence.historicalReviewEvidence.moveClassification?.status === "unclassified"
+    ) {
+      const historicalClassification = row.evidence.historicalReviewEvidence.moveClassification;
+      details.push(`Historical classification: unclassified (${historicalClassification.reason})`);
+      details.push(`Historical classification policy: ${historicalClassification.policyVersion}`);
+    }
+
     for (const limitation of row.evidence.historicalReviewEvidence.limitations) {
       details.push(`Review limitation: ${limitation}`);
     }
@@ -173,6 +200,11 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
     details.push(`Unsupported decisions: ${review.unsupportedDecisionCount}`);
     details.push(`Evaluated played moves: ${review.evaluatedChosenMoveCount}`);
     details.push(`Unevaluated played moves: ${review.unevaluatedChosenMoveCount}`);
+    details.push(`Classified best count: ${review.bestCount}`);
+    details.push(`Classified reasonable count: ${review.reasonableCount}`);
+    details.push(`Classified mistake count: ${review.mistakeCount}`);
+    details.push(`Classified major mistake count: ${review.majorMistakeCount}`);
+    details.push(`Unclassified count: ${review.unclassifiedCount}`);
     details.push(`Complete coverage count: ${review.completeCoverageCount}`);
     details.push(`Partial coverage count: ${review.partialCoverageCount}`);
     details.push(`Missing coverage count: ${review.missingCoverageCount}`);
@@ -182,6 +214,13 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
 
     for (const keyDecision of review.keyDecisions) {
       details.push(`Key decision turn ${keyDecision.turnNumber}: ${keyDecision.playedMove}`);
+      if (keyDecision.moveClassification.status === "classified") {
+        details.push(`Key decision classification: ${keyDecision.moveClassification.label}`);
+      } else {
+        details.push(
+          `Key decision classification: unclassified (${keyDecision.moveClassification.reason})`
+        );
+      }
       if (keyDecision.normalizedScoreDifference !== undefined) {
         details.push(
           `Key decision score difference: ${keyDecision.normalizedScoreDifference.toFixed(3)}`
@@ -203,6 +242,12 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
   if (row.evidence.evaluatorProvenance !== undefined) {
     details.push(`Evaluator provider: ${row.evidence.evaluatorProvenance.provider}`);
     details.push(`Evaluator coverage: ${row.evidence.evaluatorCoverage ?? "unknown"}`);
+  }
+
+  if (row.evidence.moveClassificationPolicy !== undefined) {
+    details.push(
+      `Classification policy: ${row.evidence.moveClassificationPolicy.id} ${row.evidence.moveClassificationPolicy.version}`
+    );
   }
 
   if (row.knowledge.length > 0) {

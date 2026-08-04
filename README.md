@@ -11,8 +11,9 @@ Implemented now:
 - deterministic gameplay foundation (engine authority, legal moves, committed turn history, snapshot versioning)
 - factual analysis and evaluator-attributed ranked move evidence
 - analysis-session capture and reconciliation boundaries
-- text-first coach conversation orchestration with evidence version `2`
+- text-first coach conversation orchestration with evidence version `3`
 - evidence-backed full-game review over immutable committed history snapshots (completed game and game-so-far)
+- deterministic evidence-backed move classification for committed checker-play review (`best`, `reasonable`, `mistake`, `major mistake`, `unclassified`)
 - recommendation-support authority resolved before model generation for current-position coaching
 - curated project-authored knowledge retrieval and bounded evidence disclosure
 - provider-neutral chat model contracts in `@backgammon-trainer/ai-contracts`

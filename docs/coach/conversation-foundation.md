@@ -141,12 +141,21 @@ Recommendation authority is also separated from generation:
 - fixture or missing evaluator evidence cannot support authoritative strongest-move claims
 - non-decision and no-legal-move states explicitly block fabricated recommendations
 
+Move classification authority is also separated from generation:
+
+- committed historical checker-play moves may receive deterministic policy labels (`best`, `reasonable`, `mistake`, `major mistake`)
+- classification is fail-closed and emitted as `unclassified` when evidence is insufficient or non-authoritative
+- classification requires complete trustworthy evaluator coverage with valid score semantics and evaluator-covered played move
+- fixture provenance, partial coverage, missing evaluator evidence, or unsupported turn kinds remain unclassified
+- current-position coaching never assigns mistake labels before a move is committed
+
 Historical review authority remains deterministic before generation:
 
 - complete trustworthy coverage supports played-vs-best rank and loss claims
 - partial trustworthy coverage supports strongest-evaluated claims only
 - uncovered played moves receive no fabricated rank/loss claims
 - fixture, unavailable, or failed evaluator output remains non-authoritative
+- when eligible, the deterministic policy label and policy version are included in historical evidence before prompt construction
 
 Fixture evaluator caveat:
 

@@ -40,6 +40,7 @@
 - [Trusted server real-provider boundary ADR](adr/0009-server-hosted-real-provider-boundary.md)
 - [Recommendation authority before generation ADR](adr/0010-recommendation-authority-before-generation.md)
 - [Real evaluator server-boundary ADR](adr/0011-real-evaluator-server-boundary.md)
+- [Deterministic move classification policy ADR](adr/0012-deterministic-move-classification-policy.md)
 
 ## Roadmap
 

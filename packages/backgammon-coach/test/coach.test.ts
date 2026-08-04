@@ -743,6 +743,10 @@ describe("coach evidence and prompt", () => {
         turnRecord,
         rankedAnalysis: {
           ...ranked.analysis,
+          scoreScale: {
+            kind: "equity",
+            unit: "points"
+          },
           provenance: {
             ...ranked.analysis.provenance,
             provider: "trusted-evaluator"
@@ -765,6 +769,100 @@ describe("coach evidence and prompt", () => {
     expect(evidence.evidence.recommendationSupport?.status).toBe("supported");
     expect(evidence.evidence.recommendationSupport?.reason).toBe("complete-trustworthy-coverage");
     expect(evidence.evidence.historicalReviewEvidence?.playedMoveEvaluated).toBe(true);
+  });
+
+  it("includes deterministic move classification for eligible historical move review", async () => {
+    const snapshot = buildSnapshot();
+    const ranked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "white",
+        dice: { dice: [1, 2] }
+      },
+      createFixturePositionEvaluator({ mode: "complete" })
+    );
+
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok || ranked.analysis.kind !== "evaluated") {
+      return;
+    }
+
+    const playedOutcome = ranked.analysis.rankedMoves[1]?.outcome;
+    expect(playedOutcome).toBeDefined();
+    if (playedOutcome === undefined) {
+      return;
+    }
+
+    const turnRecord = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: {
+        kind: "move",
+        move: playedOutcome.move
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: playedOutcome.positionAfter,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const playedFingerprint = getMoveFingerprint(playedOutcome.move);
+    const trustedEquity = {
+      ...ranked.analysis,
+      scoreScale: {
+        kind: "equity" as const,
+        unit: "points" as const
+      },
+      provenance: {
+        ...ranked.analysis.provenance,
+        provider: "trusted-evaluator"
+      },
+      coverage: "complete" as const,
+      rankedMoves: ranked.analysis.rankedMoves.map((row) =>
+        row.moveFingerprint === playedFingerprint
+          ? {
+              ...row,
+              rank: 2,
+              lossFromBest: 0.12,
+              normalizedScore: ranked.analysis.rankedMoves[0]!.normalizedScore - 0.12
+            }
+          : row
+      )
+    };
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null,
+      selectedHistoryTurn: {
+        turnRecord,
+        rankedAnalysis: trustedEquity
+      }
+    });
+
+    expect(context.kind).toBe("history-turn");
+    if (context.kind !== "history-turn") {
+      return;
+    }
+
+    const evidence = buildCoachEvidence({
+      question: "Was that a mistake?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    });
+
+    expect(evidence.evidence.moveClassificationPolicy?.version).toBe("1.0.0");
+    expect(evidence.evidence.historicalReviewEvidence?.moveClassification).toMatchObject({
+      status: "classified",
+      label: "mistake"
+    });
+    expect(evidence.evidence.committedTurnEvidence?.moveClassification).toMatchObject({
+      status: "classified",
+      label: "mistake"
+    });
   });
 
   it("qualifies historical review when only partial trusted coverage exists", async () => {
@@ -813,6 +911,10 @@ describe("coach evidence and prompt", () => {
         turnRecord,
         rankedAnalysis: {
           ...ranked.analysis,
+          scoreScale: {
+            kind: "equity",
+            unit: "points"
+          },
           provenance: {
             ...ranked.analysis.provenance,
             provider: "trusted-evaluator"
@@ -837,6 +939,10 @@ describe("coach evidence and prompt", () => {
     expect(evidence.evidence.historicalReviewEvidence?.limitations).toContain(
       "Evaluator coverage is partial across legal candidates."
     );
+    expect(evidence.evidence.historicalReviewEvidence?.moveClassification).toMatchObject({
+      status: "unclassified",
+      reason: "partial-coverage"
+    });
   });
 
   it("does not assign played rank when historical played move is uncovered", async () => {
@@ -982,6 +1088,92 @@ describe("coach evidence and prompt", () => {
     expect(request.systemInstruction).toContain("Do not invent legal moves");
     expect(JSON.stringify(request)).toContain("curatedKnowledge");
     expect(JSON.stringify(request)).not.toContain("apiKey");
+  });
+
+  it("instructs the model to keep deterministic move classifications authoritative", async () => {
+    const snapshot = buildSnapshot();
+    const ranked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "white",
+        dice: { dice: [1, 2] }
+      },
+      createFixturePositionEvaluator({ mode: "complete" })
+    );
+
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok || ranked.analysis.kind !== "evaluated") {
+      return;
+    }
+
+    const playedOutcome =
+      ranked.analysis.rankedMoves[1]?.outcome ?? ranked.analysis.rankedMoves[0]?.outcome;
+    expect(playedOutcome).toBeDefined();
+    if (playedOutcome === undefined) {
+      return;
+    }
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null,
+      selectedHistoryTurn: {
+        turnRecord: createTurnRecord({
+          turnNumber: 1,
+          player: "white",
+          dice: { dice: [1, 2] },
+          outcome: { kind: "move", move: playedOutcome.move },
+          positionBefore: snapshot.gameState.position,
+          positionAfter: playedOutcome.positionAfter,
+          gameStatusAfter: { state: "in-progress" },
+          phase: "normal"
+        }),
+        rankedAnalysis: {
+          ...ranked.analysis,
+          scoreScale: { kind: "equity", unit: "points" },
+          provenance: {
+            ...ranked.analysis.provenance,
+            provider: "trusted-evaluator"
+          },
+          coverage: "complete"
+        }
+      }
+    });
+
+    expect(context.kind).toBe("history-turn");
+    if (context.kind !== "history-turn") {
+      return;
+    }
+
+    const conversation = createCoachConversation({ id: "conversation-1", createdAt: NOW });
+    const evidence = buildCoachEvidence({
+      question: "Was that a mistake?",
+      context,
+      conversation
+    }).evidence;
+
+    const request = buildCoachModelRequest({
+      requestId: "request-3",
+      conversationId: conversation.id,
+      userMessageId: "m3",
+      question: "Was that a mistake?",
+      context,
+      conversation,
+      evidence,
+      knowledge: [],
+      responsePreferences: {
+        explanationLevel: "beginner",
+        verbosity: "normal"
+      }
+    });
+
+    expect(
+      request.developerInstructions?.some((instruction) =>
+        instruction.includes("authoritative policy outputs")
+      )
+    ).toBe(true);
   });
 
   it("instructs the model not to claim strongest move when evaluator evidence is missing", () => {
@@ -1481,6 +1673,150 @@ describe("coach knowledge and orchestration", () => {
     expect(review.supportedCheckerPlayDecisionCount).toBe(2);
     expect(review.failedCoverageCount).toBe(1);
     expect(review.fixtureCoverageCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("tracks full-game review classification counts and prioritizes severe classified decisions", async () => {
+    const snapshot = buildSnapshot();
+
+    const firstRanked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "white",
+        dice: { dice: [1, 2] }
+      },
+      createFixturePositionEvaluator({ mode: "complete" })
+    );
+    const secondRanked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "black",
+        dice: { dice: [3, 1] }
+      },
+      createFixturePositionEvaluator({ mode: "complete" })
+    );
+
+    expect(firstRanked.ok).toBe(true);
+    expect(secondRanked.ok).toBe(true);
+    if (!firstRanked.ok || !secondRanked.ok) {
+      return;
+    }
+
+    const firstPlayedOutcome =
+      firstRanked.analysis.kind === "evaluated"
+        ? (firstRanked.analysis.rankedMoves[1]?.outcome ??
+          firstRanked.analysis.rankedMoves[0]?.outcome)
+        : undefined;
+    const secondPlayedOutcome =
+      secondRanked.analysis.kind === "evaluated"
+        ? (secondRanked.analysis.rankedMoves[1]?.outcome ??
+          secondRanked.analysis.rankedMoves[0]?.outcome)
+        : undefined;
+    expect(firstPlayedOutcome).toBeDefined();
+    expect(secondPlayedOutcome).toBeDefined();
+    if (firstPlayedOutcome === undefined || secondPlayedOutcome === undefined) {
+      return;
+    }
+
+    const firstMove = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: {
+        kind: "move",
+        move: firstPlayedOutcome.move
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: firstPlayedOutcome.positionAfter,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const secondMove = createTurnRecord({
+      turnNumber: 2,
+      player: "black",
+      dice: { dice: [3, 1] },
+      outcome: {
+        kind: "move",
+        move: secondPlayedOutcome.move
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: secondPlayedOutcome.positionAfter,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: {
+        ...snapshot,
+        turnHistory: [firstMove, secondMove]
+      },
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const result = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+      runtime,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      question: "Review this game so far.",
+      context,
+      resolveGameReviewTurnAnalysis: async ({ turnRecord }) => {
+        const rankedAnalysis =
+          turnRecord.turnNumber === 1 ? firstRanked.analysis : secondRanked.analysis;
+        if (rankedAnalysis.kind !== "evaluated") {
+          return { ok: true, rankedAnalysis };
+        }
+
+        const playedFingerprint = getMoveFingerprint(
+          turnRecord.outcome.kind === "move"
+            ? turnRecord.outcome.move
+            : rankedAnalysis.rankedMoves[0]!.outcome.move
+        );
+        const majorLoss = turnRecord.turnNumber === 1 ? 0.35 : 0.05;
+        return {
+          ok: true,
+          rankedAnalysis: {
+            ...rankedAnalysis,
+            scoreScale: { kind: "equity", unit: "points" },
+            provenance: {
+              ...rankedAnalysis.provenance,
+              provider: "trusted-evaluator"
+            },
+            coverage: "complete",
+            rankedMoves: rankedAnalysis.rankedMoves.map((row) =>
+              row.moveFingerprint === playedFingerprint
+                ? {
+                    ...row,
+                    rank: 2,
+                    lossFromBest: majorLoss,
+                    normalizedScore: rankedAnalysis.rankedMoves[0]!.normalizedScore - majorLoss
+                  }
+                : row
+            )
+          }
+        };
+      },
+      pending: false
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const review = result.evidence.gameReviewEvidence;
+    expect(review).toBeDefined();
+    if (review === undefined) {
+      return;
+    }
+
+    expect(review.majorMistakeCount).toBeGreaterThanOrEqual(1);
+    expect(review.reasonableCount).toBeGreaterThanOrEqual(1);
+    expect(review.keyDecisions[0]?.moveClassification.status).toBe("classified");
+    expect(review.keyDecisions[0]?.moveClassification).toMatchObject({ label: "major mistake" });
   });
 
   it("keeps explicit selected history turn as the review target", async () => {

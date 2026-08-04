@@ -128,7 +128,7 @@ Instead it deterministically selects a bounded subset based on:
 
 Each selected row records explicit selection reasons.
 
-The public coach evidence bundle version is now `2` to reflect the added selection, coverage, and retrieval semantics.
+The public coach evidence bundle version is now `3` to reflect deterministic move-classification outputs in historical review and full-game review evidence.
 
 Each request also records:
 
@@ -140,6 +140,23 @@ Each request also records:
 - truncation warnings when bounded selection discards additional relevant rows
 
 Legal move coverage, evaluator coverage, and coach evidence coverage remain separate concepts.
+
+Move-quality classification is deterministic coaching policy derived from evaluator evidence, not evaluator fact:
+
+- policy identity/version are emitted in evidence
+- supported labels are currently `best`, `reasonable`, `mistake`, and `major mistake`
+- unclassifiable decisions are reported as `unclassified` with deterministic reasons
+- partial or fixture-backed evidence is not upgraded to formal labels
+- current-position requests do not receive mistake labels because no committed move exists yet
+
+Current policy (v1.0.0) uses evaluator `lossFromBest` in equity points with inclusive boundaries:
+
+- `best`: loss <= 0.000001 (tie tolerance)
+- `reasonable`: loss > 0.000001 and <= 0.08
+- `mistake`: loss > 0.08 and <= 0.2
+- `major mistake`: loss > 0.2
+
+These thresholds are initial product-policy defaults for instructional consistency, not universal backgammon truth or player rating.
 
 For full-game review, key-decision selection is deterministic and bounded. It prioritizes explicit user references and the largest supported played-vs-best evaluated differences, and may include close/tied decisions for balance.
 

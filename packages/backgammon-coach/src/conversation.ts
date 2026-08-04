@@ -8,7 +8,7 @@ export interface CoachContextReference {
 }
 
 export interface CoachEvidenceReference {
-  readonly evidenceVersion: 2;
+  readonly evidenceVersion: 3;
   readonly contextKind: CoachContextKind;
   readonly warningCount: number;
 }

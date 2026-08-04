@@ -52,3 +52,4 @@ This package does not decide coaching recommendation claims.
 
 - It provides deterministic legal-move outcomes and evaluator-attributed ranking data.
 - Recommendation-support decisions remain in `@backgammon-trainer/backgammon-coach` so this package stays factual and provider-neutral.
+- Pedagogical move-quality labels (for example `mistake` or `major mistake`) remain in coach-domain policy, not evaluator facts.

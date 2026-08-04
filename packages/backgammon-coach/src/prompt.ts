@@ -99,6 +99,12 @@ export const buildCoachModelRequest = (
     }));
   const serializedEvidence = JSON.parse(JSON.stringify(request.evidence)) as JsonValue;
   const recommendationSupport = request.evidence.recommendationSupport;
+  const hasDeterministicClassification =
+    request.evidence.historicalReviewEvidence?.moveClassification !== undefined ||
+    (request.evidence.gameReviewEvidence?.keyDecisions.some(
+      (decision) => decision.moveClassification !== undefined
+    ) ??
+      false);
 
   const recommendationInstruction =
     recommendationSupport === undefined || recommendationSupport.status === "not-supported"
@@ -119,6 +125,10 @@ export const buildCoachModelRequest = (
         ? "A trustworthy complete-coverage evaluator recommendation is supplied. Lead with that legal move and explain tradeoffs without exaggerating close alternatives."
         : "Only strongest-evaluated support is supplied from partial evaluator coverage. State the coverage caveat plainly before recommending it as strongest among evaluated moves.";
 
+  const classificationInstruction = hasDeterministicClassification
+    ? "Move classifications in deterministic evidence are authoritative policy outputs. Do not strengthen, weaken, or replace any supplied label. If a move is unclassified, explain the limitation and do not assign a substitute label."
+    : null;
+
   return {
     requestId: request.requestId,
     systemInstruction:
@@ -127,6 +137,7 @@ export const buildCoachModelRequest = (
       "Treat engine-derived and deterministic analysis evidence as authoritative for board facts and legal move facts.",
       "Treat evaluator ranking evidence as authoritative only when recommendation support explicitly says it is supported.",
       recommendationInstruction,
+      ...(classificationInstruction === null ? [] : [classificationInstruction]),
       "Keep deterministic facts, evaluator-attributed evidence, and curated general guidance clearly separated.",
       "Curated knowledge is general instructional guidance and does not prove that any legal move is best in this position.",
       "Omitted legal move rows may still represent legal moves; do not describe omitted rows as illegal.",

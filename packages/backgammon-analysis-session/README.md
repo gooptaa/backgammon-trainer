@@ -41,6 +41,8 @@ Why these exports are public:
 - Browser/local/backend persistence adapters.
 - Coaching labels, recommendations, and lesson planning.
 
+Analysis-session records remain raw evaluator-linked evidence for committed turns. Versioned pedagogical move classification is derived in coach-domain orchestration and is not persisted in this package format.
+
 ## Future Roadmap
 
 - Persistence adapter integration in host layers.

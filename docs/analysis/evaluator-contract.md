@@ -264,3 +264,5 @@ Provider-specific raw data remains adapter-isolated.
 ## Future Coaching Boundary
 
 Future coaching layers may consume ranked analysis and provenance, but they are separate from this evaluator contract and are not implemented in this milestone.
+
+Pedagogical move-quality labels (for example `mistake` or `major mistake`) are not evaluator facts. Those labels are assigned later by versioned deterministic coach-domain policy from supported ranked evidence.

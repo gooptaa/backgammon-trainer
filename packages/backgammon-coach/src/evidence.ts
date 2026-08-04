@@ -10,6 +10,13 @@ import {
   summarizeAnalysisSession,
   type AnalysisSession
 } from "@backgammon-trainer/backgammon-analysis-session";
+import {
+  classifyCommittedMove,
+  formatUnclassifiedReason,
+  isFixtureEvaluator,
+  MOVE_CLASSIFICATION_POLICY,
+  type CoachMoveClassification
+} from "./classification";
 
 import type { CoachConversation } from "./conversation";
 import type { CoachGameReviewTurnEvidence, CoachQuestionContext } from "./context";
@@ -30,6 +37,7 @@ interface CoachGameReviewDecisionEvidence {
     evaluatorRank: number;
     normalizedScore: number;
   };
+  readonly moveClassification: CoachMoveClassification;
   readonly normalizedScoreDifference?: number;
   readonly isTieForHighestEvaluation?: boolean;
   readonly note: string;
@@ -114,10 +122,11 @@ export interface CoachLegalMoveSelectionSummary {
 }
 
 export interface CoachEvidenceBundle {
-  evidenceVersion: 2;
+  evidenceVersion: 3;
   questionContext: {
     kind: CoachQuestionContext["kind"];
   };
+  moveClassificationPolicy?: typeof MOVE_CLASSIFICATION_POLICY;
   positionFacts?: ReturnType<typeof analyzePosition>;
   legalMoveSelection?: CoachLegalMoveSelectionSummary;
   legalMoveEvidence?: readonly CoachMoveEvidence[];
@@ -136,6 +145,7 @@ export interface CoachEvidenceBundle {
       evaluatorRank: number;
       normalizedScore: number;
     };
+    moveClassification?: CoachMoveClassification;
     limitations: readonly string[];
   };
   committedTurnEvidence?: {
@@ -149,6 +159,7 @@ export interface CoachEvidenceBundle {
       normalizedScore?: number;
       lossFromTopScoredMove?: number;
     };
+    moveClassification?: CoachMoveClassification;
   };
   gameReviewEvidence?: {
     reviewScope: "completed-game" | "game-so-far";
@@ -166,6 +177,11 @@ export interface CoachEvidenceBundle {
     analysisRecordCount: number;
     evaluatedChosenMoveCount: number;
     unevaluatedChosenMoveCount: number;
+    bestCount: number;
+    reasonableCount: number;
+    mistakeCount: number;
+    majorMistakeCount: number;
+    unclassifiedCount: number;
     completeCoverageCount: number;
     partialCoverageCount: number;
     missingCoverageCount: number;
@@ -209,11 +225,6 @@ const DEFAULT_LIMITS: CoachEvidenceBuildLimits = {
 
 const formatMoveLabel = (move: Move): string => {
   return move.steps.map((step) => `${step.fromPoint}/${step.toPoint}`).join(", ");
-};
-
-const isFixtureEvaluator = (provider: string): boolean => {
-  const normalized = provider.toLowerCase();
-  return normalized.includes("fixture") || normalized.includes("mock");
 };
 
 const formatStepLabel = (fromPoint: string | number, toPoint: string | number): string => {
@@ -627,6 +638,81 @@ const parseReferencedTurnNumbers = (question: string): readonly number[] => {
   return [...numbers].sort((left, right) => left - right);
 };
 
+const classificationSeverity = (classification: CoachMoveClassification): number => {
+  if (classification.status !== "classified") {
+    return 5;
+  }
+
+  switch (classification.label) {
+    case "major mistake":
+      return 1;
+    case "mistake":
+      return 2;
+    case "reasonable":
+      return 3;
+    case "best":
+      return 4;
+  }
+};
+
+const classificationLoss = (classification: CoachMoveClassification): number => {
+  if (classification.status !== "classified") {
+    return -1;
+  }
+
+  return classification.normalizedLossFromBest;
+};
+
+const isBalancedClassification = (classification: CoachMoveClassification): boolean => {
+  return (
+    classification.status === "classified" &&
+    (classification.label === "reasonable" || classification.label === "best")
+  );
+};
+
+const formatClassificationNote = (classification: CoachMoveClassification): string => {
+  if (classification.status === "classified") {
+    return classification.isTieForBest
+      ? `Classified as ${classification.label}; tied for best within policy tolerance.`
+      : `Classified as ${classification.label} under policy ${classification.policyVersion}.`;
+  }
+
+  return `Unclassified: ${formatUnclassifiedReason(classification.reason)}`;
+};
+
+const incrementClassificationCount = (
+  counts: {
+    best: number;
+    reasonable: number;
+    mistake: number;
+    majorMistake: number;
+    unclassified: number;
+  },
+  classification: CoachMoveClassification
+): void => {
+  if (classification.status !== "classified") {
+    counts.unclassified += 1;
+    return;
+  }
+
+  if (classification.label === "best") {
+    counts.best += 1;
+    return;
+  }
+
+  if (classification.label === "reasonable") {
+    counts.reasonable += 1;
+    return;
+  }
+
+  if (classification.label === "mistake") {
+    counts.mistake += 1;
+    return;
+  }
+
+  counts.majorMistake += 1;
+};
+
 export const buildCoachEvidence = (input: {
   question: string;
   context: CoachQuestionContext;
@@ -649,7 +735,7 @@ export const buildCoachEvidence = (input: {
   }
 
   const evidence: CoachEvidenceBundle = {
-    evidenceVersion: 2,
+    evidenceVersion: 3,
     questionContext: {
       kind: input.context.kind
     },
@@ -964,12 +1050,29 @@ export const buildCoachEvidence = (input: {
       limitations.push("The selected historical turn is not a checker-play move.");
     }
 
+    const moveClassification = classifyCommittedMove({
+      ...(playedMoveFingerprint === undefined ? {} : { playedMoveFingerprint }),
+      ...(rankedAnalysis === undefined ? {} : { rankedAnalysis }),
+      analysisSource:
+        turnRecord.outcome.kind !== "move"
+          ? "unsupported"
+          : rankedAnalysis === undefined
+            ? "missing"
+            : "analysis-record"
+    });
+
+    evidence.moveClassificationPolicy = structuredClone(MOVE_CLASSIFICATION_POLICY);
+    if (moveClassification.status === "unclassified") {
+      limitations.push(formatUnclassifiedReason(moveClassification.reason));
+    }
+
     evidence.historicalReviewEvidence = {
       selectionSource: input.context.selectionSource,
       turnNumber: turnRecord.turnNumber,
       playedMove:
         turnRecord.outcome.kind === "pass" ? "pass" : formatMoveLabel(turnRecord.outcome.move),
       ...(playedMoveFingerprint === undefined ? {} : { playedMoveFingerprint }),
+      ...(turnRecord.outcome.kind !== "move" ? {} : { moveClassification }),
       ...(rankedAnalysis?.kind !== "evaluated"
         ? {}
         : {
@@ -1000,7 +1103,8 @@ export const buildCoachEvidence = (input: {
         turnRecord.outcome.kind === "pass" ? "pass" : formatMoveLabel(turnRecord.outcome.move),
       hasAnalysisRecord:
         input.context.analysisRecord !== undefined || input.context.rankedAnalysis !== undefined,
-      ...(evaluatedChosenMove === undefined ? {} : { evaluatedChosenMove })
+      ...(evaluatedChosenMove === undefined ? {} : { evaluatedChosenMove }),
+      ...(turnRecord.outcome.kind !== "move" ? {} : { moveClassification })
     };
 
     if (input.context.analysisRecord === undefined && input.context.rankedAnalysis === undefined) {
@@ -1034,6 +1138,13 @@ export const buildCoachEvidence = (input: {
     let unavailableCoverageCount = 0;
     let evaluatedChosenMoveCount = 0;
     let unevaluatedChosenMoveCount = 0;
+    const classificationCounts = {
+      best: 0,
+      reasonable: 0,
+      mistake: 0,
+      majorMistake: 0,
+      unclassified: 0
+    };
 
     const limitations: string[] = [];
     const decisionEvidence: CoachGameReviewDecisionEvidence[] = [];
@@ -1047,6 +1158,11 @@ export const buildCoachEvidence = (input: {
 
       supportedCheckerPlayDecisionCount += 1;
       const playedMoveLabel = formatMoveLabel(turnRecord.outcome.move);
+      const playedMoveFingerprint = getMoveFingerprint(turnRecord.outcome.move);
+      const countsIncludeTurn =
+        input.context.reviewedPlayerScope.kind !== "learner-only" ||
+        input.context.reviewedPlayerScope.player === undefined ||
+        turnRecord.player === input.context.reviewedPlayerScope.player;
 
       if (reviewedTurn.rankedAnalysis?.kind !== "evaluated") {
         if (reviewedTurn.analysisSource === "failed") {
@@ -1065,24 +1181,45 @@ export const buildCoachEvidence = (input: {
           missingCoverageCount += 1;
         }
 
+        const moveClassification = classifyCommittedMove({
+          playedMoveFingerprint,
+          ...(reviewedTurn.rankedAnalysis === undefined
+            ? {}
+            : { rankedAnalysis: reviewedTurn.rankedAnalysis }),
+          analysisSource: reviewedTurn.analysisSource
+        });
+
+        if (countsIncludeTurn) {
+          incrementClassificationCount(classificationCounts, moveClassification);
+        }
+
         decisionEvidence.push({
           turnNumber: turnRecord.turnNumber,
           player: turnRecord.player,
           playedMove: playedMoveLabel,
           analysisSource: reviewedTurn.analysisSource,
           playedMoveEvaluated: false,
-          note: "Decision not fully covered by evaluator evidence."
+          moveClassification,
+          note: formatClassificationNote(moveClassification)
         });
         continue;
       }
 
       const rankedAnalysis = reviewedTurn.rankedAnalysis;
-      const playedMoveFingerprint = getMoveFingerprint(turnRecord.outcome.move);
       const playedRanked = rankedAnalysis.rankedMoves.find(
         (row) => row.moveFingerprint === playedMoveFingerprint
       );
       const topRanked = rankedAnalysis.rankedMoves[0];
       const fixture = isFixtureEvaluator(rankedAnalysis.provenance.provider);
+      const moveClassification = classifyCommittedMove({
+        playedMoveFingerprint,
+        rankedAnalysis,
+        analysisSource: reviewedTurn.analysisSource
+      });
+
+      if (countsIncludeTurn) {
+        incrementClassificationCount(classificationCounts, moveClassification);
+      }
 
       if (fixture) {
         fixtureCoverageCount += 1;
@@ -1101,6 +1238,15 @@ export const buildCoachEvidence = (input: {
       const normalizedScoreDifference = playedRanked?.lossFromBest;
       const topMoveDiffers =
         topRanked !== undefined && topRanked.moveFingerprint !== playedMoveFingerprint;
+
+      const rankingNote =
+        playedRanked?.rank === 1
+          ? "Played move tied for highest evaluated rank."
+          : playedRanked === undefined
+            ? "Played move was not evaluated in ranked output."
+            : topMoveDiffers
+              ? "Played move ranked lower than the strongest evaluated alternative."
+              : "Played move remained among strongest evaluated candidates.";
 
       decisionEvidence.push({
         turnNumber: turnRecord.turnNumber,
@@ -1123,18 +1269,14 @@ export const buildCoachEvidence = (input: {
                 normalizedScore: topRanked.normalizedScore
               }
             }),
+        moveClassification,
         ...(normalizedScoreDifference === undefined ? {} : { normalizedScoreDifference }),
         isTieForHighestEvaluation: playedRanked?.rank === 1,
-        note:
-          playedRanked?.rank === 1
-            ? "Played move tied for highest evaluated rank."
-            : playedRanked === undefined
-              ? "Played move was not evaluated in ranked output."
-              : topMoveDiffers
-                ? "Played move ranked lower than the strongest evaluated alternative."
-                : "Played move remained among strongest evaluated candidates."
+        note: `${rankingNote} ${formatClassificationNote(moveClassification)}`
       });
     }
+
+    evidence.moveClassificationPolicy = structuredClone(MOVE_CLASSIFICATION_POLICY);
 
     const explicitTurnNumbers = new Set<number>([
       ...(input.context.selectedTurnNumber === undefined ? [] : [input.context.selectedTurnNumber]),
@@ -1171,19 +1313,54 @@ export const buildCoachEvidence = (input: {
         return left.turnNumber - right.turnNumber;
       });
 
+    const severityOrderedDecisions = [...decisionEvidence].sort((left, right) => {
+      const leftSeverity = classificationSeverity(left.moveClassification);
+      const rightSeverity = classificationSeverity(right.moveClassification);
+      if (leftSeverity !== rightSeverity) {
+        return leftSeverity - rightSeverity;
+      }
+
+      const leftLoss = classificationLoss(left.moveClassification);
+      const rightLoss = classificationLoss(right.moveClassification);
+      if (leftLoss !== rightLoss) {
+        return rightLoss - leftLoss;
+      }
+
+      return left.turnNumber - right.turnNumber;
+    });
+
     for (const decision of decisionEvidence) {
       if (explicitTurnNumbers.has(decision.turnNumber)) {
         pushDecision(decision);
       }
     }
 
-    for (const decision of scoredDecisions) {
-      if ((decision.normalizedScoreDifference ?? 0) > 0) {
-        pushDecision(decision);
-      }
-      if (keyDecisions.length >= limits.maxLegalMoves) {
+    const hasBalancedExplicit = keyDecisions.some((decision) =>
+      isBalancedClassification(decision.moveClassification)
+    );
+    const balanceCandidate = severityOrderedDecisions.find((decision) =>
+      isBalancedClassification(decision.moveClassification)
+    );
+    const reserveBalanceSlot =
+      !hasBalancedExplicit && balanceCandidate !== undefined && limits.maxLegalMoves > 0;
+    const severityBudget = reserveBalanceSlot
+      ? Math.max(0, limits.maxLegalMoves - 1)
+      : limits.maxLegalMoves;
+
+    for (const decision of severityOrderedDecisions) {
+      if (keyDecisions.length >= severityBudget) {
         break;
       }
+
+      if (seenDecisionTurns.has(decision.turnNumber)) {
+        continue;
+      }
+
+      pushDecision(decision);
+    }
+
+    if (reserveBalanceSlot && balanceCandidate !== undefined) {
+      pushDecision(balanceCandidate);
     }
 
     const tieDecisions = scoredDecisions.filter((decision) => decision.isTieForHighestEvaluation);
@@ -1231,6 +1408,11 @@ export const buildCoachEvidence = (input: {
       analysisRecordCount: summary?.recordCount ?? 0,
       evaluatedChosenMoveCount,
       unevaluatedChosenMoveCount,
+      bestCount: classificationCounts.best,
+      reasonableCount: classificationCounts.reasonable,
+      mistakeCount: classificationCounts.mistake,
+      majorMistakeCount: classificationCounts.majorMistake,
+      unclassifiedCount: classificationCounts.unclassified,
       completeCoverageCount,
       partialCoverageCount,
       missingCoverageCount,

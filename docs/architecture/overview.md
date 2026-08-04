@@ -74,6 +74,13 @@ Current-position recommendation authority policy is explicit:
 - fixture evaluator provenance blocks authoritative strongest-move claims
 - missing evaluator evidence and non-decision states block strongest-move claims
 
+Historical move-classification authority policy is explicit:
+
+- versioned deterministic classification policy lives in coach-domain orchestration
+- labels are derived from supported evaluator evidence and committed move identity
+- engine and evaluator layers remain free of pedagogical labels
+- language-model output explains deterministic labels but does not redefine them
+
 No package under `packages/` depends on React, Fastify, browser APIs, or vendor SDKs.
 
 GNU Backgammon process execution is a stricter runtime boundary:

@@ -13,8 +13,10 @@ The web app is a development sandbox for deterministic backgammon gameplay, fact
 - One pending coach request is allowed at a time; gameplay stays enabled while pending.
 - If a current-position evaluator is configured and analysis is still running, coach send is temporarily disabled and the panel shows `Position analysis pending...`.
 - Full-game review is initiated by conversation requests (for example, "review this game" or "review game so far") and remains bound to committed turns present at submission time.
+- Historical review and full-game review now surface deterministic move classifications from coach evidence (`best`, `reasonable`, `mistake`, `major mistake`, `unclassified`) with policy/provenance limits.
 - Current coach requests use selected legal move evidence rather than a broad move dump when current-turn legal outcomes exist.
 - Current coach requests may include a small project-authored curated knowledge subset chosen deterministically from the question and trusted evidence.
+- Current-position recommendations do not assign mistake labels because no move is committed yet.
 - Fixture warning is explicit: `Development fixture coach - responses are not strategic advice.`
 - No microphone, voice capture, speech synthesis, or audio-agent behavior is implemented.
 - Coach failures are concise and non-fatal; gameplay and deterministic analysis remain available.

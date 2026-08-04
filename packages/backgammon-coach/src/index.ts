@@ -35,6 +35,14 @@ export {
 } from "./evidence";
 
 export {
+  MOVE_CLASSIFICATION_POLICY,
+  type CoachMoveClassification,
+  type CoachMoveClassificationLabel,
+  type CoachMoveClassificationPolicy,
+  type CoachMoveClassificationUnclassifiedReason
+} from "./classification";
+
+export {
   createFixtureCoachKnowledgeRetriever,
   createLocalCoachKnowledgeRetriever,
   createNoopCoachKnowledgeRetriever,
