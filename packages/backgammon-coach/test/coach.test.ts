@@ -3122,6 +3122,94 @@ describe("coach knowledge and orchestration", () => {
     expect(plan.preferredTracks[0]).toBe("move-review");
   });
 
+  it("treats referential here-follow-ups as position-specific explanations", () => {
+    const snapshot = buildSnapshot();
+    const moveTurn = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: {
+        kind: "move",
+        move: {
+          player: "white",
+          steps: [
+            {
+              kind: "point-to-point",
+              fromPoint: 13,
+              toPoint: 12,
+              dieValue: 1,
+              dieIndex: 0,
+              hitsBlot: false
+            },
+            {
+              kind: "point-to-point",
+              fromPoint: 13,
+              toPoint: 11,
+              dieValue: 2,
+              dieIndex: 1,
+              hitsBlot: false
+            }
+          ]
+        }
+      },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: snapshot.gameState.position,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: {
+        ...snapshot,
+        turnHistory: [moveTurn]
+      },
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const evidence = buildCoachEvidence({
+      question: "Why is it valuable here?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    }).evidence;
+
+    const plan = buildCoachKnowledgeRetrievalPlan({
+      question: "Why is it valuable here?",
+      context,
+      evidence
+    });
+
+    expect(plan.intent).toBe("position-specific-explanation");
+    expect(plan.preferredTracks).toContain("board-vision");
+  });
+
+  it("does not misclassify legal alternative wording as legality intent", () => {
+    const snapshot = buildSnapshot();
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const evidence = buildCoachEvidence({
+      question: "Why couldn't Black move 12/17 instead?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    }).evidence;
+
+    const plan = buildCoachKnowledgeRetrievalPlan({
+      question: "Why couldn't Black move 12/17 instead?",
+      context,
+      evidence
+    });
+
+    expect(plan.intent).toBe("candidate-comparison");
+  });
+
   it("keeps definition follow-ups definition-focused", () => {
     const snapshot = buildSnapshot();
     const context = resolveCoachQuestionContext({

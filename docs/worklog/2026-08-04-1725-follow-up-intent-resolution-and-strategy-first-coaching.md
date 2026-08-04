@@ -21,6 +21,7 @@ The coach resolved follow-up referents (for example, selecting history-turn cont
 ## Implementation decisions
 
 1. Extended provider-neutral retrieval intent taxonomy to represent operations:
+
 - move-evaluation
 - strategic-concept-explanation
 - position-specific-explanation
@@ -33,6 +34,7 @@ The coach resolved follow-up referents (for example, selecting history-turn cont
 - unsupported-topic
 
 2. Added deterministic intent precedence and subject resolution in coach retrieval planning:
+
 - explicit current wording outranks prior response mode
 - comparison cues outrank generic strategy
 - legality cues outrank strategy when comparison cues are absent
@@ -40,11 +42,13 @@ The coach resolved follow-up referents (for example, selecting history-turn cont
 - pronouns inherit subject from context, not task mode
 
 3. Updated intent-aware concept and preferred-track planning:
+
 - strategic concept and position-specific explanations avoid default move-review weighting
 - candidate comparison and move evaluation keep move-review weighting
 - legality and definition remain board-vision/glossary oriented
 
 4. Added developer-facing operation diagnostics in evidence:
+
 - resolved subject
 - resolved intent
 - evidence priority
@@ -52,6 +56,7 @@ The coach resolved follow-up referents (for example, selecting history-turn cont
 - retrieval intent/concepts/tracks/query terms
 
 5. Added intent-specific prompt instructions:
+
 - reassess intent every turn
 - strategy-first mechanism explanations for concept questions
 - explicit no circular evaluator-attribution guidance
@@ -64,6 +69,7 @@ The coach resolved follow-up referents (for example, selecting history-turn cont
 
 1. Knowledge query intent model now supports expanded operation intents.
 2. Deterministic lexical scoring updated with operation-aware boosts/penalties:
+
 - stronger move-review preference for evaluation/comparison
 - stronger board-vision/legal concept preference for legality
 - explicit move-review penalties for strategic/position-specific/counterfactual explanations
@@ -77,10 +83,12 @@ The coach resolved follow-up referents (for example, selecting history-turn cont
 ## Tests
 
 Added deterministic regression coverage in:
+
 - packages/backgammon-coach/test/coach.test.ts
 - packages/backgammon-knowledge/test/knowledge.test.ts
 
 Coverage includes:
+
 - move-review to strategic-concept intent switch
 - explicit comparison intent preservation
 - definition-focus preservation
