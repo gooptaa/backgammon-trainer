@@ -1327,6 +1327,8 @@ function App({
     setSelectedSteps([]);
     setSelectedSource(null);
     setHoveredDestination(null);
+    setSelectedOutcomeKey(null);
+    setHistoryInspection(null);
   };
 
   const onSetLearnerOwnership = (mode: LearnerOwnershipMode): void => {

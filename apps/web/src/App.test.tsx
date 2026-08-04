@@ -517,6 +517,33 @@ describe("App opening roll lifecycle", () => {
       screen.getAllByRole("button", { name: /Select source (point|bar)/i }).length
     ).toBeGreaterThan(0);
   });
+
+  it("allows the opposite player to roll when each side has one checker remaining", () => {
+    const endgamePosition = createPosition({
+      points: {
+        1: { player: "white", checkerCount: 1 },
+        24: { player: "black", checkerCount: 1 }
+      },
+      borneOff: {
+        white: 14,
+        black: 14
+      }
+    });
+
+    renderApp({
+      initialGameState: createGameState(endgamePosition, "black"),
+      initialOpeningRollState: resolvedOpeningState("white"),
+      randomSource: createRandomSource([0, 0])
+    });
+
+    expect(screen.getByText("Status: in-progress")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Roll Dice" }));
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: 1, 1");
+    expect(
+      screen.getAllByRole("button", { name: /Select source (point|bar)/i }).length
+    ).toBeGreaterThan(0);
+  });
 });
 
 describe("App turn history and inspection", () => {

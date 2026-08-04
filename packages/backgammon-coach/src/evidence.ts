@@ -1070,17 +1070,40 @@ export const buildCoachEvidence = (input: {
       }
 
       if (rankedAnalysis.rankedMoves.length > 0) {
-        const bestEvaluated = rankedAnalysis.rankedMoves[0]!;
-        const legalRows: CoachMoveEvidence[] = [];
+        const playedRanked = rankedAnalysis.rankedMoves.find((row) => {
+          return (
+            row.moveFingerprint === playedMoveFingerprint ||
+            (playedCanonicalFingerprint !== undefined &&
+              getCanonicalMoveFingerprint(row.outcome.move) === playedCanonicalFingerprint)
+          );
+        });
+        const playedRankedIndex =
+          playedRanked === undefined ? -1 : rankedAnalysis.rankedMoves.indexOf(playedRanked);
+        const rankedComparisonRows =
+          playedRankedIndex < 0
+            ? rankedAnalysis.rankedMoves.slice(0, 1)
+            : rankedAnalysis.rankedMoves.slice(0, playedRankedIndex + 1);
+        const legalRows: CoachMoveEvidence[] = rankedComparisonRows.map((row) => ({
+          moveFingerprint: row.moveFingerprint,
+          moveLabel: formatMoveLabel(row.outcome.move),
+          featureDelta: structuredClone(row.outcome.featureDelta),
+          selectionReasons: [
+            row === playedRanked
+              ? {
+                  code: "deterministic-fallback" as const,
+                  message: "Selected because this is the committed move under review."
+                }
+              : {
+                  code: "top-ranked-comparison" as const,
+                  message: "Selected as a stronger evaluator-ranked legal alternative."
+                }
+          ],
+          evaluatorRank: row.rank,
+          normalizedScore: row.normalizedScore,
+          lossFromTopScoredMove: row.lossFromBest
+        }));
 
-        if (playedMoveFingerprint !== undefined) {
-          const playedRanked = rankedAnalysis.rankedMoves.find((row) => {
-            return (
-              row.moveFingerprint === playedMoveFingerprint ||
-              (playedCanonicalFingerprint !== undefined &&
-                getCanonicalMoveFingerprint(row.outcome.move) === playedCanonicalFingerprint)
-            );
-          });
+        if (playedRanked === undefined && playedMoveFingerprint !== undefined) {
           const playedUnevaluated = rankedAnalysis.unevaluatedMoves.find((outcome) => {
             return (
               getMoveFingerprint(outcome.move) === playedMoveFingerprint ||
@@ -1088,48 +1111,19 @@ export const buildCoachEvidence = (input: {
                 getCanonicalMoveFingerprint(outcome.move) === playedCanonicalFingerprint)
             );
           });
-          const playedOutcome = playedRanked?.outcome ?? playedUnevaluated;
-
-          if (playedOutcome !== undefined) {
+          if (playedUnevaluated !== undefined) {
             legalRows.push({
-              moveFingerprint: getMoveFingerprint(playedOutcome.move),
-              moveLabel: formatMoveLabel(playedOutcome.move),
-              featureDelta: structuredClone(playedOutcome.featureDelta),
+              moveFingerprint: getMoveFingerprint(playedUnevaluated.move),
+              moveLabel: formatMoveLabel(playedUnevaluated.move),
+              featureDelta: structuredClone(playedUnevaluated.featureDelta),
               selectionReasons: [
                 {
                   code: "deterministic-fallback",
                   message: "Selected because this is the committed move under review."
                 }
-              ],
-              ...(playedRanked === undefined ? {} : { evaluatorRank: playedRanked.rank }),
-              ...(playedRanked === undefined
-                ? {}
-                : { normalizedScore: playedRanked.normalizedScore }),
-              ...(playedRanked === undefined
-                ? {}
-                : { lossFromTopScoredMove: playedRanked.lossFromBest })
+              ]
             });
           }
-        }
-
-        if (
-          playedCanonicalFingerprint === undefined ||
-          getCanonicalMoveFingerprint(bestEvaluated.outcome.move) !== playedCanonicalFingerprint
-        ) {
-          legalRows.push({
-            moveFingerprint: bestEvaluated.moveFingerprint,
-            moveLabel: formatMoveLabel(bestEvaluated.outcome.move),
-            featureDelta: structuredClone(bestEvaluated.outcome.featureDelta),
-            selectionReasons: [
-              {
-                code: "top-ranked-comparison",
-                message: "Selected as the strongest evaluated legal alternative."
-              }
-            ],
-            evaluatorRank: bestEvaluated.rank,
-            normalizedScore: bestEvaluated.normalizedScore,
-            lossFromTopScoredMove: bestEvaluated.lossFromBest
-          });
         }
 
         evidence.legalMoveSelection = {

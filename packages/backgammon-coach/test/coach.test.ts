@@ -1044,6 +1044,8 @@ describe("coach evidence and prompt", () => {
       status: "classified",
       label: "mistake"
     });
+    expect(evidence.evidence.legalMoveEvidence?.map((row) => row.evaluatorRank)).toEqual([1, 2]);
+    expect(evidence.evidence.legalMoveEvidence?.at(-1)?.moveFingerprint).toBe(playedFingerprint);
   });
 
   it("qualifies historical review when only partial trusted coverage exists", async () => {
