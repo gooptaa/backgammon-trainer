@@ -228,6 +228,9 @@ Progress-profile defaults:
 Instruction policy includes:
 
 - answer user question from supplied evidence
+- first two sentences give a plain-language verdict and error magnitude
+- response order: verdict, magnitude, main comparison, practical takeaway, then confidence note
+- keep internal policy and implementation terms out of learner-facing prose
 - do not invent legal moves or deterministic facts
 - distinguish certainty vs uncertainty
 - call out fixture/synthetic provenance explicitly
@@ -271,6 +274,10 @@ Historical review request capture:
 - the resolved committed-turn identity is fixed at submit time
 - subsequent move play does not retarget that request
 - selecting another turn later affects only future requests
+- completed-turn feedback uses a durable committed-turn record (player, dice, move, and before/after positions)
+- latest-committed fallback may hydrate ranked analysis from analysis-session records when available
+- coverage caveats are sourced from explicit structured evaluation status, not inferred by comparing unrelated arrays
+- canonical-equivalent move variants (for example die-order variants) are normalized before coverage claims
 
 Full-game review request capture:
 

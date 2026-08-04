@@ -23,7 +23,7 @@ type HistoryTurnContext = Extract<CoachQuestionContext, { kind: "history-turn" }
 type GameReviewContext = Extract<CoachQuestionContext, { kind: "game-review" }>;
 
 const LAST_MOVE_REVIEW_PATTERN =
-  /\b(last move|that move|what should i have done|why was .* better|review my last move|was that move good)\b/i;
+  /\b(last move|that move|that play|what should i have done|why was .* better|review my last move|was that move good|thoughts on that|how was that|was that good|was that okay)\b/i;
 
 const FULL_GAME_REVIEW_PATTERN =
   /\b(review (this )?game|review (the )?game so far|how did i play|most important decisions|where did i give up the most|which moves should i study)\b/i;
@@ -70,7 +70,8 @@ const parseReferencedTurnNumbers = (question: string): readonly number[] => {
 };
 
 const getLatestCommittedMoveTurn = (
-  context: CoachQuestionContext
+  context: CoachQuestionContext,
+  analysisSession?: AnalysisSession
 ): HistoryTurnContext | undefined => {
   const latestMoveTurn = [...context.snapshot.turnHistory]
     .reverse()
@@ -80,13 +81,23 @@ const getLatestCommittedMoveTurn = (
     return undefined;
   }
 
+  const analysisRecord = analysisSession?.records.find(
+    (record) => record.turnNumber === latestMoveTurn.turnNumber
+  );
+
   return {
     kind: "history-turn",
     gameReference: context.gameReference,
     turnNumber: latestMoveTurn.turnNumber,
     selectionSource: "latest-committed",
     snapshot: structuredClone(context.snapshot),
-    turnRecord: structuredClone(latestMoveTurn)
+    turnRecord: structuredClone(latestMoveTurn),
+    ...(analysisRecord === undefined
+      ? {}
+      : {
+          analysisRecord: structuredClone(analysisRecord),
+          rankedAnalysis: structuredClone(analysisRecord.rankedMoveAnalysis)
+        })
   };
 };
 
@@ -265,7 +276,7 @@ const resolveSubmissionContext = (
     return Promise.resolve(context);
   }
 
-  return Promise.resolve(getLatestCommittedMoveTurn(context) ?? context);
+  return Promise.resolve(getLatestCommittedMoveTurn(context, analysisSession) ?? context);
 };
 
 const deriveKnowledgeConcepts = (

@@ -3,6 +3,7 @@ import {
   getMoveFingerprint,
   type EvaluatorProvenance,
   type LegalMoveOutcome,
+  type Position,
   type PositionFeatureDelta
 } from "@backgammon-trainer/backgammon-analysis";
 import type { Move } from "@backgammon-trainer/backgammon-engine";
@@ -123,7 +124,7 @@ export interface CoachLegalMoveSelectionSummary {
 }
 
 export interface CoachEvidenceBundle {
-  evidenceVersion: 5;
+  evidenceVersion: 6;
   questionContext: {
     kind: CoachQuestionContext["kind"];
   };
@@ -134,11 +135,23 @@ export interface CoachEvidenceBundle {
   historicalReviewEvidence?: {
     selectionSource: "selected-history" | "latest-committed";
     turnNumber: number;
+    player: "white" | "black";
+    dice: readonly [number, number];
     playedMove: string;
     playedMoveFingerprint?: string;
+    positionBefore: Position;
+    positionAfter: Position;
     totalLegalMoveCount?: number;
     evaluatedLegalMoveCount?: number;
     unevaluatedLegalMoveCount?: number;
+    evaluationCoverage?: {
+      status: "complete" | "partial";
+      providerReportedStatus: "complete" | "partial";
+      evaluatedMoveCount: number;
+      totalLegalMoveCount: number;
+      unevaluatedMoveCount: number;
+      countingBasis: "canonical-move-fingerprint";
+    };
     playedMoveEvaluated: boolean;
     bestEvaluatedMove?: {
       moveFingerprint: string;
@@ -146,6 +159,16 @@ export interface CoachEvidenceBundle {
       evaluatorRank: number;
       normalizedScore: number;
     };
+    legalMoves?: readonly {
+      moveFingerprint: string;
+      canonicalMoveFingerprint: string;
+      moveLabel: string;
+      evaluated: boolean;
+      evaluatorRank?: number;
+      normalizedScore?: number;
+      lossFromTopScoredMove?: number;
+      featureDelta: PositionFeatureDelta;
+    }[];
     moveClassification?: CoachMoveClassification;
     limitations: readonly string[];
   };
@@ -154,6 +177,9 @@ export interface CoachEvidenceBundle {
     player: "white" | "black";
     dice: readonly [number, number];
     outcome: string;
+    playedMoveFingerprint?: string;
+    positionBefore: Position;
+    positionAfter: Position;
     hasAnalysisRecord: boolean;
     evaluatedChosenMove?: {
       evaluatorRank?: number;
@@ -235,6 +261,53 @@ const formatStepLabel = (fromPoint: string | number, toPoint: string | number): 
 
 const moveStepKeys = (move: Move): readonly string[] => {
   return move.steps.map((step) => formatStepLabel(step.fromPoint, step.toPoint));
+};
+
+const getCanonicalMoveFingerprint = (move: Move): string => {
+  const stepKeys = move.steps
+    .map((step) => {
+      const hitKey = step.hit === undefined ? "" : `:${step.hit.player}:${step.hit.point}`;
+      return `${step.kind}:${step.fromPoint}:${step.toPoint}:${step.dieValue}:${step.hitsBlot}${hitKey}`;
+    })
+    .sort((left, right) => left.localeCompare(right));
+
+  return `${move.player}::${stepKeys.join("|")}`;
+};
+
+const buildCanonicalFingerprintSet = (moves: readonly Move[]): Set<string> => {
+  return new Set(moves.map((move) => getCanonicalMoveFingerprint(move)));
+};
+
+const summarizeCanonicalCoverage = (input: {
+  factualMoves: readonly Move[];
+  evaluatedMoves: readonly Move[];
+  providerCoverage: "complete" | "partial";
+}): {
+  status: "complete" | "partial";
+  providerReportedStatus: "complete" | "partial";
+  evaluatedMoveCount: number;
+  totalLegalMoveCount: number;
+  unevaluatedMoveCount: number;
+  countingBasis: "canonical-move-fingerprint";
+} => {
+  const totalSet = buildCanonicalFingerprintSet(input.factualMoves);
+  const evaluatedSet = buildCanonicalFingerprintSet(input.evaluatedMoves);
+  const totalLegalMoveCount = totalSet.size;
+  const evaluatedMoveCount = [...evaluatedSet].filter((fingerprint) =>
+    totalSet.has(fingerprint)
+  ).length;
+  const unevaluatedMoveCount = Math.max(0, totalLegalMoveCount - evaluatedMoveCount);
+  const status: "complete" | "partial" =
+    input.providerCoverage === "complete" || unevaluatedMoveCount === 0 ? "complete" : "partial";
+
+  return {
+    status,
+    providerReportedStatus: input.providerCoverage,
+    evaluatedMoveCount,
+    totalLegalMoveCount,
+    unevaluatedMoveCount,
+    countingBasis: "canonical-move-fingerprint"
+  };
 };
 
 const MOVE_REFERENCE_PATTERN =
@@ -737,7 +810,7 @@ export const buildCoachEvidence = (input: {
   }
 
   const evidence: CoachEvidenceBundle = {
-    evidenceVersion: 5,
+    evidenceVersion: 6,
     questionContext: {
       kind: input.context.kind
     },
@@ -915,16 +988,38 @@ export const buildCoachEvidence = (input: {
     }
 
     let playedMoveFingerprint: string | undefined;
+    let playedCanonicalFingerprint: string | undefined;
     let playedMoveEvaluated = false;
+    let evaluationCoverage:
+      | {
+          status: "complete" | "partial";
+          providerReportedStatus: "complete" | "partial";
+          evaluatedMoveCount: number;
+          totalLegalMoveCount: number;
+          unevaluatedMoveCount: number;
+          countingBasis: "canonical-move-fingerprint";
+        }
+      | undefined;
 
     if (turnRecord.outcome.kind === "move") {
       playedMoveFingerprint = getMoveFingerprint(turnRecord.outcome.move);
+      playedCanonicalFingerprint = getCanonicalMoveFingerprint(turnRecord.outcome.move);
     }
 
     if (playedMoveFingerprint !== undefined && rankedAnalysis?.kind === "evaluated") {
-      const rankedChosen = rankedAnalysis.rankedMoves.find(
-        (row) => row.moveFingerprint === playedMoveFingerprint
-      );
+      evaluationCoverage = summarizeCanonicalCoverage({
+        factualMoves: rankedAnalysis.factualOutcomes.map((outcome) => outcome.move),
+        evaluatedMoves: rankedAnalysis.rankedMoves.map((row) => row.outcome.move),
+        providerCoverage: rankedAnalysis.coverage
+      });
+
+      const rankedChosen = rankedAnalysis.rankedMoves.find((row) => {
+        return (
+          row.moveFingerprint === playedMoveFingerprint ||
+          (playedCanonicalFingerprint !== undefined &&
+            getCanonicalMoveFingerprint(row.outcome.move) === playedCanonicalFingerprint)
+        );
+      });
       playedMoveEvaluated = rankedChosen !== undefined;
       evaluatedChosenMove = {
         ...(rankedChosen === undefined ? {} : { evaluatorRank: rankedChosen.rank }),
@@ -947,23 +1042,23 @@ export const buildCoachEvidence = (input: {
         evidence.recommendationSupport = {
           status: "supported",
           reason:
-            rankedAnalysis.coverage === "complete"
+            evaluationCoverage.status === "complete"
               ? "complete-trustworthy-coverage"
               : "partial-coverage",
           supportedRecommendation: {
-            kind: rankedAnalysis.coverage === "complete" ? "authoritative" : "strongest-evaluated",
+            kind:
+              evaluationCoverage.status === "complete" ? "authoritative" : "strongest-evaluated",
             moveFingerprint: recommendationMove.moveFingerprint,
             moveLabel: recommendationLabel,
             evaluatorRank: recommendationMove.rank,
             normalizedScore: recommendationMove.normalizedScore,
             comparedLegalMoveCount: rankedAnalysis.rankedMoves.length,
-            totalLegalMoveCount:
-              rankedAnalysis.rankedMoves.length + rankedAnalysis.unevaluatedMoves.length,
-            unevaluatedLegalMoveCount: rankedAnalysis.unevaluatedMoves.length
+            totalLegalMoveCount: evaluationCoverage.totalLegalMoveCount,
+            unevaluatedLegalMoveCount: evaluationCoverage.unevaluatedMoveCount
           }
         };
 
-        if (rankedAnalysis.coverage === "partial") {
+        if (evaluationCoverage.status === "partial") {
           limitations.push("Evaluator coverage is partial across legal candidates.");
         }
       } else {
@@ -979,17 +1074,25 @@ export const buildCoachEvidence = (input: {
         const legalRows: CoachMoveEvidence[] = [];
 
         if (playedMoveFingerprint !== undefined) {
-          const playedRanked = rankedAnalysis.rankedMoves.find(
-            (row) => row.moveFingerprint === playedMoveFingerprint
-          );
-          const playedUnevaluated = rankedAnalysis.unevaluatedMoves.find(
-            (outcome) => getMoveFingerprint(outcome.move) === playedMoveFingerprint
-          );
+          const playedRanked = rankedAnalysis.rankedMoves.find((row) => {
+            return (
+              row.moveFingerprint === playedMoveFingerprint ||
+              (playedCanonicalFingerprint !== undefined &&
+                getCanonicalMoveFingerprint(row.outcome.move) === playedCanonicalFingerprint)
+            );
+          });
+          const playedUnevaluated = rankedAnalysis.unevaluatedMoves.find((outcome) => {
+            return (
+              getMoveFingerprint(outcome.move) === playedMoveFingerprint ||
+              (playedCanonicalFingerprint !== undefined &&
+                getCanonicalMoveFingerprint(outcome.move) === playedCanonicalFingerprint)
+            );
+          });
           const playedOutcome = playedRanked?.outcome ?? playedUnevaluated;
 
           if (playedOutcome !== undefined) {
             legalRows.push({
-              moveFingerprint: playedMoveFingerprint,
+              moveFingerprint: getMoveFingerprint(playedOutcome.move),
               moveLabel: formatMoveLabel(playedOutcome.move),
               featureDelta: structuredClone(playedOutcome.featureDelta),
               selectionReasons: [
@@ -1009,7 +1112,10 @@ export const buildCoachEvidence = (input: {
           }
         }
 
-        if (bestEvaluated.moveFingerprint !== playedMoveFingerprint) {
+        if (
+          playedCanonicalFingerprint === undefined ||
+          getCanonicalMoveFingerprint(bestEvaluated.outcome.move) !== playedCanonicalFingerprint
+        ) {
           legalRows.push({
             moveFingerprint: bestEvaluated.moveFingerprint,
             moveLabel: formatMoveLabel(bestEvaluated.outcome.move),
@@ -1028,17 +1134,16 @@ export const buildCoachEvidence = (input: {
 
         evidence.legalMoveSelection = {
           totalLegalMoves:
-            rankedAnalysis.rankedMoves.length + rankedAnalysis.unevaluatedMoves.length,
+            evaluationCoverage?.totalLegalMoveCount ?? rankedAnalysis.rankedMoves.length,
           selectedLegalMoves: legalRows.length,
           omittedLegalMoves: Math.max(
             0,
-            rankedAnalysis.rankedMoves.length +
-              rankedAnalysis.unevaluatedMoves.length -
+            (evaluationCoverage?.totalLegalMoveCount ?? rankedAnalysis.rankedMoves.length) -
               legalRows.length
           ),
           coachEvidenceCoverage:
             legalRows.length >=
-            rankedAnalysis.rankedMoves.length + rankedAnalysis.unevaluatedMoves.length
+            (evaluationCoverage?.totalLegalMoveCount ?? rankedAnalysis.rankedMoves.length)
               ? "complete"
               : "selected-subset",
           truncated: false,
@@ -1079,17 +1184,24 @@ export const buildCoachEvidence = (input: {
     evidence.historicalReviewEvidence = {
       selectionSource: input.context.selectionSource,
       turnNumber: turnRecord.turnNumber,
+      player: turnRecord.player,
+      dice: [turnRecord.dice.dice[0], turnRecord.dice.dice[1]],
       playedMove:
         turnRecord.outcome.kind === "pass" ? "pass" : formatMoveLabel(turnRecord.outcome.move),
       ...(playedMoveFingerprint === undefined ? {} : { playedMoveFingerprint }),
+      positionBefore: structuredClone(turnRecord.positionBefore),
+      positionAfter: structuredClone(turnRecord.positionAfter),
       ...(turnRecord.outcome.kind !== "move" ? {} : { moveClassification }),
       ...(rankedAnalysis?.kind !== "evaluated"
         ? {}
         : {
             totalLegalMoveCount:
-              rankedAnalysis.rankedMoves.length + rankedAnalysis.unevaluatedMoves.length,
-            evaluatedLegalMoveCount: rankedAnalysis.rankedMoves.length,
-            unevaluatedLegalMoveCount: rankedAnalysis.unevaluatedMoves.length,
+              evaluationCoverage?.totalLegalMoveCount ?? rankedAnalysis.rankedMoves.length,
+            evaluatedLegalMoveCount:
+              evaluationCoverage?.evaluatedMoveCount ?? rankedAnalysis.rankedMoves.length,
+            unevaluatedLegalMoveCount:
+              evaluationCoverage?.unevaluatedMoveCount ?? rankedAnalysis.unevaluatedMoves.length,
+            ...(evaluationCoverage === undefined ? {} : { evaluationCoverage }),
             ...(rankedAnalysis.rankedMoves[0] === undefined
               ? {}
               : {
@@ -1099,7 +1211,26 @@ export const buildCoachEvidence = (input: {
                     evaluatorRank: rankedAnalysis.rankedMoves[0].rank,
                     normalizedScore: rankedAnalysis.rankedMoves[0].normalizedScore
                   }
-                })
+                }),
+            legalMoves: [
+              ...rankedAnalysis.rankedMoves.map((row) => ({
+                moveFingerprint: row.moveFingerprint,
+                canonicalMoveFingerprint: getCanonicalMoveFingerprint(row.outcome.move),
+                moveLabel: formatMoveLabel(row.outcome.move),
+                evaluated: true,
+                evaluatorRank: row.rank,
+                normalizedScore: row.normalizedScore,
+                lossFromTopScoredMove: row.lossFromBest,
+                featureDelta: structuredClone(row.outcome.featureDelta)
+              })),
+              ...rankedAnalysis.unevaluatedMoves.map((outcome) => ({
+                moveFingerprint: getMoveFingerprint(outcome.move),
+                canonicalMoveFingerprint: getCanonicalMoveFingerprint(outcome.move),
+                moveLabel: formatMoveLabel(outcome.move),
+                evaluated: false,
+                featureDelta: structuredClone(outcome.featureDelta)
+              }))
+            ]
           }),
       playedMoveEvaluated,
       limitations
@@ -1111,6 +1242,9 @@ export const buildCoachEvidence = (input: {
       dice: [turnRecord.dice.dice[0], turnRecord.dice.dice[1]],
       outcome:
         turnRecord.outcome.kind === "pass" ? "pass" : formatMoveLabel(turnRecord.outcome.move),
+      ...(playedMoveFingerprint === undefined ? {} : { playedMoveFingerprint }),
+      positionBefore: structuredClone(turnRecord.positionBefore),
+      positionAfter: structuredClone(turnRecord.positionAfter),
       hasAnalysisRecord:
         input.context.analysisRecord !== undefined || input.context.rankedAnalysis !== undefined,
       ...(evaluatedChosenMove === undefined ? {} : { evaluatedChosenMove }),

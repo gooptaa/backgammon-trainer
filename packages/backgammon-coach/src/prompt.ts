@@ -123,8 +123,8 @@ export const buildCoachModelRequest = (
                   ? "This is not an active checker-play decision state. Do not fabricate a recommendation."
                   : "No trustworthy evaluator ranking is available. Do not claim the strongest legal move is known."
       : recommendationSupport.supportedRecommendation?.kind === "authoritative"
-        ? "A trustworthy complete-coverage evaluator recommendation is supplied. Lead with that legal move and explain tradeoffs without exaggerating close alternatives."
-        : "Only strongest-evaluated support is supplied from partial evaluator coverage. State the coverage caveat plainly before recommending it as strongest among evaluated moves.";
+        ? "A trustworthy complete-coverage evaluator recommendation is supplied. Lead with a clear coaching verdict, then explain why the recommendation is better in plain language."
+        : "Only strongest-evaluated support is supplied from partial evaluator coverage. Give a usable coaching verdict first, then include a brief confidence caveat that coverage is incomplete.";
 
   const classificationInstruction = hasDeterministicClassification
     ? "Move classifications in deterministic evidence are authoritative policy outputs. Do not strengthen, weaken, or replace any supplied label. If a move is unclassified, explain the limitation and do not assign a substitute label."
@@ -138,11 +138,23 @@ export const buildCoachModelRequest = (
     systemInstruction:
       "You are a backgammon coach assistant. Answer the user question using only supplied evidence. Do not invent legal moves, board facts, evaluator scores, committed history, or long-term patterns.",
     developerInstructions: [
+      "Answer the user question in the first two sentences with a plain-language verdict (reasonable, mistake, or unclear) and error magnitude (close call vs meaningful error).",
+      "Use this response order: verdict, magnitude, main comparison, one practical takeaway, then confidence note.",
+      "When structured context includes completed-turn fields (player, dice, move, before/after position, evaluation status), treat those fields as authoritative even if the user message is short or ambiguous.",
+      "Do not claim a move, roll, or board fact is missing when that field is present in deterministic evidence.",
+      "If required information is truly missing, name the exact missing structured field (for example completed move, completed-turn dice, or evaluator result) instead of using a generic not-enough-information disclaimer.",
+      "Do not lead with evaluation coverage, policy status, or provenance details unless the user explicitly asked for diagnostics.",
+      "Hide internal implementation terms in user-facing prose (for example fixture-derived, unclassified, supplied evidence, policy outputs, attach a mistake label). Translate them into plain language.",
       "Treat engine-derived and deterministic analysis evidence as authoritative for board facts and legal move facts.",
       "Treat evaluator ranking evidence as authoritative only when recommendation support explicitly says it is supported.",
       recommendationInstruction,
       ...(classificationInstruction === null ? [] : [classificationInstruction]),
       ...(progressInstruction === null ? [] : [progressInstruction]),
+      "When evidence does not explain why an engine-preferred move is better, say that directly and do not pretend strategic certainty from superficial feature counts.",
+      "Do not treat unchanged checker-count features alone as proof that strategic quality is unchanged.",
+      "Use explicit structured evaluation coverage status when discussing completeness; do not infer coverage by comparing unrelated arrays or counts.",
+      "Use exact rank/equity numbers only when the user asks for precision or when the number changes the coaching conclusion.",
+      "If evidence supports no reliable strategic lesson, state that explicitly instead of inventing one.",
       "Keep deterministic facts, evaluator-attributed evidence, and curated general guidance clearly separated.",
       "Curated knowledge is general instructional guidance and does not prove that any legal move is best in this position.",
       "Omitted legal move rows may still represent legal moves; do not describe omitted rows as illegal.",

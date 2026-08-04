@@ -19,6 +19,7 @@
     "@backgammon-trainer/backgammon-analysis": "workspace:*",
     "@backgammon-trainer/backgammon-evaluator-gnubg": "workspace:*",
     "@backgammon-trainer/shared": "workspace:*",
+    "@fastify/cors": "^11.3.0",
     "dotenv": "^16.6.1",
     "fastify": "^5.0.0"
   },

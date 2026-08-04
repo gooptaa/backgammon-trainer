@@ -1,4 +1,8 @@
-import type { RankedLegalMoveAnalysis } from "@backgammon-trainer/backgammon-analysis";
+import {
+  getMoveFingerprint,
+  type RankedLegalMoveAnalysis
+} from "@backgammon-trainer/backgammon-analysis";
+import type { Move } from "@backgammon-trainer/backgammon-engine";
 
 export type CoachMoveClassificationLabel = "best" | "reasonable" | "mistake" | "major mistake";
 
@@ -111,6 +115,17 @@ const classifyLossFromBest = (lossFromBest: number): CoachMoveClassificationLabe
   return "major mistake";
 };
 
+const getCanonicalMoveFingerprint = (move: Move): string => {
+  const stepKeys = move.steps
+    .map((step) => {
+      const hitKey = step.hit === undefined ? "" : `:${step.hit.player}:${step.hit.point}`;
+      return `${step.kind}:${step.fromPoint}:${step.toPoint}:${step.dieValue}:${step.hitsBlot}${hitKey}`;
+    })
+    .sort((left, right) => left.localeCompare(right));
+
+  return `${move.player}::${stepKeys.join("|")}`;
+};
+
 export const formatUnclassifiedReason = (
   reason: CoachMoveClassificationUnclassifiedReason
 ): string => {
@@ -180,7 +195,23 @@ export const classifyCommittedMove = (input: {
     return unclassified("unsupported-score-scale");
   }
 
-  if (input.rankedAnalysis.coverage !== "complete") {
+  const totalCanonicalMoveCount = new Set(
+    input.rankedAnalysis.factualOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome.move))
+  ).size;
+  const evaluatedCanonicalSet = new Set(
+    input.rankedAnalysis.rankedMoves.map((row) => getCanonicalMoveFingerprint(row.outcome.move))
+  );
+  const evaluatedCanonicalMoveCount = evaluatedCanonicalSet.size;
+  const hasCanonicalOverlapBetweenEvaluatedAndUnevaluated =
+    input.rankedAnalysis.unevaluatedMoves.some((outcome) =>
+      evaluatedCanonicalSet.has(getCanonicalMoveFingerprint(outcome.move))
+    );
+  const hasCompleteCanonicalCoverage =
+    totalCanonicalMoveCount > 0 &&
+    evaluatedCanonicalMoveCount >= totalCanonicalMoveCount &&
+    hasCanonicalOverlapBetweenEvaluatedAndUnevaluated;
+
+  if (input.rankedAnalysis.coverage !== "complete" && !hasCompleteCanonicalCoverage) {
     return unclassified("partial-coverage");
   }
 
@@ -189,9 +220,19 @@ export const classifyCommittedMove = (input: {
     return unclassified("missing-best-evaluated-move");
   }
 
-  const playedRanked = input.rankedAnalysis.rankedMoves.find(
-    (row) => row.moveFingerprint === input.playedMoveFingerprint
+  const playedOutcome = input.rankedAnalysis.factualOutcomes.find(
+    (outcome) => getMoveFingerprint(outcome.move) === input.playedMoveFingerprint
   );
+  const playedCanonicalFingerprint =
+    playedOutcome === undefined ? undefined : getCanonicalMoveFingerprint(playedOutcome.move);
+
+  const playedRanked = input.rankedAnalysis.rankedMoves.find((row) => {
+    return (
+      row.moveFingerprint === input.playedMoveFingerprint ||
+      (playedCanonicalFingerprint !== undefined &&
+        getCanonicalMoveFingerprint(row.outcome.move) === playedCanonicalFingerprint)
+    );
+  });
 
   if (playedRanked === undefined) {
     return unclassified("played-move-not-evaluated");

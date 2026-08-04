@@ -455,6 +455,17 @@ export const getMoveFingerprint = (move: Move): string => {
   return `${move.player}::${steps}`;
 };
 
+export const getCanonicalMoveFingerprint = (move: Move): string => {
+  const stepKeys = move.steps
+    .map((step) => {
+      const hitKey = step.hit === undefined ? "" : `:${step.hit.player}:${step.hit.point}`;
+      return `${step.kind}:${step.fromPoint}:${step.toPoint}:${step.dieValue}:${step.hitsBlot}${hitKey}`;
+    })
+    .sort((left, right) => left.localeCompare(right));
+
+  return `${move.player}::${stepKeys.join("|")}`;
+};
+
 const clonePosition = (position: Position): Position => {
   const nextPoints: Record<PointIdentifier, Position["points"][PointIdentifier]> = {
     ...position.points
