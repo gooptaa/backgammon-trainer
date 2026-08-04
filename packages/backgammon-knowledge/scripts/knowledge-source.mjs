@@ -152,7 +152,18 @@ export const parseKnowledgeMarkdown = (fileName, markdownText) => {
 
 export const readKnowledgeEntries = async (packageDir) => {
   const contentDir = path.join(packageDir, "content");
-  const files = (await readdir(contentDir)).filter((fileName) => fileName.endsWith(".md")).sort();
+  const allMarkdownFiles = (await readdir(contentDir))
+    .filter((fileName) => fileName.endsWith(".md"))
+    .sort();
+
+  const readmeFile = allMarkdownFiles.find((fileName) => fileName.toLowerCase() === "readme.md");
+  if (readmeFile !== undefined) {
+    throw new Error(
+      `${readmeFile}: content README files are documentation-only and must not be runtime corpus entries.`
+    );
+  }
+
+  const files = allMarkdownFiles;
 
   const entries = [];
   for (const fileName of files) {

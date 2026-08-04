@@ -24,4 +24,8 @@ provenanceKind: project-authored
 provenanceLabel: Backgammon Trainer curated knowledge
 ---
 
-A made point does several jobs at once: it gives your own checkers a safe landing place, blocks the opponent, and helps define the future shape of the game. In your home board, made points strengthen attacking chances. In the opponent's home board, they can become anchors that keep you alive and preserve future contact. Beginners often compare point-making plays to running plays because the point does not always win the race immediately, but it can improve safety and flexibility for many future turns.
+A made point does several jobs at once: it gives your own checkers a safe landing place, blocks the opponent, and shapes the next few turns. In your home board, made points strengthen attacks. In the opponent's home board, they become anchors that preserve contact and survival.
+
+Builders matter because they prepare future point-making. A good builder sits where many rolls can improve your structure. When two plays look similar now, prefer the one that keeps more useful future numbers.
+
+Teach duplication and flexibility together. Duplication means the opponent's best numbers overlap, so one roll cannot solve everything. Flexibility means your own spare-checker layout keeps multiple constructive plans alive. Backloaded spare checkers are often more flexible than frontloaded ones.

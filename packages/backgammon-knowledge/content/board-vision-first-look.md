@@ -23,4 +23,13 @@ provenanceKind: project-authored
 provenanceLabel: Backgammon Trainer curated knowledge
 ---
 
-Start with facts before ideas. Check whether the game is still in contact or has turned into a race, whether either side has checkers on the bar, and whether either player is under immediate hitting pressure. Then look at structure: where are the made points, where are the blots, and which side has a stronger inner board. A beginner does not need a perfect plan immediately, but should at least decide whether the turn is mainly about safety, making progress in the race, improving a point structure, or creating future contact.
+Start with facts before ideas. Use this quick sequence:
+
+1. Is there still contact, or is this now a race?
+2. Who is ahead in the race by a meaningful margin?
+3. Which side has the stronger board and better structure?
+4. Which plan is most likely: race, prime, blitz, holding game, or back game?
+
+If contact remains, hitting chances, anchor value, and board strength usually matter more than raw speed alone. If contact is gone, efficient racing and bearoff technique take over.
+
+A common beginner mistake is skipping classification and jumping to a slogan like "play safe" or "just run." Good moves are conditional. In some contact positions, a quieter move loses too much initiative. In some prime battles, being slightly behind in the race can help timing.

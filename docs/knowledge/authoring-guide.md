@@ -6,6 +6,10 @@ Author curated knowledge entries in `packages/backgammon-knowledge/content/`.
 
 Each entry is one markdown file with frontmatter plus plain-English instructional body text.
 
+The current generation script reads only flat `content/*.md` entries.
+
+Do not place `README.md` under `content/`. Content READMEs are documentation-only and intentionally blocked from runtime corpus generation.
+
 ## Required metadata
 
 Each entry must define:

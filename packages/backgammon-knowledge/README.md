@@ -7,6 +7,7 @@ Provide browser-safe, repository-owned curated backgammon teaching content with 
 ## Responsibilities
 
 - Own the canonical curated beginner knowledge corpus.
+- Own the canonical curated beginner and intermediate knowledge corpus.
 - Define the controlled taxonomy for curated coaching knowledge.
 - Export browser-safe generated corpus data.
 - Validate corpus integrity and topic coverage.

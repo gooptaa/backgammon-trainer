@@ -26,10 +26,16 @@ describe("backgammon knowledge corpus", () => {
 
     expect(results.map((match) => match.entry.id)).toEqual([
       "kg.blots-hits-and-tempo",
-      "kg.bar-entry-and-inner-board",
-      "kg.board-vision-first-look"
+      "kg.blitz-holding-and-backgame-plans",
+      "kg.glossary-core-terms"
     ]);
     expect(results[0]?.reasons.some((reason) => reason.kind === "concept")).toBe(true);
+  });
+
+  it("does not include documentation README as runtime corpus content", () => {
+    expect(
+      backgammonKnowledgeCorpus.entries.some((entry) => entry.id.toLowerCase().includes("readme"))
+    ).toBe(false);
   });
 
   it("allows no-match results instead of filler entries", () => {

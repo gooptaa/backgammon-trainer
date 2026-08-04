@@ -24,4 +24,10 @@ provenanceKind: project-authored
 provenanceLabel: Backgammon Trainer curated knowledge
 ---
 
-In a pure bearoff, efficiency matters: clear points smoothly, avoid leaving unnecessary gaps, and use bigger numbers well. But beginners should first confirm whether the game is really a race. If contact or direct shots still exist, a technically efficient bearoff move can still be risky. Before treating the turn as simple racing math, check whether blots can be hit and whether a safer distribution gives up too much speed.
+Endgame decisions usually fall into three buckets: pure race, bearoff efficiency, or tactical endings with real shot danger. Confirm which bucket you are in before choosing a move.
+
+In a pure bearoff, efficiency matters: clear points smoothly, avoid unnecessary wastage, and keep checker distribution usable for future rolls. Even distributions often waste fewer pips than awkward stacks.
+
+If contact or direct shots still exist, bearoff technique alone is not enough. A fast-looking move can still be wrong if it gives a high-value shot.
+
+Use short names for recurring study patterns so review conversations stay clear: "one-gap bearoff," "last-roll shot race," and "late-contact bearoff." Keep names stable and attach rollout references later when authoritative evaluator evidence is available.
