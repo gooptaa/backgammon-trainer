@@ -138,4 +138,47 @@ describe("backgammon knowledge corpus", () => {
     expect(results[0]?.entry.id).toBe("kg.blots-hits-and-tempo");
     expect(results[0]?.entry.id).not.toBe("kg.reusable-coaching-snippets");
   });
+
+  it("prefers point-making strategy over move-review templates for point-value follow-ups", () => {
+    const results = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
+      question: "Why is the 3-point valuable?",
+      contextKind: "history-turn",
+      concepts: ["made-points", "inner-board", "bar-entry"],
+      preferredTracks: ["making-points", "safety-risk"],
+      queryTerms: ["3", "point", "valuable"],
+      intent: "strategic-concept-explanation",
+      maxEntries: 4
+    });
+
+    expect(results[0]?.entry.id).toBe("kg.making-points-and-anchors");
+    expect(results[0]?.entry.track).not.toBe("move-review");
+  });
+
+  it("prefers move-review material for explicit candidate comparisons", () => {
+    const results = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
+      question: "Why was that better than 1/4, 12/17?",
+      contextKind: "history-turn",
+      concepts: ["candidate-comparison", "move-review", "risk"],
+      preferredTracks: ["move-review", "safety-risk"],
+      queryTerms: ["better", "than", "1/4", "12/17"],
+      intent: "candidate-comparison",
+      maxEntries: 4
+    });
+
+    expect(results[0]?.entry.track).toBe("move-review");
+  });
+
+  it("keeps legality requests board-vision focused", () => {
+    const results = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
+      question: "Can I move the same checker twice?",
+      contextKind: "current-position",
+      concepts: ["legal-moves", "dice-use"],
+      preferredTracks: ["board-vision"],
+      queryTerms: ["move", "same", "checker", "twice"],
+      intent: "rules-legality",
+      maxEntries: 3
+    });
+
+    expect(results[0]?.entry.track).toBe("board-vision");
+  });
 });

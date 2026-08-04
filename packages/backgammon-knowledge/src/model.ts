@@ -50,8 +50,13 @@ export type BackgammonKnowledgeLearnerLevel = (typeof BACKGAMMON_KNOWLEDGE_LEARN
 export type BackgammonKnowledgeProvenanceKind =
   (typeof BACKGAMMON_KNOWLEDGE_PROVENANCE_KINDS)[number];
 export type BackgammonKnowledgeRetrievalIntent =
-  | "strategic-explanation"
+  | "move-evaluation"
+  | "strategic-concept-explanation"
+  | "position-specific-explanation"
+  | "candidate-comparison"
+  | "rules-legality"
   | "definition"
+  | "counterfactual-analysis"
   | "learning-focus"
   | "progress-count"
   | "unsupported-topic";

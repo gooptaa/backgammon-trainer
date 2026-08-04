@@ -227,6 +227,20 @@ export interface CoachEvidenceBundle {
   evaluatorProvenance?: EvaluatorProvenance;
   evaluatorCoverage?: "complete" | "partial";
   recommendationSupport?: CoachRecommendationSupport;
+  coachingOperation?: {
+    intent: string;
+    subject: {
+      kind: string;
+      label: string;
+      source: string;
+    };
+    evidencePriority: readonly string[];
+    evaluatorRole: "primary" | "secondary" | "optional" | "not-applicable";
+    retrievalIntent?: string;
+    retrievalConcepts?: readonly string[];
+    preferredTracks?: readonly string[];
+    queryTerms?: readonly string[];
+  };
   progressEvidence?: LearnerProgressSnapshot;
   conversationSummary: {
     messageCount: number;

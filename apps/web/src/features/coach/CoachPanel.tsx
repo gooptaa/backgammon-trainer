@@ -283,6 +283,32 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
     );
   }
 
+  if (row.evidence.coachingOperation !== undefined) {
+    details.push(`Coaching intent: ${row.evidence.coachingOperation.intent}`);
+    details.push(
+      `Coaching subject: ${row.evidence.coachingOperation.subject.label} (${row.evidence.coachingOperation.subject.kind})`
+    );
+    details.push(`Subject source: ${row.evidence.coachingOperation.subject.source}`);
+    details.push(`Evaluator role: ${row.evidence.coachingOperation.evaluatorRole}`);
+    details.push(
+      `Evidence priority: ${row.evidence.coachingOperation.evidencePriority.join(" > ")}`
+    );
+
+    if (row.evidence.coachingOperation.retrievalIntent !== undefined) {
+      details.push(`Retrieval intent: ${row.evidence.coachingOperation.retrievalIntent}`);
+    }
+    if ((row.evidence.coachingOperation.retrievalConcepts?.length ?? 0) > 0) {
+      details.push(
+        `Retrieval concepts: ${row.evidence.coachingOperation.retrievalConcepts?.join(", ")}`
+      );
+    }
+    if ((row.evidence.coachingOperation.preferredTracks?.length ?? 0) > 0) {
+      details.push(
+        `Preferred tracks: ${row.evidence.coachingOperation.preferredTracks?.join(", ")}`
+      );
+    }
+  }
+
   if (row.knowledge.length > 0) {
     details.push(`Curated knowledge entries: ${row.knowledge.length}`);
     for (const entry of row.knowledge) {

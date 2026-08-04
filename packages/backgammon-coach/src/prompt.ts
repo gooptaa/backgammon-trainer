@@ -13,6 +13,7 @@ import type {
 import type { CoachQuestionContext } from "./context";
 import type { CoachEvidenceBundle } from "./evidence";
 import type { CoachKnowledgeExcerpt } from "./knowledge";
+import type { CoachIntentResolution, CoachKnowledgeRetrievalPlan } from "./retrievalPlan";
 
 export interface CoachResponsePreferences {
   readonly explanationLevel: "beginner" | "intermediate" | "advanced";
@@ -28,6 +29,8 @@ export interface CoachRequest {
   readonly conversation: CoachConversation;
   readonly evidence: CoachEvidenceBundle;
   readonly knowledge: readonly CoachKnowledgeExcerpt[];
+  readonly intentResolution?: CoachIntentResolution;
+  readonly retrievalPlan?: CoachKnowledgeRetrievalPlan;
   readonly responsePreferences: CoachResponsePreferences;
 }
 
@@ -71,6 +74,76 @@ const trimMessageHistory = (
   return allMessages
     .slice(startIndex)
     .map((message) => toChatMessage(message, limits.maxMessageChars));
+};
+
+const getIntentSpecificInstructions = (
+  intentResolution?: CoachIntentResolution
+): readonly string[] => {
+  if (intentResolution === undefined) {
+    return [];
+  }
+
+  const base = [
+    "Reassess the user intent on every turn. Use conversation history to resolve references, but use the current user message to determine the requested task.",
+    `Resolved current intent: ${intentResolution.intent}.`,
+    `Resolved subject: ${intentResolution.subject.label} (${intentResolution.subject.kind}, ${intentResolution.subject.source}).`
+  ];
+
+  switch (intentResolution.intent) {
+    case "move-evaluation":
+      return [
+        ...base,
+        "This turn is move evaluation. Lead with verdict, then magnitude, then concrete comparison and one practical lesson.",
+        "Evaluator evidence is primary for this turn. Keep strategy guidance grounded in supplied move facts and rankings."
+      ];
+    case "strategic-concept-explanation":
+      return [
+        ...base,
+        "Begin with the strategic mechanism in plain language before any evaluator comment.",
+        "Explain what the feature does in backgammon terms, then apply it to the current position.",
+        "Do not use circular reasoning such as saying the feature is valuable only because it appeared in a top-ranked move.",
+        "If evaluator evidence is mentioned, use it only as supporting context after the mechanism is explained."
+      ];
+    case "position-specific-explanation":
+      return [
+        ...base,
+        "Start with why this feature matters in this position now: identify the local cause and consequence.",
+        "Use deterministic board facts first, then strategic knowledge. Keep evaluator commentary secondary."
+      ];
+    case "candidate-comparison":
+      return [
+        ...base,
+        "Compare the named candidates directly and identify the most important tradeoff.",
+        "If wording sounds like legality (for example couldn't), distinguish legal-vs-weaker explicitly instead of assuming illegality."
+      ];
+    case "rules-legality":
+      return [
+        ...base,
+        "State the governing rule first, then apply it to the position.",
+        "Avoid strategic speculation when answering a legality question."
+      ];
+    case "definition":
+      return [
+        ...base,
+        "Provide a plain-English definition first, then a short example.",
+        "Do not re-evaluate prior moves unless the user explicitly asks for evaluation."
+      ];
+    case "counterfactual-analysis":
+      return [
+        ...base,
+        "State the changed assumption explicitly before analysis.",
+        "Do not invent exact evaluator outcomes for hypothetical positions that were not evaluated."
+      ];
+    case "learning-focus":
+      return [
+        ...base,
+        "Answer as a learning-focus request using deterministic progress evidence plus curated study guidance."
+      ];
+    case "progress-count":
+      return [...base, "Answer as factual counting only; do not add strategic speculation."];
+    case "unsupported-topic":
+      return [...base, "This topic is unsupported. Return a concise no-match response."];
+  }
 };
 
 export const buildCoachModelRequest = (
@@ -163,14 +236,18 @@ export const buildCoachModelRequest = (
   const progressInstruction = hasProgressEvidence
     ? "Progress and pattern fields in deterministic evidence are authoritative. Do not invent additional occurrences, hidden motives, skill ratings, confidence claims, or improvement claims beyond supplied deterministic support."
     : null;
+  const intentSpecificInstructions = getIntentSpecificInstructions(request.intentResolution);
 
   return {
     requestId: request.requestId,
     systemInstruction:
       "You are a backgammon coach assistant. Answer the user question using only supplied evidence. Do not invent legal moves, board facts, evaluator scores, committed history, or long-term patterns.",
     developerInstructions: [
-      "Answer the user question in the first two sentences with a plain-language verdict or coaching assessment (for example strong, reasonable, mistake, or genuinely unclear) and an evaluator-supported sense of magnitude. Do not force 'unclear' when available analysis strongly supports a practical assessment.",
-      "Use this response order: verdict, magnitude, main comparison, one practical takeaway, then confidence note.",
+      ...intentSpecificInstructions,
+      "When the resolved intent is move evaluation, give a plain-language verdict and evaluator-supported magnitude in the first two sentences.",
+      "Use this response order: verdict, magnitude, main comparison, one practical takeaway, then confidence note for move-evaluation questions.",
+      "Answer the user question directly in the first two sentences using plain language and only the supplied evidence.",
+      "Use the response order that matches the resolved intent. Do not force evaluation-first structure for non-evaluation questions.",
       "When structured context includes completed-turn fields (player, dice, move, before/after position, evaluation status), treat those fields as authoritative even if the user message is short or ambiguous.",
       "Do not claim a move, roll, or board fact is missing when that field is present in deterministic evidence.",
       "If required information is truly missing, name the exact missing structured field (for example completed move, completed-turn dice, or evaluator result) instead of using a generic not-enough-information disclaimer.",
@@ -202,6 +279,32 @@ export const buildCoachModelRequest = (
       },
       contextKind: request.context.kind,
       deterministicEvidence: serializedEvidence,
+      ...(request.intentResolution === undefined
+        ? {}
+        : {
+            coachingOperation: {
+              intent: request.intentResolution.intent,
+              subject: {
+                kind: request.intentResolution.subject.kind,
+                label: request.intentResolution.subject.label,
+                source: request.intentResolution.subject.source
+              },
+              evidencePriority: [...request.intentResolution.evidencePriority],
+              evaluatorRole: request.intentResolution.evaluatorRole
+            }
+          }),
+      ...(request.retrievalPlan === undefined
+        ? {}
+        : {
+            retrievalPlan: {
+              intent: request.retrievalPlan.intent,
+              enabled: request.retrievalPlan.enabled,
+              maxItems: request.retrievalPlan.maxItems,
+              concepts: [...request.retrievalPlan.concepts],
+              preferredTracks: [...request.retrievalPlan.preferredTracks],
+              queryTerms: [...request.retrievalPlan.queryTerms]
+            }
+          }),
       curatedKnowledge: boundedKnowledge,
       truncation: {
         maxConversationMessages: resolvedLimits.maxConversationMessages,

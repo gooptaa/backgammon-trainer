@@ -3003,4 +3003,222 @@ describe("coach knowledge and orchestration", () => {
     expect(serialized.curatedKnowledge[0]?.text.length).toBeLessThanOrEqual(500);
     expect(serialized.truncation.knowledgeCharsIncluded).toBeLessThanOrEqual(700);
   });
+
+  it("switches from move review to strategic concept intent on follow-up why questions", async () => {
+    const snapshot = buildSnapshot();
+    const ranked = await evaluateLegalMoves(
+      {
+        position: snapshot.gameState.position,
+        player: "white",
+        dice: { dice: [1, 2] }
+      },
+      createFixturePositionEvaluator({ mode: "complete" })
+    );
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok || ranked.analysis.kind !== "evaluated") {
+      return;
+    }
+
+    const playedOutcome = ranked.analysis.rankedMoves[0]?.outcome;
+    expect(playedOutcome).toBeDefined();
+    if (playedOutcome === undefined) {
+      return;
+    }
+
+    const turnRecord = createTurnRecord({
+      turnNumber: 1,
+      player: "white",
+      dice: { dice: [1, 2] },
+      outcome: { kind: "move", move: playedOutcome.move },
+      positionBefore: snapshot.gameState.position,
+      positionAfter: playedOutcome.positionAfter,
+      gameStatusAfter: { state: "in-progress" },
+      phase: "normal"
+    });
+
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot: {
+        ...snapshot,
+        turnHistory: [turnRecord]
+      },
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const first = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createLocalCoachKnowledgeRetriever(),
+      runtime,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      question: "Thoughts on that move?",
+      context,
+      pending: false
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) {
+      return;
+    }
+
+    const fixtureModel = createFixtureChatModel();
+    let capturedRequest: unknown;
+    const followUp = await submitCoachQuestion({
+      model: {
+        ...fixtureModel,
+        complete: async (request: Parameters<typeof fixtureModel.complete>[0]) => {
+          capturedRequest = request;
+          return fixtureModel.complete(request);
+        }
+      },
+      knowledgeRetriever: createLocalCoachKnowledgeRetriever(),
+      runtime,
+      conversation: first.conversation,
+      question: "Why is the 3-point valuable?",
+      context,
+      pending: false
+    });
+
+    expect(followUp.ok).toBe(true);
+    if (!followUp.ok) {
+      return;
+    }
+
+    expect(followUp.evidence.coachingOperation?.intent).toBe("strategic-concept-explanation");
+    expect(followUp.evidence.coachingOperation?.subject.label).toContain("3-point");
+    expect(followUp.evidence.coachingOperation?.evaluatorRole).toBe("secondary");
+    expect(followUp.evidence.coachingOperation?.preferredTracks).toContain("making-points");
+    expect(followUp.evidence.coachingOperation?.preferredTracks).not.toContain("move-review");
+
+    const requestObject = capturedRequest as { developerInstructions?: readonly string[] };
+    const instructions = (requestObject.developerInstructions ?? []).join("\n");
+    expect(instructions).toContain("Begin with the strategic mechanism");
+    expect(instructions).toContain("Do not use circular reasoning");
+  });
+
+  it("treats explicit comparison follow-ups as candidate comparison", () => {
+    const snapshot = buildSnapshot();
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const evidence = buildCoachEvidence({
+      question: "Why was that better than 1/4, 12/17?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    }).evidence;
+
+    const plan = buildCoachKnowledgeRetrievalPlan({
+      question: "Why was that better than 1/4, 12/17?",
+      context,
+      evidence
+    });
+
+    expect(plan.intent).toBe("candidate-comparison");
+    expect(plan.preferredTracks[0]).toBe("move-review");
+  });
+
+  it("keeps definition follow-ups definition-focused", () => {
+    const snapshot = buildSnapshot();
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const evidence = buildCoachEvidence({
+      question: "What is a made point?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    }).evidence;
+
+    const plan = buildCoachKnowledgeRetrievalPlan({
+      question: "What is a made point?",
+      context,
+      evidence
+    });
+
+    expect(plan.intent).toBe("definition");
+    expect(plan.preferredTracks).toContain("board-vision");
+  });
+
+  it("switches from strategy explanation back to move evaluation when explicitly asked", () => {
+    const snapshot = buildSnapshot();
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const evidence = buildCoachEvidence({
+      question: "But was my move actually best?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW })
+    }).evidence;
+
+    const plan = buildCoachKnowledgeRetrievalPlan({
+      question: "But was my move actually best?",
+      context,
+      evidence
+    });
+
+    expect(plan.intent).toBe("move-evaluation");
+  });
+
+  it("classifies counterfactual follow-ups separately and instructs assumption-first reasoning", () => {
+    const snapshot = buildSnapshot();
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+    const conversation = createCoachConversation({ id: "conversation-1", createdAt: NOW });
+    const evidence = buildCoachEvidence({
+      question: "Would the 3-point still matter if White had no checker back?",
+      context,
+      conversation
+    }).evidence;
+
+    const plan = buildCoachKnowledgeRetrievalPlan({
+      question: "Would the 3-point still matter if White had no checker back?",
+      context,
+      evidence
+    });
+
+    expect(plan.intent).toBe("counterfactual-analysis");
+
+    const request = buildCoachModelRequest({
+      requestId: "counterfactual-request",
+      conversationId: conversation.id,
+      userMessageId: "m1",
+      question: "Would the 3-point still matter if White had no checker back?",
+      context,
+      conversation,
+      evidence,
+      knowledge: [],
+      intentResolution: plan.operation,
+      retrievalPlan: plan,
+      responsePreferences: {
+        explanationLevel: "beginner",
+        verbosity: "normal"
+      }
+    });
+
+    expect((request.developerInstructions ?? []).join("\n")).toContain(
+      "State the changed assumption explicitly"
+    );
+    expect((request.developerInstructions ?? []).join("\n")).toContain(
+      "Do not invent exact evaluator outcomes"
+    );
+  });
 });

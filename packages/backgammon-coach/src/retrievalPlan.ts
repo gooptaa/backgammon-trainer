@@ -8,11 +8,42 @@ import type { CoachEvidenceBundle } from "./evidence";
 import { mapPatternSkillAreaToKnowledgeConcept } from "./patterns";
 
 export type CoachKnowledgeRetrievalIntent =
-  | "strategic-explanation"
+  | "move-evaluation"
+  | "strategic-concept-explanation"
+  | "position-specific-explanation"
+  | "candidate-comparison"
+  | "rules-legality"
   | "definition"
+  | "counterfactual-analysis"
   | "learning-focus"
   | "progress-count"
   | "unsupported-topic";
+
+export interface CoachResolvedSubject {
+  readonly kind:
+    | "move"
+    | "candidate-move"
+    | "point"
+    | "anchor"
+    | "blot"
+    | "hit"
+    | "prime"
+    | "race"
+    | "rule"
+    | "term"
+    | "counterfactual"
+    | "position"
+    | "unknown";
+  readonly label: string;
+  readonly source: "question-explicit" | "context-derived";
+}
+
+export interface CoachIntentResolution {
+  readonly intent: CoachKnowledgeRetrievalIntent;
+  readonly subject: CoachResolvedSubject;
+  readonly evidencePriority: readonly string[];
+  readonly evaluatorRole: "primary" | "secondary" | "optional" | "not-applicable";
+}
 
 export interface CoachKnowledgeRetrievalPlan {
   readonly intent: CoachKnowledgeRetrievalIntent;
@@ -21,6 +52,7 @@ export interface CoachKnowledgeRetrievalPlan {
   readonly concepts: readonly BackgammonKnowledgeConcept[];
   readonly preferredTracks: readonly BackgammonKnowledgeTrack[];
   readonly queryTerms: readonly string[];
+  readonly operation: CoachIntentResolution;
 }
 
 const DEFINITION_PATTERN =
@@ -35,8 +67,31 @@ const PROGRESS_COUNT_PATTERN =
 const UNSUPPORTED_CUBE_PATTERN =
   /\b(cube|doubling|double\b|take point|cash point|match play|crawford|beaver|jacoby)\b/i;
 
+const MOVE_EVALUATION_PATTERN =
+  /\b(was (?:my|that|the) move (?:actually )?best|was (?:my|that|the) move good|was (?:my|that|the) move (?:a )?mistake|thoughts on (?:that|my|the) move|what should i have played|what should i have done|feedback on (?:that|my|the) move|review (?:that|my|the) move|assess (?:that|my|the) move)\b/i;
+
+const CANDIDATE_COMPARISON_PATTERN =
+  /\b(better than|worse than|instead of|rather than|compared to|versus|vs\.?|other move|alternative|what does the other move give up|give up)\b/i;
+
+const LEGALITY_PATTERN =
+  /\b(legal|illegal|can i|am i allowed|do i have to|must i|can i move the same checker twice|why can['’]?t i play|why can['’]?t i|can['’]?t i|cannot i|have to enter)\b/i;
+
+const COUNTERFACTUAL_PATTERN =
+  /\b(what if|would .* if|if .* would|suppose|assuming|imagine|still matter if|what changes if|had no checker back)\b/i;
+
+const POSITION_SPECIFIC_PATTERN = /\b(here|in this position|right now|now)\b/i;
+
+const STRATEGIC_EXPLANATION_PATTERN = /\b(why is|why are|what makes|how does|why do)\b/i;
+
+const REFERENTIAL_SUBJECT_PATTERN =
+  /\b(that move|the move|that point|the point|it|that blot|the blot|that hit|the hit|the alternative)\b/i;
+
+const MOVE_NOTATION_PATTERN = /\b(?:[1-9]|1[0-9]|2[0-4])\s*(?:\/|-)\s*(?:[1-9]|1[0-9]|2[0-4])\b/i;
+
 const REVIEW_STYLE_PATTERN =
   /\b(review|feedback|analogy|snippet|coaching phrase|coach answer|conversation pattern)\b/i;
+
+const POINT_SUBJECT_PATTERN = /\b([1-9]|1[0-9]|2[0-4])\s*(?:-|\s*)?(?:pt|point)\b/i;
 
 const STOP_WORDS = new Set([
   "the",
@@ -144,7 +199,8 @@ const deriveConceptsFromQuestion = (question: string): readonly BackgammonKnowle
 
 const deriveConceptsFromContext = (
   context: CoachQuestionContext,
-  evidence: CoachEvidenceBundle
+  evidence: CoachEvidenceBundle,
+  intent: CoachKnowledgeRetrievalIntent
 ): readonly BackgammonKnowledgeConcept[] => {
   const concepts = new Set<BackgammonKnowledgeConcept>();
 
@@ -177,7 +233,12 @@ const deriveConceptsFromContext = (
     }
   }
 
-  if (context.kind === "history-turn" || context.kind === "game-review") {
+  if (
+    (context.kind === "history-turn" || context.kind === "game-review") &&
+    (intent === "move-evaluation" ||
+      intent === "candidate-comparison" ||
+      intent === "learning-focus")
+  ) {
     addConcept(concepts, "move-review");
     addConcept(concepts, "candidate-comparison");
   }
@@ -251,17 +312,31 @@ const conceptToTrack = (
 };
 
 const derivePreferredTracks = (input: {
-  intent: CoachKnowledgeRetrievalIntent;
+  operation: CoachIntentResolution;
   context: CoachQuestionContext;
   concepts: readonly BackgammonKnowledgeConcept[];
   question: string;
 }): readonly BackgammonKnowledgeTrack[] => {
-  if (input.intent === "definition") {
+  const intent = input.operation.intent;
+
+  if (intent === "definition" || intent === "rules-legality") {
     return ["board-vision"];
   }
 
-  if (input.intent === "learning-focus") {
+  if (intent === "learning-focus") {
     return ["move-review", "game-plan-recognition"];
+  }
+
+  if (intent === "move-evaluation") {
+    return ["move-review", "board-vision"];
+  }
+
+  if (intent === "candidate-comparison") {
+    return ["move-review", "board-vision", "making-points", "safety-risk"];
+  }
+
+  if (intent === "counterfactual-analysis") {
+    return ["game-plan-recognition", "board-vision", "making-points"];
   }
 
   const tracks = new Set<BackgammonKnowledgeTrack>();
@@ -279,11 +354,26 @@ const derivePreferredTracks = (input: {
     input.context.kind === "progress-profile";
   const hasReviewStyleWording = REVIEW_STYLE_PATTERN.test(input.question);
 
+  if (
+    (intent === "strategic-concept-explanation" || intent === "position-specific-explanation") &&
+    !hasReviewStyleWording
+  ) {
+    tracks.delete("move-review");
+  }
+
   if (!contextual && !hasReviewStyleWording) {
     tracks.delete("move-review");
   }
 
   if (tracks.size === 0) {
+    if (intent === "position-specific-explanation") {
+      return ["board-vision", "making-points", "safety-risk"];
+    }
+
+    if (intent === "strategic-concept-explanation") {
+      return ["making-points", "safety-risk", "game-plan-recognition"];
+    }
+
     return contextual ? ["move-review"] : ["board-vision"];
   }
 
@@ -310,15 +400,211 @@ const inferIntent = (
     return "learning-focus";
   }
 
-  return "strategic-explanation";
+  if (COUNTERFACTUAL_PATTERN.test(question)) {
+    return "counterfactual-analysis";
+  }
+
+  const hasComparisonLanguage =
+    CANDIDATE_COMPARISON_PATTERN.test(question) ||
+    (MOVE_NOTATION_PATTERN.test(question) &&
+      /\b(better|instead|rather|alternative|other|give up)\b/i.test(question));
+  if (hasComparisonLanguage) {
+    return "candidate-comparison";
+  }
+
+  if (LEGALITY_PATTERN.test(question) && !hasComparisonLanguage) {
+    return "rules-legality";
+  }
+
+  if (MOVE_EVALUATION_PATTERN.test(question)) {
+    return "move-evaluation";
+  }
+
+  if (
+    POSITION_SPECIFIC_PATTERN.test(question) &&
+    /\b(why|how|what makes|does that matter)\b/i.test(question)
+  ) {
+    return "position-specific-explanation";
+  }
+
+  if (
+    REFERENTIAL_SUBJECT_PATTERN.test(question) &&
+    /\b(why|how|what makes)\b/i.test(question) &&
+    (context.kind === "history-turn" || context.kind === "current-position")
+  ) {
+    return "position-specific-explanation";
+  }
+
+  if (STRATEGIC_EXPLANATION_PATTERN.test(question)) {
+    return "strategic-concept-explanation";
+  }
+
+  return "strategic-concept-explanation";
+};
+
+const resolveSubject = (question: string, context: CoachQuestionContext): CoachResolvedSubject => {
+  const pointMatch = question.match(POINT_SUBJECT_PATTERN);
+  if (pointMatch?.[1] !== undefined) {
+    return {
+      kind: "point",
+      label: `${pointMatch[1]}-point`,
+      source: "question-explicit"
+    };
+  }
+
+  const normalized = question.toLowerCase();
+  if (normalized.includes("anchor")) {
+    return { kind: "anchor", label: "anchor", source: "question-explicit" };
+  }
+  if (normalized.includes("blot")) {
+    return { kind: "blot", label: "blot", source: "question-explicit" };
+  }
+  if (normalized.includes("hit")) {
+    return { kind: "hit", label: "hit", source: "question-explicit" };
+  }
+  if (normalized.includes("prime")) {
+    return { kind: "prime", label: "prime", source: "question-explicit" };
+  }
+  if (normalized.includes("race") || normalized.includes("pip")) {
+    return { kind: "race", label: "race lead", source: "question-explicit" };
+  }
+  if (
+    normalized.includes("what if") ||
+    normalized.includes("would") ||
+    normalized.includes("if ")
+  ) {
+    return { kind: "counterfactual", label: "hypothetical variation", source: "question-explicit" };
+  }
+  if (DEFINITION_PATTERN.test(question)) {
+    return { kind: "term", label: "term clarification", source: "question-explicit" };
+  }
+  if (LEGALITY_PATTERN.test(question)) {
+    return { kind: "rule", label: "legal move rule", source: "question-explicit" };
+  }
+  if (
+    MOVE_NOTATION_PATTERN.test(question) ||
+    normalized.includes("move") ||
+    normalized.includes("alternative")
+  ) {
+    return {
+      kind: "candidate-move",
+      label: "candidate move comparison",
+      source: "question-explicit"
+    };
+  }
+
+  if (context.kind === "history-turn" && context.turnRecord.outcome.kind === "move") {
+    return {
+      kind: "move",
+      label: `turn ${context.turnNumber} committed move`,
+      source: "context-derived"
+    };
+  }
+
+  if (context.kind === "current-position") {
+    return {
+      kind: "position",
+      label: "current position",
+      source: "context-derived"
+    };
+  }
+
+  return {
+    kind: "unknown",
+    label: "contextual referent",
+    source: "context-derived"
+  };
+};
+
+const getEvidencePriority = (intent: CoachKnowledgeRetrievalIntent): readonly string[] => {
+  switch (intent) {
+    case "move-evaluation":
+      return [
+        "evaluator-result",
+        "deterministic-move-facts",
+        "curated-strategy-knowledge",
+        "constrained-explanation"
+      ];
+    case "strategic-concept-explanation":
+      return [
+        "curated-strategy-knowledge",
+        "deterministic-position-facts",
+        "learner-context",
+        "evaluator-support"
+      ];
+    case "position-specific-explanation":
+      return [
+        "deterministic-position-facts",
+        "curated-strategy-knowledge",
+        "evaluator-support",
+        "constrained-explanation"
+      ];
+    case "candidate-comparison":
+      return [
+        "evaluated-candidate-comparison",
+        "deterministic-move-delta",
+        "curated-strategy-knowledge",
+        "constrained-explanation"
+      ];
+    case "rules-legality":
+      return ["engine-rules", "legal-move-facts", "glossary-knowledge"];
+    case "definition":
+      return ["glossary-knowledge", "curated-definitions", "position-illustration"];
+    case "counterfactual-analysis":
+      return [
+        "stated-assumption",
+        "deterministic-base-facts",
+        "evaluator-evidence-when-available",
+        "curated-strategy-knowledge"
+      ];
+    case "learning-focus":
+      return ["deterministic-progress-facts", "curated-learning-material", "review-context"];
+    case "progress-count":
+      return ["deterministic-progress-facts"];
+    case "unsupported-topic":
+      return ["deterministic-no-match"];
+  }
+};
+
+const getEvaluatorRole = (
+  intent: CoachKnowledgeRetrievalIntent
+): CoachIntentResolution["evaluatorRole"] => {
+  switch (intent) {
+    case "move-evaluation":
+    case "candidate-comparison":
+      return "primary";
+    case "strategic-concept-explanation":
+    case "position-specific-explanation":
+    case "learning-focus":
+      return "secondary";
+    case "counterfactual-analysis":
+      return "optional";
+    default:
+      return "not-applicable";
+  }
+};
+
+export const resolveCoachIntent = (input: {
+  question: string;
+  context: CoachQuestionContext;
+}): CoachIntentResolution => {
+  const intent = inferIntent(input.question, input.context);
+  return {
+    intent,
+    subject: resolveSubject(input.question, input.context),
+    evidencePriority: getEvidencePriority(intent),
+    evaluatorRole: getEvaluatorRole(intent)
+  };
 };
 
 export const buildCoachKnowledgeRetrievalPlan = (input: {
   question: string;
   context: CoachQuestionContext;
   evidence: CoachEvidenceBundle;
+  operation?: CoachIntentResolution;
 }): CoachKnowledgeRetrievalPlan => {
-  const intent = inferIntent(input.question, input.context);
+  const operation = input.operation ?? resolveCoachIntent(input);
+  const intent = operation.intent;
   if (intent === "unsupported-topic" || intent === "progress-count") {
     return {
       intent,
@@ -326,23 +612,24 @@ export const buildCoachKnowledgeRetrievalPlan = (input: {
       maxItems: 0,
       concepts: [],
       preferredTracks: [],
-      queryTerms: []
+      queryTerms: [],
+      operation
     };
   }
 
   const concepts = new Set<BackgammonKnowledgeConcept>([
-    ...deriveConceptsFromContext(input.context, input.evidence),
+    ...deriveConceptsFromContext(input.context, input.evidence, intent),
     ...deriveConceptsFromQuestion(input.question)
   ]);
 
   const preferredTracks = derivePreferredTracks({
-    intent,
+    operation,
     context: input.context,
     concepts: [...concepts],
     question: input.question
   });
 
-  const maxItems = intent === "definition" ? 2 : 3;
+  const maxItems = intent === "definition" || intent === "rules-legality" ? 2 : 3;
   const queryTerms = tokenize(input.question);
 
   return {
@@ -351,6 +638,7 @@ export const buildCoachKnowledgeRetrievalPlan = (input: {
     maxItems,
     concepts: [...concepts].sort(),
     preferredTracks,
-    queryTerms
+    queryTerms,
+    operation
   };
 };

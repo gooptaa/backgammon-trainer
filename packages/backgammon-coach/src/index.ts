@@ -99,7 +99,10 @@ export {
 
 export {
   buildCoachKnowledgeRetrievalPlan,
-  type CoachKnowledgeRetrievalIntent
+  resolveCoachIntent,
+  type CoachIntentResolution,
+  type CoachKnowledgeRetrievalIntent,
+  type CoachResolvedSubject
 } from "./retrievalPlan";
 
 export {

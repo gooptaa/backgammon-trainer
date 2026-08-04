@@ -43,6 +43,12 @@ export const searchBackgammonKnowledge = (
   const maxEntries = Math.max(0, query.maxEntries);
   const definitionIntent = query.intent === "definition";
   const learningFocusIntent = query.intent === "learning-focus";
+  const moveEvaluationIntent = query.intent === "move-evaluation";
+  const candidateComparisonIntent = query.intent === "candidate-comparison";
+  const strategicConceptIntent = query.intent === "strategic-concept-explanation";
+  const positionSpecificIntent = query.intent === "position-specific-explanation";
+  const rulesLegalityIntent = query.intent === "rules-legality";
+  const counterfactualIntent = query.intent === "counterfactual-analysis";
 
   if (
     maxEntries === 0 ||
@@ -105,7 +111,38 @@ export const searchBackgammonKnowledge = (
         score += 1;
       }
 
-      if (!learningFocusIntent && !definitionIntent && query.contextKind === "current-position") {
+      if ((moveEvaluationIntent || candidateComparisonIntent) && entry.track === "move-review") {
+        score += 2;
+      }
+
+      if (rulesLegalityIntent) {
+        if (entry.track === "board-vision") {
+          score += 4;
+        }
+
+        if (entry.concepts.includes("legal-moves") || entry.concepts.includes("dice-use")) {
+          score += 3;
+        }
+
+        if (entry.track === "move-review") {
+          score -= 4;
+        }
+      }
+
+      if (
+        (strategicConceptIntent || positionSpecificIntent || counterfactualIntent) &&
+        entry.track === "move-review"
+      ) {
+        score -= 3;
+      }
+
+      if (
+        !learningFocusIntent &&
+        !definitionIntent &&
+        !moveEvaluationIntent &&
+        !candidateComparisonIntent &&
+        query.contextKind === "current-position"
+      ) {
         if (entry.track === "move-review") {
           score -= 2;
         }

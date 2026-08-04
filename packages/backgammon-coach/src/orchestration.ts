@@ -15,7 +15,7 @@ import {
 import { buildCoachEvidence, type CoachEvidenceBundle } from "./evidence";
 import type { CoachKnowledgeRetriever } from "./knowledge";
 import { buildCoachModelRequest, toCoachEvidenceReference, toCoachModelProvenance } from "./prompt";
-import { buildCoachKnowledgeRetrievalPlan } from "./retrievalPlan";
+import { buildCoachKnowledgeRetrievalPlan, resolveCoachIntent } from "./retrievalPlan";
 import type { CoachGameReviewTurnEvidence, CoachQuestionContext } from "./context";
 
 type HistoryTurnContext = Extract<CoachQuestionContext, { kind: "history-turn" }>;
@@ -503,11 +503,29 @@ export const submitCoachQuestion = async (input: {
     context: resolvedContext,
     conversation: appendUserResult.conversation
   });
+  const operation = resolveCoachIntent({
+    question,
+    context: resolvedContext
+  });
   const retrievalPlan = buildCoachKnowledgeRetrievalPlan({
     question,
     context: resolvedContext,
-    evidence: evidenceResult.evidence
+    evidence: evidenceResult.evidence,
+    operation
   });
+  const evidence: CoachEvidenceBundle = {
+    ...evidenceResult.evidence,
+    coachingOperation: {
+      intent: operation.intent,
+      subject: operation.subject,
+      evidencePriority: operation.evidencePriority,
+      evaluatorRole: operation.evaluatorRole,
+      retrievalIntent: retrievalPlan.intent,
+      retrievalConcepts: retrievalPlan.concepts,
+      preferredTracks: retrievalPlan.preferredTracks,
+      queryTerms: retrievalPlan.queryTerms
+    }
+  };
 
   const knowledgeRetriever = input.knowledgeRetriever;
   const knowledgeResult =
@@ -537,8 +555,10 @@ export const submitCoachQuestion = async (input: {
     question,
     context: resolvedContext,
     conversation: appendUserResult.conversation,
-    evidence: evidenceResult.evidence,
+    evidence,
     knowledge: knowledgeEntries,
+    intentResolution: operation,
+    retrievalPlan,
     responsePreferences: {
       explanationLevel: "intermediate",
       verbosity: "normal"
@@ -565,7 +585,7 @@ export const submitCoachQuestion = async (input: {
     text: response.text,
     evidenceReference: toCoachEvidenceReference({
       context: resolvedContext,
-      evidence: evidenceResult.evidence
+      evidence
     }),
     model: toCoachModelProvenance({
       provider: response.model.provider,
@@ -590,7 +610,7 @@ export const submitCoachQuestion = async (input: {
     requestId,
     conversation: appendCoachResult.conversation,
     context: resolvedContext,
-    evidence: evidenceResult.evidence,
+    evidence,
     response,
     knowledge: knowledgeEntries,
     ...(knowledgeWarning === undefined ? {} : { knowledgeWarning })
