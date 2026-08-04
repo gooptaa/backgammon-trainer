@@ -14,6 +14,9 @@ Implemented now:
 - text-first coach conversation orchestration with evidence version `3`
 - evidence-backed full-game review over immutable committed history snapshots (completed game and game-so-far)
 - deterministic evidence-backed move classification for committed checker-play review (`best`, `reasonable`, `mistake`, `major mistake`, `unclassified`)
+- authoritative per-lineage learner ownership selection (`white`, `black`, `both`, `unknown`) separate from checker color semantics
+- persistent local learner progress profile derived from committed learner decisions with deterministic deduplication/reconciliation
+- rolling recent-20 learner progress evidence with policy-compatible aggregate counts and conservative deterministic trend support boundaries
 - recommendation-support authority resolved before model generation for current-position coaching
 - curated project-authored knowledge retrieval and bounded evidence disclosure
 - provider-neutral chat model contracts in `@backgammon-trainer/ai-contracts`
@@ -37,7 +40,7 @@ Not implemented yet:
 - browser credential entry or per-user credential storage
 - provider comparison/fallback routing
 - semantic retrieval/embeddings/vector search
-- conversation persistence and cross-game learner modeling
+- conversation persistence
 
 ## Prerequisites
 

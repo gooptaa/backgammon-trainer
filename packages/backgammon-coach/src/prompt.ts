@@ -99,6 +99,7 @@ export const buildCoachModelRequest = (
     }));
   const serializedEvidence = JSON.parse(JSON.stringify(request.evidence)) as JsonValue;
   const recommendationSupport = request.evidence.recommendationSupport;
+  const hasProgressEvidence = request.evidence.progressEvidence !== undefined;
   const hasDeterministicClassification =
     request.evidence.historicalReviewEvidence?.moveClassification !== undefined ||
     (request.evidence.gameReviewEvidence?.keyDecisions.some(
@@ -128,6 +129,9 @@ export const buildCoachModelRequest = (
   const classificationInstruction = hasDeterministicClassification
     ? "Move classifications in deterministic evidence are authoritative policy outputs. Do not strengthen, weaken, or replace any supplied label. If a move is unclassified, explain the limitation and do not assign a substitute label."
     : null;
+  const progressInstruction = hasProgressEvidence
+    ? "Progress counts and trend fields in deterministic evidence are authoritative. Do not invent additional observations, causes, ratings, or improvement claims beyond supplied deterministic trend support."
+    : null;
 
   return {
     requestId: request.requestId,
@@ -138,6 +142,7 @@ export const buildCoachModelRequest = (
       "Treat evaluator ranking evidence as authoritative only when recommendation support explicitly says it is supported.",
       recommendationInstruction,
       ...(classificationInstruction === null ? [] : [classificationInstruction]),
+      ...(progressInstruction === null ? [] : [progressInstruction]),
       "Keep deterministic facts, evaluator-attributed evidence, and curated general guidance clearly separated.",
       "Curated knowledge is general instructional guidance and does not prove that any legal move is best in this position.",
       "Omitted legal move rows may still represent legal moves; do not describe omitted rows as illegal.",

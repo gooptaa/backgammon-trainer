@@ -70,6 +70,7 @@ Supported context types:
 - `move-outcome` (explicit preview selection)
 - `history-turn` (explicit history inspection selection)
 - `game-review` (explicit review intent over committed game history)
+- `progress-profile` (explicit learner-progress intent over deterministic local profile evidence)
 
 Full-game review activation policy:
 
@@ -83,6 +84,12 @@ Precedence on submit:
 2. explicit selected history turn
 3. current committed position
 4. full-game review only when explicit review intent is present
+
+Progress-profile activation policy:
+
+- progress-profile is user-initiated through conversation intent (for example: "How am I doing?", "Show my recent progress")
+- explicit move-outcome/history-turn/full-game-review precedence is preserved
+- progress-profile does not silently replace explicit selected-turn review questions
 
 Historical-review extension:
 
@@ -128,6 +135,7 @@ Evidence includes:
 - recommendation-support status resolved before model generation
 - historical turn facts and optional analysis linkage
 - completed-game aggregate counts (only currently supported aggregates)
+- deterministic learner-profile aggregate evidence (compatible policy only) for explicit progress questions
 - conversation summary counts
 - bounded warnings list
 
@@ -148,6 +156,13 @@ Move classification authority is also separated from generation:
 - classification requires complete trustworthy evaluator coverage with valid score semantics and evaluator-covered played move
 - fixture provenance, partial coverage, missing evaluator evidence, or unsupported turn kinds remain unclassified
 - current-position coaching never assigns mistake labels before a move is committed
+
+Learner profile authority is also separated from generation:
+
+- learner ownership is explicit per lineage (`white`, `black`, `both`, `unknown`)
+- only committed learner checker-play decisions are eligible for learner observations
+- profile aggregation preserves classification-policy identity/version compatibility
+- trend fields are deterministic and conservative; insufficient evidence is explicit
 
 Historical review authority remains deterministic before generation:
 
@@ -195,6 +210,11 @@ Current bounds:
 - max knowledge excerpts included: 4
 - max selected legal move rows in evidence: 8
 - max evidence warnings included: 8
+
+Progress-profile defaults:
+
+- rolling recent window: 20 eligible learner decisions
+- profile observation cap: 500
 
 Instruction policy includes:
 
@@ -337,7 +357,7 @@ Decision for this milestone:
 - no request queueing
 - no streaming
 - no semantic retrieval
-- no cross-game learning/habit inference
+- no strategic habit diagnosis from profile evidence yet
 - OpenAI-compatible support is intentionally narrow (non-streaming text completion only)
 - local environment file updates require process restart to take effect
 

@@ -19,11 +19,13 @@ import {
   buildCoachEvidence,
   buildCoachModelRequest,
   createCoachConversation,
+  createLearnerProfile,
   createFixtureCoachKnowledgeRetriever,
   createLocalCoachKnowledgeRetriever,
   createNoopCoachKnowledgeRetriever,
   deriveCurrentTurnContext,
   resolveCoachQuestionContext,
+  summarizeLearnerProgress,
   submitCoachQuestion
 } from "../src/index";
 import { createFixtureChatModel } from "@backgammon-trainer/ai-contracts/fixture";
@@ -1946,5 +1948,44 @@ describe("coach knowledge and orchestration", () => {
       return;
     }
     expect(result.context.rankedAnalysis).toBeDefined();
+  });
+
+  it("routes progress questions to deterministic progress-profile context when available", async () => {
+    const snapshot = buildSnapshot();
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const progressContext = {
+      kind: "progress-profile" as const,
+      gameReference: "game-1",
+      snapshot,
+      progress: summarizeLearnerProgress(createLearnerProfile({ updatedAt: NOW }), {
+        recentWindowSize: 20
+      })
+    };
+
+    const result = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+      runtime,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      question: "How am I doing lately?",
+      context,
+      progressContext,
+      pending: false
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.context.kind).toBe("progress-profile");
+    expect(result.evidence.progressEvidence).toBeDefined();
   });
 });

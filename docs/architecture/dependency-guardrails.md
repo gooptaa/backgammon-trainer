@@ -44,6 +44,7 @@ This repository enforces architectural boundaries with lightweight checks in exi
 - Browser requests do not select arbitrary upstream provider destinations.
 - Browser evaluator requests use server routes; browser code does not import GNU adapter or Node process code.
 - Real GNU evaluator execution is server-owned (`EVALUATOR_PROVIDER=gnubg`) and remains outside browser runtime.
+- Learner progress profile domain logic remains in `@backgammon-trainer/backgammon-coach`; browser storage access for profile/lineage remains in `apps/web` adapters.
 
 ## Local environment file convention
 

@@ -16,6 +16,11 @@ Structured deterministic analysis is now a dedicated package boundary:
 7. **Coach conversation layer** (`packages/backgammon-coach`)
 8. **Curated knowledge layer** (`packages/backgammon-knowledge`)
 
+Learner progress profile is a coach-domain sub-boundary:
+
+- profile schema/versioning, ownership semantics, observation reconciliation, and deterministic aggregation live in `packages/backgammon-coach`
+- browser persistence adapters for profile and lineage metadata live in `apps/web`
+
 A narrow `packages/shared` package holds only small cross-cutting transport types.
 
 ## Dependency direction
@@ -80,6 +85,13 @@ Historical move-classification authority policy is explicit:
 - labels are derived from supported evaluator evidence and committed move identity
 - engine and evaluator layers remain free of pedagogical labels
 - language-model output explains deterministic labels but does not redefine them
+
+Learner progress authority policy is explicit:
+
+- learner ownership is authoritative per lineage and separate from checker-side semantics
+- profile observations are derived from committed learner checker-play decisions only
+- profile aggregation is policy-version compatible and deterministic
+- language-model output explains profile evidence and does not invent counts, trends, or ratings
 
 No package under `packages/` depends on React, Fastify, browser APIs, or vendor SDKs.
 

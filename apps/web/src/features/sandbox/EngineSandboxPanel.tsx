@@ -25,6 +25,15 @@ interface EngineSandboxPanelProps {
   canCopySnapshot: boolean;
   snapshotFormat: string;
   snapshotVersion: number;
+  learnerOwnershipMode: "white" | "black" | "both" | "unknown";
+  recentWindowSize: number;
+  recentBestOrReasonableCount: number;
+  recentMistakeCount: number;
+  recentMajorMistakeCount: number;
+  recentUnclassifiedCount: number;
+  profileGamesRepresented: number;
+  profileStorageStatus: "ready" | "memory-only" | "lineage-memory-only";
+  profileMessage: string | null;
   onDieOneChange: (value: DieValue) => void;
   onDieTwoChange: (value: DieValue) => void;
   onRollForOpening: () => void;
@@ -32,6 +41,8 @@ interface EngineSandboxPanelProps {
   onSetDice: () => void;
   onPassTurn: () => void;
   onNewGame: () => void;
+  onSetLearnerOwnership: (value: "white" | "black" | "both" | "unknown") => void;
+  onClearLearnerProfile: () => void;
   onCopyExportSnapshot: () => void;
   onImportTextChange: (value: string) => void;
   onValidateAndImportSnapshot: () => void;
@@ -89,6 +100,15 @@ export function EngineSandboxPanel({
   canCopySnapshot,
   snapshotFormat,
   snapshotVersion,
+  learnerOwnershipMode,
+  recentWindowSize,
+  recentBestOrReasonableCount,
+  recentMistakeCount,
+  recentMajorMistakeCount,
+  recentUnclassifiedCount,
+  profileGamesRepresented,
+  profileStorageStatus,
+  profileMessage,
   onDieOneChange,
   onDieTwoChange,
   onRollForOpening,
@@ -96,6 +116,8 @@ export function EngineSandboxPanel({
   onSetDice,
   onPassTurn,
   onNewGame,
+  onSetLearnerOwnership,
+  onClearLearnerProfile,
   onCopyExportSnapshot,
   onImportTextChange,
   onValidateAndImportSnapshot,
@@ -171,6 +193,60 @@ export function EngineSandboxPanel({
         <button type="button" onClick={onNewGame}>
           New Game
         </button>
+
+        <details className={styles.devControls}>
+          <summary>Learner Profile</summary>
+          <p className={styles.meta}>
+            Local-only progress profile. Data stays in this browser unless you export it manually in
+            a future milestone.
+          </p>
+          <div className={styles.field}>
+            <label htmlFor="learner-ownership">Learner side for this game</label>
+            <select
+              id="learner-ownership"
+              value={learnerOwnershipMode}
+              onChange={(event) =>
+                onSetLearnerOwnership(
+                  event.currentTarget.value as "white" | "black" | "both" | "unknown"
+                )
+              }
+            >
+              <option value="unknown">Unknown (no learner attribution)</option>
+              <option value="white">Learner plays White</option>
+              <option value="black">Learner plays Black</option>
+              <option value="both">Both sides explored</option>
+            </select>
+          </div>
+          <p className={styles.meta} data-testid="recent-progress-heading">
+            Recent {recentWindowSize} learner decisions
+          </p>
+          <p className={styles.meta} data-testid="recent-progress-best-reasonable">
+            Best/reasonable: {recentBestOrReasonableCount}
+          </p>
+          <p className={styles.meta} data-testid="recent-progress-mistakes">
+            Mistakes: {recentMistakeCount}
+          </p>
+          <p className={styles.meta} data-testid="recent-progress-major-mistakes">
+            Major mistakes: {recentMajorMistakeCount}
+          </p>
+          <p className={styles.meta} data-testid="recent-progress-unclassified">
+            Unclassified: {recentUnclassifiedCount}
+          </p>
+          <p className={styles.meta} data-testid="profile-games-represented">
+            Games represented: {profileGamesRepresented}
+          </p>
+          <p className={styles.meta} data-testid="profile-storage-status">
+            Profile storage: {profileStorageStatus === "ready" ? "local persisted" : "memory only"}
+          </p>
+          {profileMessage !== null ? (
+            <p className={styles.message} data-testid="profile-message" aria-live="polite">
+              {profileMessage}
+            </p>
+          ) : null}
+          <button type="button" onClick={onClearLearnerProfile}>
+            Clear Learner Profile
+          </button>
+        </details>
 
         <details className={styles.devControls}>
           <summary>Development controls</summary>

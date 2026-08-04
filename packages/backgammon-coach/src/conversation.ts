@@ -1,4 +1,5 @@
-export type CoachContextKind = "current-position" | "history-turn" | "move-outcome" | "game-review";
+export type CoachContextKind =
+  "current-position" | "history-turn" | "move-outcome" | "game-review" | "progress-profile";
 
 export interface CoachContextReference {
   readonly kind: CoachContextKind;
@@ -8,7 +9,7 @@ export interface CoachContextReference {
 }
 
 export interface CoachEvidenceReference {
-  readonly evidenceVersion: 3;
+  readonly evidenceVersion: 4;
   readonly contextKind: CoachContextKind;
   readonly warningCount: number;
 }

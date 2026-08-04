@@ -27,6 +27,9 @@ const LAST_MOVE_REVIEW_PATTERN =
 const FULL_GAME_REVIEW_PATTERN =
   /\b(review (this )?game|review (the )?game so far|how did i play|most important decisions|where did i give up the most|which moves should i study)\b/i;
 
+const PROGRESS_PROFILE_PATTERN =
+  /\b(how am i doing|how have i been playing|recent progress|show (me )?my progress|how many (serious )?mistakes|am i improving|how many major mistakes)\b/i;
+
 const TURN_NUMBER_PATTERN = /\bturn\s+([0-9]+)\b/gi;
 
 const isLastMoveReviewQuestion = (question: string): boolean => {
@@ -35,6 +38,10 @@ const isLastMoveReviewQuestion = (question: string): boolean => {
 
 const isFullGameReviewQuestion = (question: string): boolean => {
   return FULL_GAME_REVIEW_PATTERN.test(question);
+};
+
+const isProgressProfileQuestion = (question: string): boolean => {
+  return PROGRESS_PROFILE_PATTERN.test(question);
 };
 
 const parseReferencedTurnNumbers = (question: string): readonly number[] => {
@@ -224,7 +231,8 @@ const resolveFullGameReviewContext = async (input: {
 const resolveSubmissionContext = (
   question: string,
   context: CoachQuestionContext,
-  analysisSession?: AnalysisSession
+  analysisSession?: AnalysisSession,
+  progressContext?: Extract<CoachQuestionContext, { kind: "progress-profile" }>
 ): Promise<CoachQuestionContext> => {
   if (isFullGameReviewQuestion(question)) {
     return resolveFullGameReviewContext({
@@ -235,6 +243,10 @@ const resolveSubmissionContext = (
   }
 
   if (!isLastMoveReviewQuestion(question)) {
+    if (isProgressProfileQuestion(question) && context.kind === "current-position") {
+      return Promise.resolve(progressContext ?? context);
+    }
+
     return Promise.resolve(context);
   }
 
@@ -349,6 +361,7 @@ export const submitCoachQuestion = async (input: {
   conversation: CoachConversation;
   question: string;
   context: CoachQuestionContext;
+  progressContext?: Extract<CoachQuestionContext, { kind: "progress-profile" }>;
   analysisSession?: AnalysisSession;
   resolveHistoryTurnAnalysis?: (input: {
     question: string;
@@ -395,7 +408,8 @@ export const submitCoachQuestion = async (input: {
   let resolvedContext = await resolveSubmissionContext(
     question,
     input.context,
-    input.analysisSession
+    input.analysisSession,
+    input.progressContext
   );
   if (isFullGameReviewQuestion(question) && resolvedContext.kind === "game-review") {
     resolvedContext = await resolveFullGameReviewContext({

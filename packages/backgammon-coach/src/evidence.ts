@@ -122,7 +122,7 @@ export interface CoachLegalMoveSelectionSummary {
 }
 
 export interface CoachEvidenceBundle {
-  evidenceVersion: 3;
+  evidenceVersion: 4;
   questionContext: {
     kind: CoachQuestionContext["kind"];
   };
@@ -200,6 +200,72 @@ export interface CoachEvidenceBundle {
   evaluatorProvenance?: EvaluatorProvenance;
   evaluatorCoverage?: "complete" | "partial";
   recommendationSupport?: CoachRecommendationSupport;
+  progressEvidence?: {
+    policyId: string;
+    policyVersion: string;
+    compatibilityMode: "current-policy-only";
+    recentWindowSize: number;
+    maxObservations: number;
+    counts: {
+      fullProfile: {
+        best: number;
+        reasonable: number;
+        mistake: number;
+        majorMistake: number;
+        unclassified: number;
+        totalEligible: number;
+        totalClassified: number;
+        bestOrReasonable: number;
+      };
+      recentWindow: {
+        best: number;
+        reasonable: number;
+        mistake: number;
+        majorMistake: number;
+        unclassified: number;
+        totalEligible: number;
+        totalClassified: number;
+        bestOrReasonable: number;
+      };
+    };
+    gamesRepresented: {
+      fullProfile: number;
+      recentWindow: number;
+    };
+    coverage: {
+      fullProfileClassifiedRatio: number;
+      recentWindowClassifiedRatio: number;
+    };
+    trend:
+      | {
+          status: "insufficient-evidence";
+          reason:
+            | "not-enough-observations"
+            | "insufficient-classified-observations"
+            | "incompatible-policy";
+          recentWindowSize: number;
+          previousWindowSize: number;
+          recentClassifiedCount: number;
+          previousClassifiedCount: number;
+        }
+      | {
+          status: "supported";
+          recentWindowSize: number;
+          previousWindowSize: number;
+          recentClassifiedCount: number;
+          previousClassifiedCount: number;
+          recentBestOrReasonableShare: number;
+          previousBestOrReasonableShare: number;
+          recentMajorMistakeShare: number;
+          previousMajorMistakeShare: number;
+          bestOrReasonableShareDelta: number;
+          majorMistakeShareDelta: number;
+          recentMajorMistakeCount: number;
+          previousMajorMistakeCount: number;
+          majorMistakeCountDelta: number;
+        };
+    limitations: readonly string[];
+  };
   conversationSummary: {
     messageCount: number;
     userMessageCount: number;
@@ -735,13 +801,21 @@ export const buildCoachEvidence = (input: {
   }
 
   const evidence: CoachEvidenceBundle = {
-    evidenceVersion: 3,
+    evidenceVersion: 4,
     questionContext: {
       kind: input.context.kind
     },
     conversationSummary: summarizeConversation(input.conversation),
     warnings: []
   };
+
+  if (input.context.kind === "progress-profile") {
+    evidence.progressEvidence = structuredClone(input.context.progress);
+    evidence.recommendationSupport = {
+      status: "not-supported",
+      reason: "non-decision-state"
+    };
+  }
 
   if (input.context.kind === "current-position") {
     const positionFacts = analyzePosition(input.context.snapshot.gameState.position);

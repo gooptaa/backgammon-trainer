@@ -128,7 +128,7 @@ Instead it deterministically selects a bounded subset based on:
 
 Each selected row records explicit selection reasons.
 
-The public coach evidence bundle version is now `3` to reflect deterministic move-classification outputs in historical review and full-game review evidence.
+The public coach evidence bundle version is now `4` to reflect deterministic learner-progress evidence for explicit progress-profile questions in addition to deterministic move-classification outputs.
 
 Each request also records:
 
@@ -157,6 +157,14 @@ Current policy (v1.0.0) uses evaluator `lossFromBest` in equity points with incl
 - `major mistake`: loss > 0.2
 
 These thresholds are initial product-policy defaults for instructional consistency, not universal backgammon truth or player rating.
+
+Progress-profile evidence is deterministic coaching policy derived from local learner observations:
+
+- evidence scope is policy-compatible observations only (`current-policy-only`)
+- includes full-profile and recent-window counts (`best`, `reasonable`, `mistake`, `major mistake`, `unclassified`)
+- includes classified coverage ratios, games represented, and bounded limitations
+- includes conservative trend fields only when deterministic sample-size rules are satisfied
+- never invents ratings, strategic causes, or habit labels
 
 For full-game review, key-decision selection is deterministic and bounded. It prioritizes explicit user references and the largest supported played-vs-best evaluated differences, and may include close/tied decisions for balance.
 

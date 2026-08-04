@@ -20,6 +20,7 @@
 - [Conversation foundation](coach/conversation-foundation.md)
 - [Evidence selection and knowledge retrieval](coach/evidence-selection-knowledge-retrieval.md)
 - [OpenAI-compatible real provider](coach/openai-compatible-provider.md)
+- [Learner progress profile](coach/learner-progress-profile.md)
 
 ## Engine
 
@@ -41,6 +42,7 @@
 - [Recommendation authority before generation ADR](adr/0010-recommendation-authority-before-generation.md)
 - [Real evaluator server-boundary ADR](adr/0011-real-evaluator-server-boundary.md)
 - [Deterministic move classification policy ADR](adr/0012-deterministic-move-classification-policy.md)
+- [Local learner progress profile ADR](adr/0013-local-learner-progress-profile.md)
 
 ## Roadmap
 

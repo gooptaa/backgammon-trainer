@@ -14,6 +14,9 @@ The web app is a development sandbox for deterministic backgammon gameplay, fact
 - If a current-position evaluator is configured and analysis is still running, coach send is temporarily disabled and the panel shows `Position analysis pending...`.
 - Full-game review is initiated by conversation requests (for example, "review this game" or "review game so far") and remains bound to committed turns present at submission time.
 - Historical review and full-game review now surface deterministic move classifications from coach evidence (`best`, `reasonable`, `mistake`, `major mistake`, `unclassified`) with policy/provenance limits.
+- Learner ownership is selected per game lineage (`white`, `black`, `both`, `unknown`) and remains separate from checker color semantics.
+- A local learner progress profile stores eligible committed learner decisions only; opponent turns and ambiguous ownership are excluded.
+- Progress-profile questions (for example, "How am I doing?" or "Show my recent progress") resolve to deterministic profile evidence.
 - Current coach requests use selected legal move evidence rather than a broad move dump when current-turn legal outcomes exist.
 - Current coach requests may include a small project-authored curated knowledge subset chosen deterministically from the question and trusted evidence.
 - Current-position recommendations do not assign mistake labels because no move is committed yet.
@@ -89,6 +92,14 @@ Not implemented in this milestone:
 - backend analysis-session persistence
 
 `GameSnapshot` persistence remains independent and unchanged.
+
+Learner-profile persistence behavior:
+
+- profile data is local-only browser storage in this milestone
+- schema is versioned and validated on read
+- malformed profile payloads fail safe to fresh profile state
+- unsupported future profile versions are not rewritten
+- profile clear is explicit through UI control (`Clear Learner Profile`)
 
 ## Evaluator/runtime boundary
 

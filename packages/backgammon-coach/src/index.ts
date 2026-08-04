@@ -43,6 +43,34 @@ export {
 } from "./classification";
 
 export {
+  LEARNER_PROFILE_FORMAT,
+  LEARNER_PROFILE_VERSION,
+  DEFAULT_MAX_OBSERVATIONS,
+  DEFAULT_RECENT_WINDOW_SIZE,
+  MIN_CLASSIFIED_FOR_TREND,
+  clearLearnerProfile,
+  createLearnerProfile,
+  decodeLearnerProfile,
+  encodeLearnerProfile,
+  getLineageOwnershipMode,
+  ingestCommittedLearnerObservation,
+  parseLearnerProfile,
+  serializeLearnerProfile,
+  setLineageOwnership,
+  summarizeLearnerProgress,
+  type LearnerDecisionObservation,
+  type LearnerLineageOwnership,
+  type LearnerObservationClassification,
+  type LearnerOwnershipMode,
+  type LearnerProfile,
+  type LearnerProgressCounts,
+  type LearnerProgressSnapshot,
+  type LearnerProgressTrend,
+  type ParseLearnerProfileFailureReason,
+  type ParseLearnerProfileResult
+} from "./profile";
+
+export {
   createFixtureCoachKnowledgeRetriever,
   createLocalCoachKnowledgeRetriever,
   createNoopCoachKnowledgeRetriever,

@@ -1,6 +1,7 @@
 import {
   backgammonKnowledgeCorpus,
   searchBackgammonKnowledge,
+  type BackgammonKnowledgeContextKind,
   type BackgammonKnowledgeConcept,
   type BackgammonKnowledgeMatchReason
 } from "@backgammon-trainer/backgammon-knowledge";
@@ -145,9 +146,12 @@ export const createFixtureCoachKnowledgeRetriever = (input: {
 export const createLocalCoachKnowledgeRetriever = (): CoachKnowledgeRetriever => {
   return {
     retrieve: async (request) => {
+      const knowledgeContextKind: BackgammonKnowledgeContextKind =
+        request.contextKind === "progress-profile" ? "game-review" : request.contextKind;
+
       const matches = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
         question: request.question,
-        contextKind: request.contextKind,
+        contextKind: knowledgeContextKind,
         ...(request.concepts === undefined ? {} : { concepts: request.concepts }),
         maxEntries: request.maxItems
       });

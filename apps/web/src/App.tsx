@@ -44,13 +44,22 @@ import {
   type Player
 } from "@backgammon-trainer/backgammon-domain";
 import {
+  createLearnerProfile,
+  decodeLearnerProfile,
   deriveCurrentTurnContext,
+  encodeLearnerProfile,
+  getLineageOwnershipMode,
+  ingestCommittedLearnerObservation,
   resolveCoachQuestionContext,
+  setLineageOwnership,
+  summarizeLearnerProgress,
   type CoachRuntime,
   type CoachStagedSelectionSummary,
   type CoachKnowledgeRetriever,
   type CoachQuestionContext,
-  type GameReviewTurnHydrationResult
+  type GameReviewTurnHydrationResult,
+  type LearnerOwnershipMode,
+  type LearnerProfile
 } from "@backgammon-trainer/backgammon-coach";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -89,6 +98,16 @@ import {
   createLocalGameStorage,
   type GameStorage
 } from "./features/sandbox/gameStorage";
+import {
+  createLocalLearnerProfileStorage,
+  type LearnerProfileStorage
+} from "./features/profile/profileStorage";
+import {
+  createLocalGameLineageStorage,
+  decodePersistedGameLineage,
+  encodePersistedGameLineage,
+  type GameLineageStorage
+} from "./features/profile/lineageStorage";
 import { rollDice, type RandomSource } from "./features/sandbox/rollDice";
 import { rollOpeningDice } from "./features/sandbox/rollOpeningDice";
 
@@ -119,6 +138,16 @@ const DEFAULT_TEST_OPENING_DIE: DieValue = 1;
 const SECOND_TEST_OPENING_DIE: DieValue = 2;
 let fallbackAnalysisSessionCounter = 0;
 let fallbackCoachCounter = 0;
+let fallbackLineageCounter = 0;
+
+const createLineageId = (): string => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  fallbackLineageCounter += 1;
+  return `lineage-${fallbackLineageCounter}`;
+};
 
 const DEFAULT_ANALYSIS_CAPTURE_RUNTIME: AnalysisCaptureRuntime = {
   createSessionId: () => {
@@ -338,6 +367,18 @@ interface DurableAppState {
   readonly message: string | null;
 }
 
+interface InitialLearnerProfileState {
+  readonly profile: LearnerProfile;
+  readonly message: string | null;
+  readonly writable: boolean;
+}
+
+interface InitialLineageState {
+  readonly lineageId: string;
+  readonly message: string | null;
+  readonly writable: boolean;
+}
+
 const createFreshDurableAppState = (
   initialGameState?: GameState,
   initialOpeningRollState?: OpeningRollState,
@@ -419,12 +460,99 @@ const buildGameSnapshot = (
   };
 };
 
+const resolveInitialLearnerProfileState = (
+  storage: LearnerProfileStorage,
+  now: string
+): InitialLearnerProfileState => {
+  let savedText: string | null = null;
+
+  try {
+    savedText = storage.load();
+  } catch {
+    return {
+      profile: createLearnerProfile({ updatedAt: now }),
+      message: "Learner profile storage is unavailable. Progress stays in memory only.",
+      writable: false
+    };
+  }
+
+  if (savedText === null) {
+    return {
+      profile: createLearnerProfile({ updatedAt: now }),
+      message: null,
+      writable: true
+    };
+  }
+
+  const decoded = decodeLearnerProfile(savedText);
+  if (!decoded.ok) {
+    if (decoded.reason === "unsupported-version") {
+      return {
+        profile: createLearnerProfile({ updatedAt: now }),
+        message: "Stored learner profile version is newer than this app and was left untouched.",
+        writable: false
+      };
+    }
+
+    return {
+      profile: createLearnerProfile({ updatedAt: now }),
+      message: "Stored learner profile was invalid and has been reset locally.",
+      writable: true
+    };
+  }
+
+  return {
+    profile: decoded.profile,
+    message: null,
+    writable: true
+  };
+};
+
+const resolveInitialLineageState = (storage: GameLineageStorage): InitialLineageState => {
+  let savedText: string | null = null;
+
+  try {
+    savedText = storage.load();
+  } catch {
+    return {
+      lineageId: createLineageId(),
+      message: "Lineage metadata storage is unavailable. Using in-memory lineage identity.",
+      writable: false
+    };
+  }
+
+  if (savedText === null) {
+    return {
+      lineageId: createLineageId(),
+      message: null,
+      writable: true
+    };
+  }
+
+  const decoded = decodePersistedGameLineage(savedText);
+  if (!decoded.ok) {
+    return {
+      lineageId: createLineageId(),
+      message: "Stored lineage metadata was invalid and has been replaced.",
+      writable: true
+    };
+  }
+
+  return {
+    lineageId: decoded.value.lineageId,
+    message: null,
+    writable: true
+  };
+};
+
 interface AppProps {
   initialGameState?: GameState;
   randomSource?: RandomSource;
   initialOpeningRollState?: OpeningRollState;
   initialOpeningTurnPending?: boolean;
   gameStorage?: GameStorage;
+  profileStorage?: LearnerProfileStorage;
+  lineageStorage?: GameLineageStorage;
   moveEvaluator?: PositionEvaluator;
   analysisCaptureEnabled?: boolean;
   analysisCaptureRuntime?: AnalysisCaptureRuntime;
@@ -463,6 +591,8 @@ function App({
   initialOpeningRollState,
   initialOpeningTurnPending,
   gameStorage,
+  profileStorage,
+  lineageStorage,
   moveEvaluator,
   analysisCaptureEnabled = false,
   analysisCaptureRuntime,
@@ -477,6 +607,15 @@ function App({
     () => gameStorage ?? createLocalGameStorage(DEFAULT_GAME_STORAGE_KEY),
     [gameStorage]
   );
+  const learnerProfileStorage = useMemo(
+    () => profileStorage ?? createLocalLearnerProfileStorage(),
+    [profileStorage]
+  );
+  const gameLineageStorage = useMemo(
+    () => lineageStorage ?? createLocalGameLineageStorage(),
+    [lineageStorage]
+  );
+  const bootstrapNow = useMemo(() => new Date().toISOString(), []);
   const initialDurableState = useMemo(
     () =>
       resolveInitialDurableAppState(
@@ -486,6 +625,14 @@ function App({
         initialOpeningTurnPending
       ),
     [initialGameState, initialOpeningRollState, initialOpeningTurnPending, snapshotStorage]
+  );
+  const initialProfileState = useMemo(
+    () => resolveInitialLearnerProfileState(learnerProfileStorage, bootstrapNow),
+    [bootstrapNow, learnerProfileStorage]
+  );
+  const initialLineageState = useMemo(
+    () => resolveInitialLineageState(gameLineageStorage),
+    [gameLineageStorage]
   );
   const captureRuntime = analysisCaptureRuntime ?? DEFAULT_ANALYSIS_CAPTURE_RUNTIME;
   const captureMetadata = analysisCaptureMetadata ?? DEFAULT_ANALYSIS_CAPTURE_METADATA;
@@ -521,7 +668,15 @@ function App({
   );
   const [lastCaptureFailure, setLastCaptureFailure] = useState<AnalysisCaptureFailure | null>(null);
   const [importText, setImportText] = useState<string>("");
+  const [lineageId, setLineageId] = useState<string>(initialLineageState.lineageId);
+  const [learnerProfile, setLearnerProfile] = useState<LearnerProfile>(initialProfileState.profile);
+  const [profileWritable, setProfileWritable] = useState<boolean>(initialProfileState.writable);
+  const [lineageWritable, setLineageWritable] = useState<boolean>(initialLineageState.writable);
+  const [profileMessage, setProfileMessage] = useState<string | null>(
+    initialProfileState.message ?? initialLineageState.message
+  );
   const skipInitialPersistRef = useRef(true);
+  const skipInitialProfilePersistRef = useRef(true);
   const moveEvaluationRequestIdRef = useRef(0);
 
   useEffect(() => {
@@ -573,6 +728,24 @@ function App({
     const reference = getAnalysisSessionGameReference(activeSnapshot);
     return reference.ok ? reference.gameReference : null;
   }, [activeSnapshot]);
+
+  const learnerOwnershipMode = useMemo<LearnerOwnershipMode>(() => {
+    return getLineageOwnershipMode(learnerProfile, lineageId);
+  }, [learnerProfile, lineageId]);
+
+  const learnerProgress = useMemo(() => {
+    return summarizeLearnerProgress(learnerProfile, { recentWindowSize: 20 });
+  }, [learnerProfile]);
+
+  const progressContext = useMemo<Extract<CoachQuestionContext, { kind: "progress-profile" }>>(
+    () => ({
+      kind: "progress-profile",
+      gameReference: activeGameReference ?? "unresolved-game-reference",
+      snapshot: activeSnapshot,
+      progress: learnerProgress
+    }),
+    [activeGameReference, activeSnapshot, learnerProgress]
+  );
 
   useEffect(() => {
     if (
@@ -1084,6 +1257,44 @@ function App({
     }
   }, [exportSnapshotText, snapshotStorage]);
 
+  useEffect(() => {
+    if (skipInitialProfilePersistRef.current) {
+      skipInitialProfilePersistRef.current = false;
+      return;
+    }
+
+    if (!profileWritable) {
+      return;
+    }
+
+    try {
+      learnerProfileStorage.save(encodeLearnerProfile(learnerProfile));
+    } catch {
+      setProfileWritable(false);
+      setProfileMessage("Learner profile could not be saved. Progress remains in memory only.");
+    }
+  }, [learnerProfile, learnerProfileStorage, profileWritable]);
+
+  useEffect(() => {
+    if (!lineageWritable) {
+      return;
+    }
+
+    try {
+      gameLineageStorage.save(
+        encodePersistedGameLineage({
+          lineageId,
+          updatedAt: new Date().toISOString()
+        })
+      );
+    } catch {
+      setLineageWritable(false);
+      setProfileMessage(
+        "Lineage metadata could not be saved. Current session uses in-memory identity."
+      );
+    }
+  }, [gameLineageStorage, lineageId, lineageWritable]);
+
   const resetTransientState = (): void => {
     setSelectedSteps([]);
     setSelectedSource(null);
@@ -1095,6 +1306,44 @@ function App({
     setSelectedSteps([]);
     setSelectedSource(null);
     setHoveredDestination(null);
+  };
+
+  const onSetLearnerOwnership = (mode: LearnerOwnershipMode): void => {
+    const now = new Date().toISOString();
+    setLearnerProfile((current) =>
+      setLineageOwnership({
+        profile: current,
+        lineageId,
+        mode,
+        resolvedAt: now
+      })
+    );
+    setProfileMessage(null);
+  };
+
+  const onClearLearnerProfile = (): void => {
+    const confirmed = window.confirm(
+      "Clear all locally stored learner progress observations and ownership metadata?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    setLearnerProfile(createLearnerProfile({ updatedAt: now }));
+
+    if (profileWritable) {
+      try {
+        learnerProfileStorage.clear();
+        setProfileMessage("Learner profile data cleared locally.");
+      } catch {
+        setProfileWritable(false);
+        setProfileMessage("Learner profile clear failed. In-memory profile was reset.");
+      }
+    } else {
+      setProfileMessage("Learner profile reset in memory for this session.");
+    }
   };
 
   const clearStagedSelection = (): void => {
@@ -1191,6 +1440,7 @@ function App({
     }
 
     if (diceBefore !== null) {
+      const observedAt = captureRuntime.now();
       const { committedTurn, nextTurnHistory } = createCommittedTurnRecord({
         player: playerBefore,
         dice: diceBefore,
@@ -1205,6 +1455,27 @@ function App({
       });
 
       setTurnHistory(nextTurnHistory);
+
+      const rankedForObservation =
+        moveEvaluationResult?.ok &&
+        (moveEvaluationResult.analysis.kind === "evaluated" ||
+          moveEvaluationResult.analysis.kind === "no-legal-moves")
+          ? moveEvaluationResult.analysis
+          : undefined;
+
+      setLearnerProfile((current) => {
+        const ingested = ingestCommittedLearnerObservation({
+          profile: current,
+          lineageId,
+          ...(activeGameReference === null ? {} : { gameReference: activeGameReference }),
+          ownershipMode: learnerOwnershipMode,
+          committedTurn,
+          ...(rankedForObservation === undefined ? {} : { rankedAnalysis: rankedForObservation }),
+          observedAt
+        });
+
+        return ingested.profile;
+      });
 
       if (analysisCaptureEnabled) {
         const snapshotAfterTurn = buildGameSnapshot(
@@ -1391,6 +1662,7 @@ function App({
     }
 
     setGameState(nextGameState);
+    setLineageId(createLineageId());
     setOpeningRollState(nextOpeningRollState);
     setOpeningTurnPending(nextOpeningTurnPending);
     setDieOne(DEFAULT_MANUAL_DIE_ONE);
@@ -1450,6 +1722,7 @@ function App({
     const restoredOpening = fromSnapshotOpeningState(parsed.snapshot.openingState);
 
     setGameState(parsed.snapshot.gameState);
+    setLineageId(createLineageId());
     setTurnHistory(parsed.snapshot.turnHistory);
     setOpeningRollState(restoredOpening.openingRollState);
     setOpeningTurnPending(restoredOpening.openingTurnPending);
@@ -1468,6 +1741,7 @@ function App({
   const onClearSavedGame = (): void => {
     try {
       snapshotStorage.clear();
+      gameLineageStorage.clear();
       setMessage(
         "Saved game cleared. Reloading now will start fresh unless this game is saved again."
       );
@@ -2017,6 +2291,7 @@ function App({
           <CoachPanel
             lineageKey={coachLineageKey}
             context={coachContext}
+            progressContext={progressContext}
             runtime={resolvedCoachRuntime}
             fixtureEnabled={coachFixtureEnabled}
             evaluatorConfigured={moveEvaluator !== undefined}
@@ -2050,11 +2325,24 @@ function App({
             canCopySnapshot={canCopySnapshot}
             snapshotFormat={GAME_SNAPSHOT_FORMAT}
             snapshotVersion={GAME_SNAPSHOT_VERSION}
+            learnerOwnershipMode={learnerOwnershipMode}
+            recentWindowSize={learnerProgress.recentWindowSize}
+            recentBestOrReasonableCount={learnerProgress.counts.recentWindow.bestOrReasonable}
+            recentMistakeCount={learnerProgress.counts.recentWindow.mistake}
+            recentMajorMistakeCount={learnerProgress.counts.recentWindow.majorMistake}
+            recentUnclassifiedCount={learnerProgress.counts.recentWindow.unclassified}
+            profileGamesRepresented={learnerProgress.gamesRepresented.fullProfile}
+            profileStorageStatus={
+              profileWritable ? (lineageWritable ? "ready" : "lineage-memory-only") : "memory-only"
+            }
+            profileMessage={profileMessage}
             onRollForOpening={onRollForOpening}
             onRollDice={onRollDice}
             onSetDice={onSetDice}
             onPassTurn={onPassTurn}
             onNewGame={onNewGame}
+            onSetLearnerOwnership={onSetLearnerOwnership}
+            onClearLearnerProfile={onClearLearnerProfile}
             onCopyExportSnapshot={onCopyExportSnapshot}
             onImportTextChange={setImportText}
             onValidateAndImportSnapshot={onValidateAndImportSnapshot}

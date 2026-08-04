@@ -12,6 +12,7 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Select bounded question-relevant legal move evidence without introducing strategic verdicts.
 - Resolve recommendation-support authority from evaluator evidence before model generation.
 - Apply deterministic versioned move-quality classification for committed historical checker-play decisions before model generation.
+- Own deterministic learner-profile contracts (schema/versioning, ownership mapping, observation ingestion, reconciliation, aggregation, and trend-limited progress evidence).
 - Define knowledge-retriever boundary with no-op, fixture, and local curated-content implementations.
 - Build provider-neutral chat-model requests from conversation + evidence.
 - Orchestrate single-request coaching submission flow with explicit failure handling.
@@ -40,6 +41,7 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Prompt builder (`buildCoachModelRequest`) for `ChatModel`.
 - Recommendation-support evidence (`recommendationSupport`) for current-position claims.
 - Deterministic move classification policy (`MOVE_CLASSIFICATION_POLICY`) and review evidence classification outputs.
+- Deterministic learner-profile APIs (`createLearnerProfile`, `setLineageOwnership`, `ingestCommittedLearnerObservation`, `summarizeLearnerProgress`, parse/encode/decode).
 - Historical review evidence (`historicalReviewEvidence`) with deterministic played-move coverage limits.
 - Knowledge interfaces (`CoachKnowledgeRetriever`) and local/fixture/no-op retrievers.
 - Submission orchestration (`submitCoachQuestion`) for host-layer integration, including optional on-demand history-turn ranked-analysis hydration.

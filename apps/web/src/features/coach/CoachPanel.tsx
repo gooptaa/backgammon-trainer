@@ -22,6 +22,7 @@ import styles from "./CoachPanel.module.css";
 interface CoachPanelProps {
   readonly lineageKey: string;
   readonly context: CoachQuestionContext;
+  readonly progressContext?: Extract<CoachQuestionContext, { kind: "progress-profile" }>;
   readonly model?: ChatModel;
   readonly runtime: CoachRuntime;
   readonly fixtureEnabled: boolean;
@@ -239,6 +240,23 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
     }
   }
 
+  if (row.evidence.progressEvidence !== undefined) {
+    const progress = row.evidence.progressEvidence;
+    details.push(`Progress policy: ${progress.policyId} ${progress.policyVersion}`);
+    details.push(`Recent window size: ${progress.recentWindowSize}`);
+    details.push(`Recent best/reasonable: ${progress.counts.recentWindow.bestOrReasonable}`);
+    details.push(`Recent mistakes: ${progress.counts.recentWindow.mistake}`);
+    details.push(`Recent major mistakes: ${progress.counts.recentWindow.majorMistake}`);
+    details.push(`Recent unclassified: ${progress.counts.recentWindow.unclassified}`);
+    details.push(`Recent eligible decisions: ${progress.counts.recentWindow.totalEligible}`);
+    details.push(`Recent classified decisions: ${progress.counts.recentWindow.totalClassified}`);
+    details.push(`Recent games represented: ${progress.gamesRepresented.recentWindow}`);
+    details.push(`Trend status: ${progress.trend.status}`);
+    for (const limitation of progress.limitations) {
+      details.push(`Progress limitation: ${limitation}`);
+    }
+  }
+
   if (row.evidence.evaluatorProvenance !== undefined) {
     details.push(`Evaluator provider: ${row.evidence.evaluatorProvenance.provider}`);
     details.push(`Evaluator coverage: ${row.evidence.evaluatorCoverage ?? "unknown"}`);
@@ -276,6 +294,7 @@ const summarizeEvidence = (row: EvidenceRow): readonly string[] => {
 export function CoachPanel({
   lineageKey,
   context,
+  progressContext,
   model,
   runtime,
   fixtureEnabled,
@@ -341,6 +360,7 @@ export function CoachPanel({
       conversation,
       question: draft,
       context,
+      ...(progressContext === undefined ? {} : { progressContext }),
       ...(analysisSession === undefined ? {} : { analysisSession }),
       ...(resolveHistoryTurnAnalysis === undefined ? {} : { resolveHistoryTurnAnalysis }),
       ...(resolveGameReviewTurnAnalysis === undefined ? {} : { resolveGameReviewTurnAnalysis }),

@@ -40,6 +40,7 @@ Why these exports are public:
 - GNU integration and process management.
 - Browser/local/backend persistence adapters.
 - Coaching labels, recommendations, and lesson planning.
+- Cross-game learner ownership/profile persistence or progress aggregation.
 
 Analysis-session records remain raw evaluator-linked evidence for committed turns. Versioned pedagogical move classification is derived in coach-domain orchestration and is not persisted in this package format.
 

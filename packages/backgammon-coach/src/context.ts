@@ -10,6 +10,7 @@ import type {
 } from "@backgammon-trainer/backgammon-analysis-session";
 import type { DiceRoll, GameSnapshot, TurnRecord } from "@backgammon-trainer/backgammon-engine";
 import type { Player } from "@backgammon-trainer/backgammon-domain";
+import type { LearnerProgressSnapshot } from "./profile";
 
 export type CoachTurnStatus =
   | "opening-unresolved"
@@ -85,6 +86,12 @@ export type CoachQuestionContext =
       readonly referencedTurnNumbers?: readonly number[];
       readonly reviewedTurns?: readonly CoachGameReviewTurnEvidence[];
       readonly analysisSession?: AnalysisSession;
+    }
+  | {
+      readonly kind: "progress-profile";
+      readonly gameReference: string;
+      readonly snapshot: GameSnapshot;
+      readonly progress: LearnerProgressSnapshot;
     };
 
 export interface ResolveCoachQuestionContextInput {
@@ -235,6 +242,10 @@ export const formatCoachContextLabel = (context: CoachQuestionContext): string =
     }
 
     return `Reviewing turn ${context.turnNumber} · pass`;
+  }
+
+  if (context.kind === "progress-profile") {
+    return "Context: Learner progress";
   }
 
   if (context.reviewScope === "completed-game") {

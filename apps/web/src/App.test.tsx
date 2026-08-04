@@ -28,6 +28,8 @@ import {
   type FixtureAnalysisSessionMetadataConfig
 } from "./features/analysis-session/analysisCapture";
 import { type GameStorage } from "./features/sandbox/gameStorage";
+import { type LearnerProfileStorage } from "./features/profile/profileStorage";
+import { type GameLineageStorage } from "./features/profile/lineageStorage";
 
 import App from "./App";
 
@@ -320,18 +322,52 @@ const createInspectableMemoryGameStorage = (
   };
 };
 
+const createMemoryLearnerProfileStorage = (
+  initialValue: string | null = null
+): LearnerProfileStorage => {
+  let value = initialValue;
+
+  return {
+    load: () => value,
+    save: (nextValue) => {
+      value = nextValue;
+    },
+    clear: () => {
+      value = null;
+    }
+  };
+};
+
+const createMemoryLineageStorage = (initialValue: string | null = null): GameLineageStorage => {
+  let value = initialValue;
+
+  return {
+    load: () => value,
+    save: (nextValue) => {
+      value = nextValue;
+    },
+    clear: () => {
+      value = null;
+    }
+  };
+};
+
 const renderApp = (options?: {
   initialGameState?: GameState;
   randomSource?: () => number;
   initialOpeningRollState?: OpeningRollState;
   initialOpeningTurnPending?: boolean;
   gameStorage?: GameStorage;
+  profileStorage?: LearnerProfileStorage;
+  lineageStorage?: GameLineageStorage;
   moveEvaluator?: PositionEvaluator;
   analysisCaptureEnabled?: boolean;
   analysisCaptureRuntime?: AnalysisCaptureRuntime;
   analysisCaptureMetadata?: FixtureAnalysisSessionMetadataConfig;
 }): void => {
   const storage = options?.gameStorage ?? createMemoryGameStorage();
+  const profileStorage = options?.profileStorage ?? createMemoryLearnerProfileStorage();
+  const lineageStorage = options?.lineageStorage ?? createMemoryLineageStorage();
 
   render(
     <App
@@ -356,6 +392,8 @@ const renderApp = (options?: {
         ? {}
         : { analysisCaptureMetadata: options.analysisCaptureMetadata })}
       gameStorage={storage}
+      profileStorage={profileStorage}
+      lineageStorage={lineageStorage}
     />
   );
 };
@@ -1767,5 +1805,40 @@ describe("App legal move outcomes panel", () => {
     expect(screen.getByTestId("evaluator-contract-preview")).not.toHaveTextContent(
       "Normalized score: 99"
     );
+  });
+});
+
+describe("App learner profile", () => {
+  it("shows concise recent learner progress summary and local-only profile status", () => {
+    renderApp();
+
+    fireEvent.click(screen.getByText("Learner Profile"));
+
+    expect(screen.getByTestId("recent-progress-heading")).toHaveTextContent(
+      "Recent 20 learner decisions"
+    );
+    expect(screen.getByTestId("recent-progress-best-reasonable")).toHaveTextContent(
+      "Best/reasonable: 0"
+    );
+    expect(screen.getByTestId("profile-storage-status")).toHaveTextContent("local persisted");
+  });
+
+  it("persists learner ownership selection across reload for the same saved lineage", () => {
+    const profileStorage = createMemoryLearnerProfileStorage();
+    const lineageStorage = createMemoryLineageStorage();
+
+    renderApp({ profileStorage, lineageStorage });
+
+    fireEvent.click(screen.getByText("Learner Profile"));
+    fireEvent.change(screen.getByLabelText("Learner side for this game"), {
+      target: { value: "white" }
+    });
+
+    cleanup();
+
+    renderApp({ profileStorage, lineageStorage });
+    fireEvent.click(screen.getByText("Learner Profile"));
+
+    expect(screen.getByLabelText("Learner side for this game")).toHaveValue("white");
   });
 });
