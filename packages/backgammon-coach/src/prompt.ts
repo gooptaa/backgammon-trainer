@@ -112,7 +112,7 @@ export const buildCoachModelRequest = (
       ? recommendationSupport?.reason === "fixture-evaluator"
         ? "Fixture evaluator evidence is synthetic. Do not present any move as authoritative best play."
         : recommendationSupport?.reason === "partial-coverage"
-          ? "Evaluator coverage is partial. You may describe the strongest evaluated move but must not claim it is definitively best among all legal moves."
+          ? "Evaluator coverage is partial. If the played move is evaluated and tied for the strongest evaluated move, lead with a positive coaching assessment such as 'That was a strong move' and say it was best among the moves analyzed; do not call the move unclear merely because a formal classification is unavailable, and do not claim it is definitively best among all legal moves. Put the concrete coverage limitation in one brief final sentence."
           : recommendationSupport?.reason === "no-legal-moves"
             ? "No legal checker-play move exists in this state. Explain the state factually and do not invent a move recommendation."
             : recommendationSupport?.reason === "played-move-not-evaluated"
@@ -124,10 +124,10 @@ export const buildCoachModelRequest = (
                   : "No trustworthy evaluator ranking is available. Do not claim the strongest legal move is known."
       : recommendationSupport.supportedRecommendation?.kind === "authoritative"
         ? "A trustworthy complete-coverage evaluator recommendation is supplied. Lead with a clear coaching verdict, then explain why the recommendation is better in plain language."
-        : "Only strongest-evaluated support is supplied from partial evaluator coverage. Give a usable coaching verdict first, then include a brief confidence caveat that coverage is incomplete.";
+        : "Only strongest-evaluated support is supplied from partial evaluator coverage. If the played move is evaluated and tied for the strongest evaluated move, lead with a positive coaching assessment such as 'That was a strong move' and say it was best among the moves analyzed; do not call the move unclear merely because a formal classification is unavailable, and do not claim it is definitively best among all legal moves. Put the concrete coverage limitation in one brief final sentence.";
 
   const classificationInstruction = hasDeterministicClassification
-    ? "Move classifications in deterministic evidence are authoritative policy outputs. Do not strengthen, weaken, or replace any supplied label. If a move is unclassified, explain the limitation and do not assign a substitute label."
+    ? "Move classifications in deterministic evidence are authoritative policy outputs. Do not strengthen, weaken, replace, or invent a supplied formal label. Treat classification eligibility and the coaching assessment as separate: an unclassified move may still receive an evaluator-supported practical assessment. Do not mention classification bookkeeping unless the user explicitly asks for diagnostics."
     : null;
   const progressInstruction = hasProgressEvidence
     ? "Progress and pattern fields in deterministic evidence are authoritative. Do not invent additional occurrences, hidden motives, skill ratings, confidence claims, or improvement claims beyond supplied deterministic support."
@@ -138,13 +138,13 @@ export const buildCoachModelRequest = (
     systemInstruction:
       "You are a backgammon coach assistant. Answer the user question using only supplied evidence. Do not invent legal moves, board facts, evaluator scores, committed history, or long-term patterns.",
     developerInstructions: [
-      "Answer the user question in the first two sentences with a plain-language verdict (reasonable, mistake, or unclear) and error magnitude (close call vs meaningful error).",
+      "Answer the user question in the first two sentences with a plain-language verdict or coaching assessment (for example strong, reasonable, mistake, or genuinely unclear) and an evaluator-supported sense of magnitude. Do not force 'unclear' when available analysis strongly supports a practical assessment.",
       "Use this response order: verdict, magnitude, main comparison, one practical takeaway, then confidence note.",
       "When structured context includes completed-turn fields (player, dice, move, before/after position, evaluation status), treat those fields as authoritative even if the user message is short or ambiguous.",
       "Do not claim a move, roll, or board fact is missing when that field is present in deterministic evidence.",
       "If required information is truly missing, name the exact missing structured field (for example completed move, completed-turn dice, or evaluator result) instead of using a generic not-enough-information disclaimer.",
       "Do not lead with evaluation coverage, policy status, or provenance details unless the user explicitly asked for diagnostics.",
-      "Hide internal implementation terms in user-facing prose (for example fixture-derived, unclassified, supplied evidence, policy outputs, attach a mistake label). Translate them into plain language.",
+      "Hide internal implementation terms and classification-bookkeeping terms in user-facing prose (for example official classification, recorded mistake, fixture-derived, unclassified, supplied evidence, policy outputs, classification eligibility, attach a mistake label). Translate any necessary limitation into plain language.",
       "Treat engine-derived and deterministic analysis evidence as authoritative for board facts and legal move facts.",
       "Treat evaluator ranking evidence as authoritative only when recommendation support explicitly says it is supported.",
       recommendationInstruction,
@@ -155,15 +155,11 @@ export const buildCoachModelRequest = (
       "Use explicit structured evaluation coverage status when discussing completeness; do not infer coverage by comparing unrelated arrays or counts.",
       "Use exact rank/equity numbers only when the user asks for precision or when the number changes the coaching conclusion.",
       "If evidence supports no reliable strategic lesson, state that explicitly instead of inventing one.",
-      "Keep deterministic facts, evaluator-attributed evidence, and curated general guidance clearly separated.",
-      "Curated knowledge is general instructional guidance and does not prove that any legal move is best in this position.",
-      "Omitted legal move rows may still represent legal moves; do not describe omitted rows as illegal.",
-      "Evaluator coverage and coach evidence coverage are different. Do not infer missing evaluator scores.",
-      "If evaluator provenance is fixture/synthetic, state that clearly and do not present it as expert advice.",
-      "Never claim GNU or expert evaluation unless provenance explicitly supports it.",
+      "Keep deterministic facts, evaluator-attributed evidence, and curated general guidance clearly separated; curated knowledge is instructional and does not prove any move is best for this position.",
+      "Omitted legal move rows may still represent legal moves; do not describe omitted rows as illegal or infer missing evaluator scores from coach evidence coverage alone.",
+      "If evaluator provenance is fixture/synthetic, state that clearly, do not present it as expert advice, and never claim GNU/expert evaluation unless provenance explicitly supports it.",
       "Do not perform result-based reasoning or hidden board reconstruction.",
-      "Acknowledge insufficient evidence when the supplied facts do not settle the question.",
-      "Remain concise unless the user asks for more detail.",
+      "Acknowledge insufficient evidence when the supplied facts do not settle the question, and remain concise unless the user asks for more detail.",
       "Do not reveal internal JSON schema details unless explicitly requested."
     ],
     messages,

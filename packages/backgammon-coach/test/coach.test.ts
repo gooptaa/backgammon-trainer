@@ -1123,6 +1123,50 @@ describe("coach evidence and prompt", () => {
       status: "unclassified",
       reason: "partial-coverage"
     });
+
+    const request = buildCoachModelRequest({
+      requestId: "request-partial-top-play",
+      conversationId: "conversation-1",
+      userMessageId: "message-partial-top-play",
+      question: "What should I have done?",
+      context,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      evidence: evidence.evidence,
+      knowledge: [],
+      responsePreferences: {
+        explanationLevel: "beginner",
+        verbosity: "normal"
+      }
+    });
+    const instructions = request.developerInstructions ?? [];
+
+    expect(
+      instructions.some(
+        (instruction) =>
+          instruction.includes("lead with a positive coaching assessment") &&
+          instruction.includes("best among the moves analyzed") &&
+          instruction.includes("do not call the move unclear")
+      )
+    ).toBe(true);
+    expect(
+      instructions.some(
+        (instruction) =>
+          instruction.includes(
+            "classification eligibility and the coaching assessment as separate"
+          ) && instruction.includes("unless the user explicitly asks for diagnostics")
+      )
+    ).toBe(true);
+    expect(
+      instructions.some(
+        (instruction) =>
+          instruction.includes("official classification") &&
+          instruction.includes("recorded mistake")
+      )
+    ).toBe(true);
+    expect(evidence.evidence.historicalReviewEvidence?.moveClassification).toMatchObject({
+      status: "unclassified",
+      reason: "partial-coverage"
+    });
   });
 
   it("does not assign played rank when historical played move is uncovered", async () => {
@@ -1266,6 +1310,7 @@ describe("coach evidence and prompt", () => {
 
     expect(request.messages).toHaveLength(1);
     expect(request.systemInstruction).toContain("Do not invent legal moves");
+    expect((request.developerInstructions ?? []).length).toBeLessThanOrEqual(24);
     expect(JSON.stringify(request)).toContain("curatedKnowledge");
     expect(JSON.stringify(request)).not.toContain("apiKey");
   });
@@ -1740,6 +1785,102 @@ describe("coach knowledge and orchestration", () => {
     expect(deterministicEvidence.historicalReviewEvidence?.turnNumber).toBe(1);
   });
 
+  it.each([
+    "Can you assess White's most recent move?",
+    "Give me feedback on my move",
+    "Feedback on that last move"
+  ])(
+    "routes common completed-move feedback wording with structured turn evidence: %s",
+    async (question) => {
+      const snapshot = buildSnapshot();
+      const moveTurn = createTurnRecord({
+        turnNumber: 1,
+        player: "white",
+        dice: { dice: [3, 1] },
+        outcome: {
+          kind: "move",
+          move: {
+            player: "white",
+            steps: [
+              {
+                kind: "point-to-point",
+                fromPoint: 8,
+                toPoint: 5,
+                dieValue: 3,
+                dieIndex: 0,
+                hitsBlot: false
+              },
+              {
+                kind: "point-to-point",
+                fromPoint: 6,
+                toPoint: 5,
+                dieValue: 1,
+                dieIndex: 1,
+                hitsBlot: false
+              }
+            ]
+          }
+        },
+        positionBefore: snapshot.gameState.position,
+        positionAfter: snapshot.gameState.position,
+        gameStatusAfter: { state: "in-progress" },
+        phase: "normal"
+      });
+      const context = resolveCoachQuestionContext({
+        gameReference: "game-1",
+        snapshot: {
+          ...snapshot,
+          gameState: createGameState(snapshot.gameState.position, "black"),
+          turnHistory: [moveTurn]
+        },
+        openingResolved: true,
+        gameComplete: false,
+        legalMoveOutcomesResult: null
+      });
+
+      const fixtureModel = createFixtureChatModel();
+      let capturedRequest: unknown;
+      const result = await submitCoachQuestion({
+        model: {
+          ...fixtureModel,
+          complete: async (request: Parameters<typeof fixtureModel.complete>[0]) => {
+            capturedRequest = request;
+            return fixtureModel.complete(request);
+          }
+        },
+        knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+        runtime,
+        conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+        question,
+        context,
+        pending: false
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok || result.context.kind !== "history-turn") {
+        return;
+      }
+
+      expect(result.context.turnNumber).toBe(1);
+      expect(result.evidence.committedTurnEvidence?.dice).toEqual([3, 1]);
+      expect(result.evidence.historicalReviewEvidence?.playedMove).toBe("8/5, 6/5");
+      const deterministicEvidence = (
+        capturedRequest as { evidence?: { deterministicEvidence?: unknown } }
+      ).evidence?.deterministicEvidence as {
+        historicalReviewEvidence?: {
+          turnNumber?: number;
+          dice?: readonly number[];
+          playedMove?: string;
+        };
+      };
+      expect(deterministicEvidence.historicalReviewEvidence).toMatchObject({
+        turnNumber: 1,
+        dice: [3, 1],
+        playedMove: "8/5, 6/5"
+      });
+    }
+  );
+
   it("targets the most recent completed move after turn advance", async () => {
     const snapshot = buildSnapshot();
 
@@ -1999,6 +2140,74 @@ describe("coach knowledge and orchestration", () => {
 
     expect(result.context.rankedAnalysis).toBeDefined();
     expect(result.evidence.committedTurnEvidence?.hasAnalysisRecord).toBe(true);
+
+    const fixtureModel = createFixtureChatModel();
+    let capturedFollowUpRequest: unknown;
+    const followUp = await submitCoachQuestion({
+      model: {
+        ...fixtureModel,
+        complete: async (request: Parameters<typeof fixtureModel.complete>[0]) => {
+          capturedFollowUpRequest = request;
+          return fixtureModel.complete(request);
+        }
+      },
+      knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+      runtime,
+      conversation: result.conversation,
+      question: "Wouldn't the move from 13-11 leave a vulnerable blot?",
+      context,
+      analysisSession,
+      pending: false
+    });
+
+    expect(followUp.ok).toBe(true);
+    if (!followUp.ok || followUp.context.kind !== "history-turn") {
+      return;
+    }
+
+    expect(followUp.context.turnNumber).toBe(1);
+    expect(followUp.context.selectionSource).toBe("conversation-follow-up");
+    expect(followUp.context.rankedAnalysis).toBeDefined();
+    expect(followUp.evidence.historicalReviewEvidence?.legalMoves?.length).toBeGreaterThan(0);
+    const followUpEvidence = (
+      capturedFollowUpRequest as { evidence?: { deterministicEvidence?: unknown } }
+    ).evidence?.deterministicEvidence as {
+      questionContext?: { kind?: string };
+      historicalReviewEvidence?: { turnNumber?: number; legalMoves?: readonly unknown[] };
+    };
+    expect(followUpEvidence.questionContext?.kind).toBe("history-turn");
+    expect(followUpEvidence.historicalReviewEvidence?.turnNumber).toBe(1);
+    expect(followUpEvidence.historicalReviewEvidence?.legalMoves?.length).toBeGreaterThan(0);
+
+    const explicitCurrentPosition = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+      runtime,
+      conversation: result.conversation,
+      question: "What should I do now in the current position?",
+      context,
+      analysisSession,
+      pending: false
+    });
+    expect(explicitCurrentPosition.ok).toBe(true);
+    if (explicitCurrentPosition.ok) {
+      expect(explicitCurrentPosition.context.kind).toBe("current-position");
+
+      const afterFocusCleared = await submitCoachQuestion({
+        model: createFixtureChatModel(),
+        knowledgeRetriever: createNoopCoachKnowledgeRetriever(),
+        runtime,
+        conversation: explicitCurrentPosition.conversation,
+        question: "Why is that important?",
+        context,
+        analysisSession,
+        pending: false
+      });
+      expect(afterFocusCleared.ok).toBe(true);
+      if (afterFocusCleared.ok) {
+        expect(afterFocusCleared.context.kind).toBe("current-position");
+      }
+    }
   });
 
   it("resolves explicit full-game review questions for in-progress games", async () => {

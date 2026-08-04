@@ -23,7 +23,7 @@ type HistoryTurnContext = Extract<CoachQuestionContext, { kind: "history-turn" }
 type GameReviewContext = Extract<CoachQuestionContext, { kind: "game-review" }>;
 
 const LAST_MOVE_REVIEW_PATTERN =
-  /\b(last move|that move|that play|what should i have done|why was .* better|review my last move|was that move good|thoughts on that|how was that|was that good|was that okay)\b/i;
+  /\b(last move|(?:most )?recent move|that move|that play|what should i have done|why was .* better|review my (?:last|most recent|recent) move|feedback (?:on|about|for) (?:my|the|that) (?:last |most recent |recent )?move|(?:give|provide) me feedback on (?:my|the|that) (?:last |most recent |recent )?move|assess (?:my|the|that) (?:last |most recent |recent )?move|was that move good|thoughts on that|how was that|was that good|was that okay)\b/i;
 
 const FULL_GAME_REVIEW_PATTERN =
   /\b(review (this )?game|review (the )?game so far|how did i play|most important decisions|where did i give up the most|which moves should i study)\b/i;
@@ -33,6 +33,12 @@ const PROGRESS_PROFILE_PATTERN =
 
 const PATTERN_PROFILE_PATTERN =
   /\b(what do i keep doing wrong|main pattern|focus on next|same kind of mistake|where am i losing the most|recurring pattern|repeating the same mistakes)\b/i;
+
+const CURRENT_POSITION_PATTERN =
+  /\b(current position|this position|position now|what should i (?:do|play) now|what (?:are|is) my (?:move|moves|option|options) now|what should i play|what should i do)\b/i;
+
+const CONVERSATIONAL_MOVE_FOLLOW_UP_PATTERN =
+  /(?:\b(?:that|the|this|other|alternative|earlier|proposed|preferred|next-best) (?:move|play|choice|alternative)\b|\bmove from\b|\b(?:why|wouldn['’]?t|would|does|did|is|was|could|should)\b|\b(?:blot|point|checker|safe|vulnerable|equity|rank|alternative)\b|\b(?:bar|off|[1-9]|1[0-9]|2[0-4])\s*(?:\/|-)\s*(?:bar|off|[1-9]|1[0-9]|2[0-4])\b)/i;
 
 const TURN_NUMBER_PATTERN = /\bturn\s+([0-9]+)\b/gi;
 
@@ -50,6 +56,14 @@ const isProgressProfileQuestion = (question: string): boolean => {
 
 const isPatternProfileQuestion = (question: string): boolean => {
   return PATTERN_PROFILE_PATTERN.test(question);
+};
+
+const isCurrentPositionQuestion = (question: string): boolean => {
+  return CURRENT_POSITION_PATTERN.test(question);
+};
+
+const isConversationalMoveFollowUpQuestion = (question: string): boolean => {
+  return CONVERSATIONAL_MOVE_FOLLOW_UP_PATTERN.test(question);
 };
 
 const parseReferencedTurnNumbers = (question: string): readonly number[] => {
@@ -92,6 +106,55 @@ const getLatestCommittedMoveTurn = (
     selectionSource: "latest-committed",
     snapshot: structuredClone(context.snapshot),
     turnRecord: structuredClone(latestMoveTurn),
+    ...(analysisRecord === undefined
+      ? {}
+      : {
+          analysisRecord: structuredClone(analysisRecord),
+          rankedAnalysis: structuredClone(analysisRecord.rankedMoveAnalysis)
+        })
+  };
+};
+
+const getConversationFocusedMoveTurn = (
+  context: CoachQuestionContext,
+  conversation: CoachConversation,
+  analysisSession?: AnalysisSession
+): HistoryTurnContext | undefined => {
+  if (context.kind !== "current-position") {
+    return undefined;
+  }
+
+  const focusedMessage = [...conversation.messages]
+    .reverse()
+    .find((message) => message.role === "user");
+  const turnNumber =
+    focusedMessage?.role === "user" &&
+    focusedMessage.contextReference.kind === "history-turn" &&
+    focusedMessage.contextReference.gameReference === context.gameReference
+      ? focusedMessage.contextReference.turnNumber
+      : undefined;
+  if (turnNumber === undefined) {
+    return undefined;
+  }
+
+  const turnRecord = context.snapshot.turnHistory.find(
+    (candidate) => candidate.turnNumber === turnNumber && candidate.outcome.kind === "move"
+  );
+  if (turnRecord === undefined) {
+    return undefined;
+  }
+
+  const analysisRecord = analysisSession?.records.find(
+    (record) => record.turnNumber === turnRecord.turnNumber
+  );
+
+  return {
+    kind: "history-turn",
+    gameReference: context.gameReference,
+    turnNumber: turnRecord.turnNumber,
+    selectionSource: "conversation-follow-up",
+    snapshot: structuredClone(context.snapshot),
+    turnRecord: structuredClone(turnRecord),
     ...(analysisRecord === undefined
       ? {}
       : {
@@ -250,6 +313,7 @@ const resolveFullGameReviewContext = async (input: {
 const resolveSubmissionContext = (
   question: string,
   context: CoachQuestionContext,
+  conversation: CoachConversation,
   analysisSession?: AnalysisSession,
   progressContext?: Extract<CoachQuestionContext, { kind: "progress-profile" }>
 ): Promise<CoachQuestionContext> => {
@@ -267,6 +331,13 @@ const resolveSubmissionContext = (
       context.kind === "current-position"
     ) {
       return Promise.resolve(progressContext ?? context);
+    }
+
+    if (!isCurrentPositionQuestion(question) && isConversationalMoveFollowUpQuestion(question)) {
+      const focusedTurn = getConversationFocusedMoveTurn(context, conversation, analysisSession);
+      if (focusedTurn !== undefined) {
+        return Promise.resolve(focusedTurn);
+      }
     }
 
     return Promise.resolve(context);
@@ -443,6 +514,7 @@ export const submitCoachQuestion = async (input: {
   let resolvedContext = await resolveSubmissionContext(
     question,
     input.context,
+    input.conversation,
     input.analysisSession,
     input.progressContext
   );

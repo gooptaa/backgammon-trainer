@@ -133,7 +133,7 @@ export interface CoachEvidenceBundle {
   legalMoveSelection?: CoachLegalMoveSelectionSummary;
   legalMoveEvidence?: readonly CoachMoveEvidence[];
   historicalReviewEvidence?: {
-    selectionSource: "selected-history" | "latest-committed";
+    selectionSource: "selected-history" | "latest-committed" | "conversation-follow-up";
     turnNumber: number;
     player: "white" | "black";
     dice: readonly [number, number];

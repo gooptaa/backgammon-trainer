@@ -61,7 +61,7 @@ export type CoachQuestionContext =
       readonly kind: "history-turn";
       readonly gameReference: string;
       readonly turnNumber: number;
-      readonly selectionSource: "selected-history" | "latest-committed";
+      readonly selectionSource: "selected-history" | "latest-committed" | "conversation-follow-up";
       readonly snapshot: GameSnapshot;
       readonly turnRecord: TurnRecord;
       readonly analysisRecord?: AnalysisRecord;
