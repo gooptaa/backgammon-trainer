@@ -59,6 +59,7 @@ Text coach pipeline boundary is:
 - typed user message
 - explicit question context resolution from app state
 - deterministic evidence bundle generation with selected legal move rows
+- provider-neutral retrieval plan derived from deterministic context/evidence
 - optional replaceable knowledge retrieval boundary backed by local curated corpus in the current milestone
 - provider-neutral `ChatModel` request/response
 - trusted server execution boundary for real provider adapters

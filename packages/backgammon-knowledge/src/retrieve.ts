@@ -17,6 +17,11 @@ const tokenize = (value: string): readonly string[] => {
     .filter((token) => token.length >= 3);
 };
 
+const hasWord = (source: string, word: string): boolean => {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|\\s)${escaped}($|\\s)`).test(source);
+};
+
 const pushReason = (
   reasons: BackgammonKnowledgeMatchReason[],
   reason: BackgammonKnowledgeMatchReason
@@ -32,9 +37,20 @@ export const searchBackgammonKnowledge = (
   query: BackgammonKnowledgeQuery
 ): readonly BackgammonKnowledgeMatch[] => {
   const normalizedQuestion = normalizeText(query.question);
-  const questionTokens = tokenize(query.question);
+  const questionTokens = query.queryTerms ?? tokenize(query.question);
   const conceptSet = new Set(query.concepts ?? []);
+  const preferredTrackSet = new Set(query.preferredTracks ?? []);
   const maxEntries = Math.max(0, query.maxEntries);
+  const definitionIntent = query.intent === "definition";
+  const learningFocusIntent = query.intent === "learning-focus";
+
+  if (
+    maxEntries === 0 ||
+    query.intent === "unsupported-topic" ||
+    query.intent === "progress-count"
+  ) {
+    return [];
+  }
 
   const scored = corpus.entries
     .map((entry) => {
@@ -44,6 +60,15 @@ export const searchBackgammonKnowledge = (
       if (entry.contexts.includes(query.contextKind)) {
         score += 2;
         pushReason(reasons, { kind: "context", value: query.contextKind });
+      }
+
+      if (preferredTrackSet.has(entry.track)) {
+        score += 3;
+        pushReason(reasons, { kind: "track", value: entry.track });
+      }
+
+      if (query.learnerLevel !== undefined && entry.learnerLevel === query.learnerLevel) {
+        score += 1;
       }
 
       for (const concept of entry.concepts) {
@@ -56,18 +81,33 @@ export const searchBackgammonKnowledge = (
       for (const alias of entry.aliases) {
         const normalizedAlias = normalizeText(alias);
         if (normalizedAlias.length > 0 && normalizedQuestion.includes(normalizedAlias)) {
-          score += 5;
+          score += definitionIntent ? 7 : 5;
           pushReason(reasons, { kind: "alias", value: alias });
         }
       }
 
-      const keywordSource = normalizeText(
-        `${entry.title} ${entry.summary} ${entry.concepts.join(" ")}`
-      );
+      const titleAndAliases = normalizeText(`${entry.title} ${entry.aliases.join(" ")}`);
+      const summaryAndConcepts = normalizeText(`${entry.summary} ${entry.concepts.join(" ")}`);
       for (const token of questionTokens) {
-        if (keywordSource.includes(token)) {
+        if (hasWord(titleAndAliases, token)) {
+          score += 2;
+          pushReason(reasons, { kind: "keyword", value: token });
+          continue;
+        }
+
+        if (summaryAndConcepts.includes(token)) {
           score += 1;
           pushReason(reasons, { kind: "keyword", value: token });
+        }
+      }
+
+      if (learningFocusIntent && entry.track === "move-review") {
+        score += 1;
+      }
+
+      if (!learningFocusIntent && !definitionIntent && query.contextKind === "current-position") {
+        if (entry.track === "move-review") {
+          score -= 2;
         }
       }
 
@@ -76,7 +116,8 @@ export const searchBackgammonKnowledge = (
         reasons,
         score,
         hasStrongReason: reasons.some(
-          (reason) => reason.kind === "alias" || reason.kind === "concept"
+          (reason) =>
+            reason.kind === "alias" || reason.kind === "concept" || reason.kind === "track"
         ),
         keywordReasonCount: reasons.filter((reason) => reason.kind === "keyword").length
       };

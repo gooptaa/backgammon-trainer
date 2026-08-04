@@ -67,6 +67,7 @@ Current knowledge boundaries:
 - no runtime filesystem access is used in browser coaching flows
 - real provider execution (when configured) occurs in server runtime and does not change knowledge package responsibilities
 - recommendation-support authority is resolved in coach-domain evidence, not in curated knowledge entries
+- retrieval consumes provider-neutral plan metadata from coach orchestration (intent, concepts, preferred tracks, bounded terms) while remaining deterministic and lexical
 
 Current analysis-capture boundaries:
 

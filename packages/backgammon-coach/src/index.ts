@@ -89,12 +89,18 @@ export {
   createLocalCoachKnowledgeRetriever,
   createNoopCoachKnowledgeRetriever,
   type CoachKnowledgeExcerpt,
+  type CoachKnowledgeRetrievalPlan,
   type CoachKnowledgeProvenance,
   type CoachKnowledgeRequest,
   type CoachKnowledgeResult,
   type CoachKnowledgeRetriever,
   type CoachKnowledgeSelectionReason
 } from "./knowledge";
+
+export {
+  buildCoachKnowledgeRetrievalPlan,
+  type CoachKnowledgeRetrievalIntent
+} from "./retrievalPlan";
 
 export {
   buildCoachModelRequest,

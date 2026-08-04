@@ -13,7 +13,6 @@ concepts:
   - game-plan
   - candidate-comparison
 contexts:
-  - current-position
   - history-turn
   - game-review
 aliases:

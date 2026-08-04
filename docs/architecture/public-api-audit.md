@@ -49,7 +49,7 @@ No unintended package exports were found in this audit. Public surfaces are curr
 ### `@backgammon-trainer/backgammon-coach`
 
 - Export surface: root entry only.
-- Public symbols: conversation model, context resolver, evidence builder, knowledge retriever boundary, prompt builder, host orchestration helpers, and learner-profile domain contracts.
+- Public symbols: conversation model, context resolver, evidence builder, retrieval-plan builder, knowledge retriever boundary, prompt builder, host orchestration helpers, and learner-profile domain contracts.
 - Why public: host layers need a deterministic coaching-domain API (including versioned learner-progress aggregation contracts) without importing UI or provider SDK types.
 
 ### `@backgammon-trainer/backgammon-knowledge`

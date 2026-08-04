@@ -15,6 +15,7 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Apply deterministic versioned skill-pattern detection for committed learner decisions using factual played-vs-stronger move comparisons.
 - Own deterministic learner-profile contracts (schema/versioning, ownership mapping, observation ingestion, reconciliation, aggregation, and trend-limited progress evidence).
 - Define knowledge-retriever boundary with no-op, fixture, and local curated-content implementations.
+- Define a provider-neutral retrieval-plan boundary that maps resolved context + deterministic evidence into bounded retriever inputs.
 - Build provider-neutral chat-model requests from conversation + evidence.
 - Orchestrate single-request coaching submission flow with explicit failure handling.
 - Resolve evidence-backed historical review targets for "last move" questions without replacing explicit history selection.
@@ -46,6 +47,7 @@ Provide deterministic, provider-neutral coaching conversation orchestration that
 - Deterministic pattern-policy APIs (`PATTERN_DETECTION_POLICY`, `MAIN_PATTERN_SUPPORT_RULES`, `deriveLearnerPatternSignals`, `summarizeLearnerPatterns`).
 - Historical review evidence (`historicalReviewEvidence`) with deterministic played-move coverage limits.
 - Knowledge interfaces (`CoachKnowledgeRetriever`) and local/fixture/no-op retrievers.
+- Retrieval planning (`buildCoachKnowledgeRetrievalPlan`) for deterministic question-versus-context balancing.
 - Submission orchestration (`submitCoachQuestion`) for host-layer integration, including optional on-demand history-turn ranked-analysis hydration.
 
 ## Last Move Review Behavior

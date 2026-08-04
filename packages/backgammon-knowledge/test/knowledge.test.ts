@@ -48,4 +48,94 @@ describe("backgammon knowledge corpus", () => {
 
     expect(results).toEqual([]);
   });
+
+  it("favors glossary entry for direct definition questions", () => {
+    const results = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
+      question: "What is an anchor?",
+      contextKind: "current-position",
+      concepts: ["anchors"],
+      preferredTracks: ["board-vision"],
+      intent: "definition",
+      queryTerms: ["anchor"],
+      maxEntries: 2
+    });
+
+    expect(results[0]?.entry.id).toBe("kg.glossary-core-terms");
+  });
+
+  it("favors point-making guidance for point-making questions", () => {
+    const results = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
+      question: "Should I make a point or run?",
+      contextKind: "current-position",
+      concepts: ["made-points", "anchors"],
+      preferredTracks: ["making-points"],
+      queryTerms: ["make", "point", "run"],
+      maxEntries: 3
+    });
+
+    expect(results[0]?.entry.id).toBe("kg.making-points-and-anchors");
+  });
+
+  it("favors race guidance for race questions", () => {
+    const results = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
+      question: "How should I think about this race and pip count?",
+      contextKind: "current-position",
+      concepts: ["race"],
+      preferredTracks: ["game-plan-recognition"],
+      queryTerms: ["race", "pip", "count"],
+      maxEntries: 3
+    });
+
+    expect(results[0]?.entry.id).toBe("kg.pip-count-and-race-context");
+  });
+
+  it("favors bearing-off guidance for bearing-off questions", () => {
+    const results = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
+      question: "How should I bear off safely here?",
+      contextKind: "current-position",
+      concepts: ["bearing-off", "risk"],
+      preferredTracks: ["game-plan-recognition"],
+      queryTerms: ["bear", "off", "safely"],
+      maxEntries: 3
+    });
+
+    expect(results[0]?.entry.id).toBe("kg.bearing-off-basics");
+  });
+
+  it("favors opening and priming entries for topic-specific questions", () => {
+    const openingResults = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
+      question: "What are opening principles I should follow?",
+      contextKind: "current-position",
+      concepts: ["game-plan"],
+      preferredTracks: ["game-plan-recognition"],
+      queryTerms: ["opening", "principles"],
+      maxEntries: 2
+    });
+
+    const primingResults = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
+      question: "How do prime battles change my move choice?",
+      contextKind: "current-position",
+      concepts: ["structure", "game-plan"],
+      preferredTracks: ["game-plan-recognition"],
+      queryTerms: ["prime", "battles"],
+      maxEntries: 2
+    });
+
+    expect(openingResults[0]?.entry.id).toBe("kg.opening-principles-first");
+    expect(primingResults[0]?.entry.id).toBe("kg.priming-and-prime-battles");
+  });
+
+  it("does not let broad coaching snippets outrank specific strategy by default", () => {
+    const results = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
+      question: "Why was blot exposure a mistake in this move review?",
+      contextKind: "history-turn",
+      concepts: ["blots", "safety", "move-review"],
+      preferredTracks: ["hitting-tempo", "safety-risk"],
+      queryTerms: ["blot", "exposure", "mistake"],
+      maxEntries: 4
+    });
+
+    expect(results[0]?.entry.id).toBe("kg.blots-hits-and-tempo");
+    expect(results[0]?.entry.id).not.toBe("kg.reusable-coaching-snippets");
+  });
 });

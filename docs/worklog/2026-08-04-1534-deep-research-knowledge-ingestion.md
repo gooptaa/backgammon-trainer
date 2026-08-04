@@ -98,6 +98,7 @@ Total proposed briefs found: 17
 ## Files changed
 
 Added:
+
 - packages/backgammon-knowledge/content/blitz-holding-and-backgame-plans.md
 - packages/backgammon-knowledge/content/common-mistakes-and-myths.md
 - packages/backgammon-knowledge/content/curriculum-ladders-and-practice.md
@@ -111,6 +112,7 @@ Added:
 - packages/backgammon-knowledge/content/timing-structure-and-volatility.md
 
 Modified:
+
 - docs/knowledge/authoring-guide.md
 - packages/backgammon-knowledge/README.md
 - packages/backgammon-knowledge/content/bearing-off-basics.md

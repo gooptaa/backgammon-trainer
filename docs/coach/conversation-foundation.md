@@ -197,6 +197,7 @@ Included in milestone:
 - no-op retriever
 - deterministic fixture retriever
 - deterministic local curated-content retriever backed by `@backgammon-trainer/backgammon-knowledge`
+- provider-neutral retrieval planning boundary (`buildCoachKnowledgeRetrievalPlan(...)`)
 
 Out of scope:
 
@@ -217,6 +218,8 @@ Current bounds:
 - max conversation messages included: 8
 - max message chars per included message: 800
 - max knowledge excerpts included: 4
+- max knowledge text per excerpt included: 900 chars
+- max aggregate knowledge text included: 2400 chars
 - max selected legal move rows in evidence: 8
 - max evidence warnings included: 8
 

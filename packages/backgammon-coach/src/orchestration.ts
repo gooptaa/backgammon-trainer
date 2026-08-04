@@ -1,5 +1,4 @@
 import type { ChatModel, ChatModelResult } from "@backgammon-trainer/ai-contracts";
-import type { BackgammonKnowledgeConcept } from "@backgammon-trainer/backgammon-knowledge";
 import type { RankedLegalMoveAnalysis } from "@backgammon-trainer/backgammon-analysis";
 import type {
   AnalysisRecord,
@@ -15,8 +14,8 @@ import {
 } from "./conversation";
 import { buildCoachEvidence, type CoachEvidenceBundle } from "./evidence";
 import type { CoachKnowledgeRetriever } from "./knowledge";
-import { mapPatternSkillAreaToKnowledgeConcept } from "./patterns";
 import { buildCoachModelRequest, toCoachEvidenceReference, toCoachModelProvenance } from "./prompt";
+import { buildCoachKnowledgeRetrievalPlan } from "./retrievalPlan";
 import type { CoachGameReviewTurnEvidence, CoachQuestionContext } from "./context";
 
 type HistoryTurnContext = Extract<CoachQuestionContext, { kind: "history-turn" }>;
@@ -350,90 +349,6 @@ const resolveSubmissionContext = (
   return Promise.resolve(getLatestCommittedMoveTurn(context, analysisSession) ?? context);
 };
 
-const deriveKnowledgeConcepts = (
-  context: CoachQuestionContext,
-  evidence: CoachEvidenceBundle
-): readonly BackgammonKnowledgeConcept[] => {
-  const concepts = new Set<BackgammonKnowledgeConcept>();
-
-  if (context.kind === "current-position") {
-    concepts.add("current-position");
-    if (context.currentTurn.stagedSelection !== undefined) {
-      concepts.add("candidate-comparison");
-    }
-
-    for (const outcome of context.currentTurn.legalMoveOutcomes?.outcomes ?? []) {
-      if (outcome.move.steps.some((step) => step.hitsBlot)) {
-        concepts.add("hits");
-        concepts.add("blots");
-      }
-
-      if (outcome.move.steps.some((step) => step.kind === "enter-from-bar")) {
-        concepts.add("bar-entry");
-      }
-
-      if (outcome.move.steps.some((step) => step.kind === "bear-off")) {
-        concepts.add("bearing-off");
-      }
-
-      if (
-        outcome.featureDelta.white.madePointCountDelta > 0 ||
-        outcome.featureDelta.black.madePointCountDelta > 0
-      ) {
-        concepts.add("made-points");
-      }
-    }
-  }
-
-  if (context.kind === "history-turn" || context.kind === "game-review") {
-    concepts.add("move-review");
-  }
-
-  if (context.kind === "progress-profile") {
-    concepts.add("move-review");
-    const mainPattern = context.progress.patterns.mainPattern;
-    if (mainPattern.status === "supported") {
-      concepts.add(mapPatternSkillAreaToKnowledgeConcept(mainPattern.skillArea));
-    }
-    if (mainPattern.status === "tied") {
-      for (const pattern of mainPattern.tiedPatterns) {
-        concepts.add(mapPatternSkillAreaToKnowledgeConcept(pattern.skillArea));
-      }
-    }
-  }
-
-  if (evidence.positionFacts?.relationship.contactStatus === "contact") {
-    concepts.add("contact");
-  }
-
-  if (evidence.positionFacts?.relationship.contactStatus === "race") {
-    concepts.add("race");
-  }
-
-  if (
-    (evidence.positionFacts?.white.checkersOnBar ?? 0) > 0 ||
-    (evidence.positionFacts?.black.checkersOnBar ?? 0) > 0
-  ) {
-    concepts.add("bar-entry");
-  }
-
-  if (
-    (evidence.positionFacts?.white.madeHomeBoardPointCount ?? 0) > 0 ||
-    (evidence.positionFacts?.black.madeHomeBoardPointCount ?? 0) > 0
-  ) {
-    concepts.add("inner-board");
-  }
-
-  if (
-    (evidence.positionFacts?.white.checkersBorneOff ?? 0) > 0 ||
-    (evidence.positionFacts?.black.checkersBorneOff ?? 0) > 0
-  ) {
-    concepts.add("bearing-off");
-  }
-
-  return [...concepts].sort();
-};
-
 export interface CoachRuntime {
   createId(): string;
   now(): string;
@@ -588,10 +503,15 @@ export const submitCoachQuestion = async (input: {
     context: resolvedContext,
     conversation: appendUserResult.conversation
   });
+  const retrievalPlan = buildCoachKnowledgeRetrievalPlan({
+    question,
+    context: resolvedContext,
+    evidence: evidenceResult.evidence
+  });
 
   const knowledgeRetriever = input.knowledgeRetriever;
   const knowledgeResult =
-    knowledgeRetriever === undefined
+    knowledgeRetriever === undefined || !retrievalPlan.enabled
       ? {
           ok: true as const,
           entries: [] as const
@@ -599,11 +519,9 @@ export const submitCoachQuestion = async (input: {
       : await knowledgeRetriever.retrieve({
           question,
           contextKind: resolvedContext.kind,
-          ...(() => {
-            const concepts = deriveKnowledgeConcepts(resolvedContext, evidenceResult.evidence);
-            return concepts.length === 0 ? {} : { concepts };
-          })(),
-          maxItems: 4
+          concepts: retrievalPlan.concepts,
+          maxItems: retrievalPlan.maxItems,
+          plan: retrievalPlan
         });
 
   const knowledgeEntries = knowledgeResult.ok ? knowledgeResult.entries : [];

@@ -21,6 +21,8 @@ contexts:
 aliases:
   - glossary
   - core terms
+  - what is an anchor
+  - anchor definition
   - what does anchor mean
   - what does timing mean
   - define backgame

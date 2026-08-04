@@ -1,22 +1,36 @@
 import {
   backgammonKnowledgeCorpus,
   searchBackgammonKnowledge,
+  type BackgammonKnowledgeLearnerLevel,
   type BackgammonKnowledgeContextKind,
   type BackgammonKnowledgeConcept,
+  type BackgammonKnowledgeTrack,
   type BackgammonKnowledgeMatchReason
 } from "@backgammon-trainer/backgammon-knowledge";
 
 import type { CoachContextKind } from "./conversation";
+import type { CoachKnowledgeRetrievalIntent } from "./retrievalPlan";
+
+export interface CoachKnowledgeRetrievalPlan {
+  readonly intent: CoachKnowledgeRetrievalIntent;
+  readonly enabled: boolean;
+  readonly maxItems: number;
+  readonly concepts: readonly BackgammonKnowledgeConcept[];
+  readonly preferredTracks: readonly BackgammonKnowledgeTrack[];
+  readonly queryTerms: readonly string[];
+  readonly learnerLevel?: BackgammonKnowledgeLearnerLevel;
+}
 
 export interface CoachKnowledgeRequest {
   readonly question: string;
   readonly contextKind: CoachContextKind;
   readonly concepts?: readonly BackgammonKnowledgeConcept[];
   readonly maxItems: number;
+  readonly plan?: CoachKnowledgeRetrievalPlan;
 }
 
 export interface CoachKnowledgeSelectionReason {
-  readonly kind: "context" | "concept" | "alias" | "keyword";
+  readonly kind: "context" | "concept" | "alias" | "keyword" | "track";
   readonly value: string;
 }
 
@@ -146,14 +160,32 @@ export const createFixtureCoachKnowledgeRetriever = (input: {
 export const createLocalCoachKnowledgeRetriever = (): CoachKnowledgeRetriever => {
   return {
     retrieve: async (request) => {
+      if (request.plan?.enabled === false || request.maxItems <= 0) {
+        return {
+          ok: true,
+          entries: []
+        };
+      }
+
       const knowledgeContextKind: BackgammonKnowledgeContextKind =
         request.contextKind === "progress-profile" ? "game-review" : request.contextKind;
+
+      const concepts = request.plan?.concepts ?? request.concepts;
+      const maxEntries = request.plan?.maxItems ?? request.maxItems;
 
       const matches = searchBackgammonKnowledge(backgammonKnowledgeCorpus, {
         question: request.question,
         contextKind: knowledgeContextKind,
-        ...(request.concepts === undefined ? {} : { concepts: request.concepts }),
-        maxEntries: request.maxItems
+        ...(concepts === undefined ? {} : { concepts }),
+        ...(request.plan?.preferredTracks === undefined
+          ? {}
+          : { preferredTracks: request.plan.preferredTracks }),
+        ...(request.plan?.queryTerms === undefined ? {} : { queryTerms: request.plan.queryTerms }),
+        ...(request.plan?.intent === undefined ? {} : { intent: request.plan.intent }),
+        ...(request.plan?.learnerLevel === undefined
+          ? {}
+          : { learnerLevel: request.plan.learnerLevel }),
+        maxEntries
       });
 
       return {

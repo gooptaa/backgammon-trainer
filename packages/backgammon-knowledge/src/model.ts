@@ -49,6 +49,12 @@ export type BackgammonKnowledgeContextKind = (typeof BACKGAMMON_KNOWLEDGE_CONTEX
 export type BackgammonKnowledgeLearnerLevel = (typeof BACKGAMMON_KNOWLEDGE_LEARNER_LEVELS)[number];
 export type BackgammonKnowledgeProvenanceKind =
   (typeof BACKGAMMON_KNOWLEDGE_PROVENANCE_KINDS)[number];
+export type BackgammonKnowledgeRetrievalIntent =
+  | "strategic-explanation"
+  | "definition"
+  | "learning-focus"
+  | "progress-count"
+  | "unsupported-topic";
 
 export interface BackgammonKnowledgeProvenance {
   readonly kind: BackgammonKnowledgeProvenanceKind;
@@ -79,11 +85,15 @@ export interface BackgammonKnowledgeQuery {
   readonly question: string;
   readonly contextKind: BackgammonKnowledgeContextKind;
   readonly concepts?: readonly BackgammonKnowledgeConcept[];
+  readonly preferredTracks?: readonly BackgammonKnowledgeTrack[];
+  readonly queryTerms?: readonly string[];
+  readonly learnerLevel?: BackgammonKnowledgeLearnerLevel;
+  readonly intent?: BackgammonKnowledgeRetrievalIntent;
   readonly maxEntries: number;
 }
 
 export interface BackgammonKnowledgeMatchReason {
-  readonly kind: "context" | "concept" | "alias" | "keyword";
+  readonly kind: "context" | "concept" | "alias" | "keyword" | "track";
   readonly value: string;
 }
 

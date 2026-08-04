@@ -14,7 +14,6 @@ concepts:
   - hits
   - anchors
 contexts:
-  - current-position
   - history-turn
   - game-review
 aliases:

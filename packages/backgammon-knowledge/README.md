@@ -12,6 +12,7 @@ Provide browser-safe, repository-owned curated backgammon teaching content with 
 - Export browser-safe generated corpus data.
 - Validate corpus integrity and topic coverage.
 - Provide deterministic local retrieval helpers over the curated corpus.
+- Provide deterministic metadata-aware local retrieval helpers (question, context, concepts, preferred tracks, bounded terms).
 
 ## Allowed Dependencies
 

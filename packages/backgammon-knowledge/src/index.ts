@@ -15,6 +15,7 @@ export {
   type BackgammonKnowledgeMatchReason,
   type BackgammonKnowledgeProvenance,
   type BackgammonKnowledgeQuery,
+  type BackgammonKnowledgeRetrievalIntent,
   type BackgammonKnowledgeTrack
 } from "./model";
 

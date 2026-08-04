@@ -204,15 +204,39 @@ Inputs:
 
 - user question text
 - resolved context kind
+- provider-neutral retrieval plan derived from deterministic evidence
 - factual retrieval concepts derived by the coach layer
-- `maxItems`
+- preferred tracks and bounded query terms
+- bounded `maxItems`
+
+Retrieval-plan ownership:
+
+- coach orchestration owns retrieval planning (`buildCoachKnowledgeRetrievalPlan(...)`)
+- the retriever owns deterministic metadata-aware scoring and bounded selection
+- prompt construction consumes selected entries and does not own retrieval logic
+
+Question-versus-context precedence:
+
+- user wording remains first-class through lexical alias/keyword matching
+- deterministic context and concepts improve relevance through metadata signals
+- context improves retrieval but does not override direct user intent
+- unsupported cube and factual progress-count intents intentionally return no-match
 
 Selection rules:
 
 - alias matches and concept matches are stronger than context-only overlap
+- preferred-track matches are explicit deterministic metadata signals
+- title/alias token matches are weighted above generic summary token matches
 - generic context-only matches are ignored to avoid filler results
 - no-match is valid
 - tie-breaking is deterministic by score, reason count, then stable entry id
+
+Corpus-role behavior:
+
+- specific strategy entries are favored for position-specific questions
+- broad coaching prose entries are deprioritized for current-position strategy retrieval
+- curriculum and coaching-pattern entries are favored only for explicit learning-focus intent
+- glossary definitions are favored for direct term-definition intent
 
 Returned entries keep:
 
@@ -233,6 +257,12 @@ Returned entries keep:
 - deterministic evidence
 - curated knowledge
 - truncation metadata
+
+Current bounded knowledge limits in prompt evidence:
+
+- max knowledge entries included: 4
+- max knowledge text per entry: 900 chars
+- max aggregate knowledge text: 2400 chars
 
 Developer instructions explicitly tell the model that:
 

@@ -141,7 +141,7 @@ export const backgammonKnowledgeCorpus: BackgammonKnowledgeCorpus = {
         "game-plan",
         "candidate-comparison"
       ],
-      contexts: ["current-position", "history-turn", "game-review"],
+      contexts: ["history-turn", "game-review"],
       aliases: [
         "study plan",
         "what should i learn next",
@@ -211,6 +211,8 @@ export const backgammonKnowledgeCorpus: BackgammonKnowledgeCorpus = {
       aliases: [
         "glossary",
         "core terms",
+        "what is an anchor",
+        "anchor definition",
         "what does anchor mean",
         "what does timing mean",
         "define backgame"
@@ -333,7 +335,7 @@ export const backgammonKnowledgeCorpus: BackgammonKnowledgeCorpus = {
       learnerLevel: "beginner",
       track: "move-review",
       concepts: ["move-review", "game-plan", "contact", "risk", "structure", "hits", "anchors"],
-      contexts: ["current-position", "history-turn", "game-review"],
+      contexts: ["history-turn", "game-review"],
       aliases: [
         "short coaching snippet",
         "quick explanation",

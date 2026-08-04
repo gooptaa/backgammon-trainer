@@ -35,12 +35,16 @@ export interface BuildCoachModelRequestLimits {
   readonly maxConversationMessages: number;
   readonly maxMessageChars: number;
   readonly maxKnowledgeEntries: number;
+  readonly maxKnowledgeEntryChars: number;
+  readonly maxKnowledgeTotalChars: number;
 }
 
 const DEFAULT_LIMITS: BuildCoachModelRequestLimits = {
   maxConversationMessages: 8,
   maxMessageChars: 800,
-  maxKnowledgeEntries: 4
+  maxKnowledgeEntries: 4,
+  maxKnowledgeEntryChars: 900,
+  maxKnowledgeTotalChars: 2400
 };
 
 const toChatMessage = (
@@ -77,17 +81,43 @@ export const buildCoachModelRequest = (
     maxConversationMessages:
       limits?.maxConversationMessages ?? DEFAULT_LIMITS.maxConversationMessages,
     maxMessageChars: limits?.maxMessageChars ?? DEFAULT_LIMITS.maxMessageChars,
-    maxKnowledgeEntries: limits?.maxKnowledgeEntries ?? DEFAULT_LIMITS.maxKnowledgeEntries
+    maxKnowledgeEntries: limits?.maxKnowledgeEntries ?? DEFAULT_LIMITS.maxKnowledgeEntries,
+    maxKnowledgeEntryChars: limits?.maxKnowledgeEntryChars ?? DEFAULT_LIMITS.maxKnowledgeEntryChars,
+    maxKnowledgeTotalChars: limits?.maxKnowledgeTotalChars ?? DEFAULT_LIMITS.maxKnowledgeTotalChars
   };
 
   const messages = trimMessageHistory(request.conversation, resolvedLimits);
-  const boundedKnowledge = request.knowledge
-    .slice(0, resolvedLimits.maxKnowledgeEntries)
-    .map((entry) => ({
+  const boundedKnowledge: {
+    id: string;
+    title: string;
+    summary: string;
+    text: string;
+    source: string;
+    track: string;
+    concepts: readonly string[];
+    selectionReasons: readonly { kind: string; value: string }[];
+    provenance: { kind: string; label: string };
+  }[] = [];
+  let aggregateKnowledgeChars = 0;
+  for (const entry of request.knowledge.slice(0, resolvedLimits.maxKnowledgeEntries)) {
+    const available = Math.max(0, resolvedLimits.maxKnowledgeTotalChars - aggregateKnowledgeChars);
+    if (available === 0) {
+      break;
+    }
+
+    const entryLimit = Math.min(resolvedLimits.maxKnowledgeEntryChars, available);
+    const text = entry.text.slice(0, entryLimit);
+    if (text.length === 0) {
+      continue;
+    }
+
+    const summary = (entry.summary ?? text.slice(0, 160)).slice(0, 200);
+    aggregateKnowledgeChars += text.length;
+    boundedKnowledge.push({
       id: entry.id,
       title: entry.title,
-      summary: entry.summary ?? entry.text.slice(0, 160),
-      text: entry.text,
+      summary,
+      text,
       source: entry.source,
       track: entry.track ?? "general",
       concepts: [...(entry.concepts ?? [])],
@@ -96,7 +126,8 @@ export const buildCoachModelRequest = (
         kind: entry.provenance?.kind ?? "project-authored",
         label: entry.provenance?.label ?? entry.source
       }
-    }));
+    });
+  }
   const serializedEvidence = JSON.parse(JSON.stringify(request.evidence)) as JsonValue;
   const recommendationSupport = request.evidence.recommendationSupport;
   const hasProgressEvidence = request.evidence.progressEvidence !== undefined;
@@ -176,8 +207,11 @@ export const buildCoachModelRequest = (
         maxConversationMessages: resolvedLimits.maxConversationMessages,
         maxMessageChars: resolvedLimits.maxMessageChars,
         maxKnowledgeEntries: resolvedLimits.maxKnowledgeEntries,
+        maxKnowledgeEntryChars: resolvedLimits.maxKnowledgeEntryChars,
+        maxKnowledgeTotalChars: resolvedLimits.maxKnowledgeTotalChars,
         conversationMessagesIncluded: messages.length,
-        knowledgeIncluded: boundedKnowledge.length
+        knowledgeIncluded: boundedKnowledge.length,
+        knowledgeCharsIncluded: aggregateKnowledgeChars
       }
     }
   };

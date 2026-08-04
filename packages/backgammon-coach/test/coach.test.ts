@@ -17,6 +17,7 @@ import {
   appendCoachCoachMessage,
   appendUserCoachMessage,
   buildCoachEvidence,
+  buildCoachKnowledgeRetrievalPlan,
   buildCoachModelRequest,
   createCoachConversation,
   createLearnerProfile,
@@ -1567,6 +1568,102 @@ describe("coach knowledge and orchestration", () => {
     expect(firstEntry.selectionReasons?.length ?? 0).toBeGreaterThan(0);
   });
 
+  it("builds glossary-focused retrieval plans for definition questions", () => {
+    const snapshot = buildSnapshot();
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const conversation = createCoachConversation({ id: "conversation-1", createdAt: NOW });
+    const evidence = buildCoachEvidence({
+      question: "What is an anchor?",
+      context,
+      conversation
+    }).evidence;
+
+    const plan = buildCoachKnowledgeRetrievalPlan({
+      question: "What is an anchor?",
+      context,
+      evidence
+    });
+
+    expect(plan.enabled).toBe(true);
+    expect(plan.intent).toBe("definition");
+    expect(plan.preferredTracks).toContain("board-vision");
+    expect(plan.maxItems).toBe(2);
+  });
+
+  it("skips retrieval for factual progress-count questions", async () => {
+    const snapshot = buildSnapshot();
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const progressContext = {
+      kind: "progress-profile" as const,
+      gameReference: "game-1",
+      snapshot,
+      progress: summarizeLearnerProgress(createLearnerProfile({ updatedAt: NOW }), {
+        recentWindowSize: 20
+      })
+    };
+
+    const result = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createLocalCoachKnowledgeRetriever(),
+      runtime,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      question: "How many mistakes have I made?",
+      context,
+      progressContext,
+      pending: false
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.context.kind).toBe("progress-profile");
+    expect(result.knowledge).toEqual([]);
+  });
+
+  it("returns no curated knowledge for unsupported cube questions", async () => {
+    const snapshot = buildSnapshot();
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const result = await submitCoachQuestion({
+      model: createFixtureChatModel(),
+      knowledgeRetriever: createLocalCoachKnowledgeRetriever(),
+      runtime,
+      conversation: createCoachConversation({ id: "conversation-1", createdAt: NOW }),
+      question: "Should I double from this position?",
+      context,
+      pending: false
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.knowledge).toEqual([]);
+  });
+
   it("submits through model and preserves immutable conversation state", async () => {
     const snapshot = buildSnapshot();
     const context = resolveCoachQuestionContext({
@@ -2838,5 +2935,70 @@ describe("coach knowledge and orchestration", () => {
       "Do not invent additional occurrences"
     );
     expect((request.developerInstructions ?? []).join("\n")).toContain("hidden motives");
+  });
+
+  it("bounds curated knowledge text in prompt construction", () => {
+    const snapshot = buildSnapshot();
+    const context = resolveCoachQuestionContext({
+      gameReference: "game-1",
+      snapshot,
+      openingResolved: true,
+      gameComplete: false,
+      legalMoveOutcomesResult: null
+    });
+
+    const conversation = createCoachConversation({ id: "conversation-1", createdAt: NOW });
+    const evidence = buildCoachEvidence({
+      question: "Help me compare these moves",
+      context,
+      conversation
+    }).evidence;
+
+    const longText = "x".repeat(1200);
+    const request = buildCoachModelRequest(
+      {
+        requestId: "request-bounds",
+        conversationId: conversation.id,
+        userMessageId: "m1",
+        question: "Help me compare these moves",
+        context,
+        conversation,
+        evidence,
+        knowledge: [
+          {
+            id: "k1",
+            title: "Entry 1",
+            summary: "Summary 1",
+            text: longText,
+            source: "fixture"
+          },
+          {
+            id: "k2",
+            title: "Entry 2",
+            summary: "Summary 2",
+            text: longText,
+            source: "fixture"
+          }
+        ],
+        responsePreferences: {
+          explanationLevel: "beginner",
+          verbosity: "normal"
+        }
+      },
+      {
+        maxKnowledgeEntries: 4,
+        maxKnowledgeEntryChars: 500,
+        maxKnowledgeTotalChars: 700
+      }
+    );
+
+    const serialized = request.evidence as {
+      curatedKnowledge: readonly { text: string }[];
+      truncation: { knowledgeCharsIncluded: number };
+    };
+
+    expect(serialized.curatedKnowledge.length).toBeGreaterThan(0);
+    expect(serialized.curatedKnowledge[0]?.text.length).toBeLessThanOrEqual(500);
+    expect(serialized.truncation.knowledgeCharsIncluded).toBeLessThanOrEqual(700);
   });
 });
