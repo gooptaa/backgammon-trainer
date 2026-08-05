@@ -1,5 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as engineModule from "@backgammon-trainer/backgammon-engine";
 import {
   createGameState,
   createTurnRecord,
@@ -18,10 +19,12 @@ import {
 } from "@backgammon-trainer/backgammon-domain";
 import {
   type EvaluatePositionRequest,
+  getCanonicalMoveFingerprint,
   getMoveFingerprint,
   type EvaluatePositionResult,
   type PositionEvaluator
 } from "@backgammon-trainer/backgammon-analysis";
+import { decodeLearnerProfile } from "@backgammon-trainer/backgammon-coach";
 import { createFixturePositionEvaluator } from "@backgammon-trainer/backgammon-analysis/fixture";
 import {
   type AnalysisCaptureRuntime,
@@ -32,6 +35,7 @@ import { type LearnerProfileStorage } from "./features/profile/profileStorage";
 import { type GameLineageStorage } from "./features/profile/lineageStorage";
 
 import App from "./App";
+import type { GameShellMode } from "./features/profile/lineageStorage";
 
 type OpeningRollState =
   | {
@@ -104,6 +108,19 @@ const createNoLegalMovePosition = (): BoardPosition =>
     points: {
       8: { player: "white", checkerCount: 1 },
       7: { player: "black", checkerCount: 2 }
+    },
+    borneOff: {
+      white: 14,
+      black: 13
+    }
+  });
+
+const createBlackNoLegalMovePosition = (): BoardPosition =>
+  createPosition({
+    points: {
+      22: { player: "black", checkerCount: 1 },
+      23: { player: "white", checkerCount: 2 },
+      24: { player: "white", checkerCount: 2 }
     },
     borneOff: {
       white: 14,
@@ -338,6 +355,31 @@ const createMemoryLearnerProfileStorage = (
   };
 };
 
+const createInspectableMemoryLearnerProfileStorage = (
+  initialValue: string | null = null
+): {
+  storage: LearnerProfileStorage;
+  getValue: () => string | null;
+  saveCalls: () => number;
+} => {
+  let value = initialValue;
+  const save = vi.fn((nextValue: string) => {
+    value = nextValue;
+  });
+
+  return {
+    storage: {
+      load: () => value,
+      save,
+      clear: () => {
+        value = null;
+      }
+    },
+    getValue: () => value,
+    saveCalls: () => save.mock.calls.length
+  };
+};
+
 const createMemoryLineageStorage = (initialValue: string | null = null): GameLineageStorage => {
   let value = initialValue;
 
@@ -357,6 +399,7 @@ const renderApp = (options?: {
   randomSource?: () => number;
   initialOpeningRollState?: OpeningRollState;
   initialOpeningTurnPending?: boolean;
+  initialGameShellMode?: GameShellMode;
   gameStorage?: GameStorage;
   profileStorage?: LearnerProfileStorage;
   lineageStorage?: GameLineageStorage;
@@ -381,6 +424,9 @@ const renderApp = (options?: {
       {...(options?.initialOpeningTurnPending === undefined
         ? {}
         : { initialOpeningTurnPending: options.initialOpeningTurnPending })}
+      {...(options?.initialGameShellMode === undefined
+        ? {}
+        : { initialGameShellMode: options.initialGameShellMode })}
       {...(options?.moveEvaluator === undefined ? {} : { moveEvaluator: options.moveEvaluator })}
       {...(options?.analysisCaptureEnabled === undefined
         ? {}
@@ -397,6 +443,129 @@ const renderApp = (options?: {
     />
   );
 };
+
+const createCompleteNonFixtureEvaluator = (): {
+  evaluator: PositionEvaluator;
+  evaluateSpy: ReturnType<typeof vi.fn>;
+} => {
+  const evaluateSpy = vi.fn(
+    async (request: EvaluatePositionRequest): Promise<EvaluatePositionResult> => ({
+      ok: true,
+      coverage: "complete",
+      scores: (() => {
+        const seenCanonicalFingerprints = new Set<string>();
+        const scores: Array<{ moveFingerprint: string; normalizedScore: number }> = [];
+
+        for (const outcome of request.legalOutcomes) {
+          const canonicalFingerprint = getCanonicalMoveFingerprint(outcome.move);
+
+          if (seenCanonicalFingerprints.has(canonicalFingerprint)) {
+            continue;
+          }
+
+          seenCanonicalFingerprints.add(canonicalFingerprint);
+          scores.push({
+            moveFingerprint: getMoveFingerprint(outcome.move),
+            normalizedScore: 100 - seenCanonicalFingerprints.size
+          });
+        }
+
+        return scores;
+      })(),
+      scoreScale: {
+        kind: "relative"
+      },
+      provenance: {
+        provider: "gnubg",
+        providerVersion: "1.1",
+        adapterVersion: "0.1",
+        settings: {
+          mode: "test"
+        }
+      },
+      warnings: []
+    })
+  );
+
+  return {
+    evaluator: {
+      evaluate: evaluateSpy
+    },
+    evaluateSpy
+  };
+};
+
+const createDeferredNonFixtureEvaluator = (): {
+  evaluator: PositionEvaluator;
+  evaluateSpy: ReturnType<typeof vi.fn>;
+  getCapturedRequest: () => EvaluatePositionRequest | null;
+  resolveEvaluation: (result: EvaluatePositionResult) => void;
+} => {
+  let capturedRequest: EvaluatePositionRequest | null = null;
+  let resolveEvaluation: ((result: EvaluatePositionResult) => void) | null = null;
+
+  const evaluateSpy = vi.fn((request: EvaluatePositionRequest) => {
+    capturedRequest = request;
+    return new Promise<EvaluatePositionResult>((resolve) => {
+      resolveEvaluation = resolve;
+    });
+  });
+
+  return {
+    evaluator: {
+      evaluate: evaluateSpy
+    },
+    evaluateSpy,
+    getCapturedRequest: () => capturedRequest,
+    resolveEvaluation: (result: EvaluatePositionResult) => {
+      if (resolveEvaluation === null) {
+        throw new Error("Expected deferred evaluator to be waiting for a result.");
+      }
+
+      resolveEvaluation(result);
+      resolveEvaluation = null;
+    }
+  };
+};
+
+const buildCompleteEvaluationResult = (
+  request: EvaluatePositionRequest
+): EvaluatePositionResult => ({
+  ok: true,
+  coverage: "complete",
+  scores: (() => {
+    const seenCanonicalFingerprints = new Set<string>();
+    const scores: Array<{ moveFingerprint: string; normalizedScore: number }> = [];
+
+    for (const outcome of request.legalOutcomes) {
+      const canonicalFingerprint = getCanonicalMoveFingerprint(outcome.move);
+
+      if (seenCanonicalFingerprints.has(canonicalFingerprint)) {
+        continue;
+      }
+
+      seenCanonicalFingerprints.add(canonicalFingerprint);
+      scores.push({
+        moveFingerprint: getMoveFingerprint(outcome.move),
+        normalizedScore: 100 - seenCanonicalFingerprints.size
+      });
+    }
+
+    return scores;
+  })(),
+  scoreScale: {
+    kind: "relative"
+  },
+  provenance: {
+    provider: "gnubg",
+    providerVersion: "1.1",
+    adapterVersion: "0.1",
+    settings: {
+      mode: "test"
+    }
+  },
+  warnings: []
+});
 
 const openDevelopmentControls = (): void => {
   fireEvent.click(screen.getByText("Development controls"));
@@ -765,7 +934,7 @@ describe("App turn history and inspection", () => {
       initialGameState,
       initialOpeningRollState: resolvedOpeningState("white", 1, 1),
       initialOpeningTurnPending: true,
-      randomSource: createRandomSource([0.7, 0.4])
+      randomSource: createRandomSource([0.7, 0.4, 0.7, 0.4])
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
@@ -776,7 +945,6 @@ describe("App turn history and inspection", () => {
     fireEvent.click(screen.getByRole("button", { name: "New Game" }));
     expect(getHistoryCount()).toContain("Recorded turns: 0");
 
-    clickOpeningRoll();
     selectSourcePoint(13);
     selectDestinationPoint(8);
     selectSourcePoint(8);
@@ -1107,7 +1275,7 @@ describe("App turn transitions and reset behavior", () => {
   });
 
   it("new game resets to opening phase and clears transient interaction state", () => {
-    renderApp({ randomSource: createRandomSource([0.7, 0.4]) });
+    renderApp({ randomSource: createRandomSource([0.7, 0.4, 0.8, 0.1]) });
 
     clickOpeningRoll();
     selectSourcePoint(13);
@@ -1118,12 +1286,240 @@ describe("App turn transitions and reset behavior", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "New Game" }));
 
-    expect(screen.getByTestId("opening-phase")).toHaveTextContent("Opening phase: waiting");
+    expect(screen.getByTestId("opening-phase")).toHaveTextContent("Opening phase: resolved");
+    expect(screen.getByTestId("opening-resolution")).toHaveTextContent("White starts with 5-1");
     expect(screen.getByTestId("selection-breadcrumb")).toHaveTextContent("");
     expect(screen.getByTestId("hover-preview")).toHaveTextContent("");
-    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
-    expect(screen.getByRole("button", { name: "Roll for Opening" })).toBeInTheDocument();
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: 5, 1");
+    expect(screen.queryByRole("button", { name: "Roll for Opening" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Undo Last Step" })).not.toBeInTheDocument();
+  });
+
+  it("automatically plays a black opening turn exactly once after the opening roll", async () => {
+    const { evaluator, evaluateSpy } = createCompleteNonFixtureEvaluator();
+
+    renderApp({
+      randomSource: createRandomSource([0.0, 0.99]),
+      moveEvaluator: evaluator,
+      initialGameShellMode: "player-vs-computer"
+    });
+
+    clickOpeningRoll();
+
+    await waitFor(() => {
+      expect(getHistoryCount()).toContain("Recorded turns: 1");
+    });
+
+    expect(screen.getByRole("button", { name: /^1\. Black - Opening - 1-6 -/ })).toBeInTheDocument();
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeEnabled();
+    expect(evaluateSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("opening-resolution")).not.toHaveTextContent(
+      "opening turn in progress"
+    );
+  });
+
+  it("committing a white turn triggers exactly one automatic black reply", async () => {
+    const { evaluator, evaluateSpy } = createCompleteNonFixtureEvaluator();
+    const profileStorage = createInspectableMemoryLearnerProfileStorage();
+
+    renderApp({
+      initialGameState: {
+        position: createPosition({
+          points: {
+            8: { player: "white", checkerCount: 1 },
+            1: { player: "black", checkerCount: 1 }
+          },
+          borneOff: {
+            white: 14,
+            black: 14
+          }
+        }),
+        activePlayer: "white",
+        dice: {
+          dice: [1, 2]
+        }
+      },
+      initialOpeningRollState: resolvedOpeningState("white"),
+      moveEvaluator: evaluator,
+      randomSource: createRandomSource([0.0, 0.0]),
+      initialGameShellMode: "player-vs-computer",
+      profileStorage: profileStorage.storage
+    });
+
+    fireEvent.click(screen.getByText("Learner Profile"));
+    fireEvent.change(screen.getByLabelText("Learner side for this game"), {
+      target: { value: "white" }
+    });
+
+    selectSourcePoint(8);
+    selectDestinationPoint(7);
+    selectSourcePoint(7);
+    selectDestinationPoint(5);
+
+    await waitFor(() => {
+      expect(getHistoryCount()).toContain("Recorded turns: 2");
+    });
+
+    expect(screen.getByRole("button", { name: /^1\. White - Normal - 1-2 -/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^2\. Black - Normal - 1-1 -/ })).toBeInTheDocument();
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeEnabled();
+    expect(evaluateSpy).toHaveBeenCalledTimes(2);
+
+    const storedProfileText = profileStorage.getValue();
+    expect(storedProfileText).not.toBeNull();
+    if (storedProfileText === null) {
+      return;
+    }
+
+    const decodedProfile = decodeLearnerProfile(storedProfileText);
+    expect(decodedProfile.ok).toBe(true);
+    if (!decodedProfile.ok) {
+      return;
+    }
+
+    expect(decodedProfile.profile.observations).toHaveLength(1);
+    expect(decodedProfile.profile.observations[0]?.actingSide).toBe("white");
+    expect(decodedProfile.profile.observations[0]?.learnerOwnershipAtObservation).toBe("white");
+  });
+
+  it("passes an unplayable black turn exactly once without evaluator work", async () => {
+    const { evaluator, evaluateSpy } = createCompleteNonFixtureEvaluator();
+
+    renderApp({
+      initialGameState: {
+        position: createBlackNoLegalMovePosition(),
+        activePlayer: "black",
+        dice: {
+          dice: [1, 2]
+        }
+      },
+      initialOpeningRollState: resolvedOpeningState("black"),
+      initialOpeningTurnPending: false,
+      moveEvaluator: evaluator,
+      initialGameShellMode: "player-vs-computer"
+    });
+
+    await waitFor(() => {
+      expect(getHistoryCount()).toContain("Recorded turns: 1");
+    });
+
+    expect(evaluateSpy).toHaveBeenCalledTimes(0);
+    expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
+    expect(screen.getByRole("button", { name: "Roll Dice" })).toBeEnabled();
+  });
+
+  it("shows a failed computer move state and replays the same black decision without re-evaluating after retry", async () => {
+    const { evaluator, evaluateSpy } = createCompleteNonFixtureEvaluator();
+    const realApplyGameMove = engineModule.applyGameMove;
+    const applySpy = vi.spyOn(engineModule, "applyGameMove");
+    applySpy.mockImplementationOnce((...args: Parameters<typeof realApplyGameMove>) => {
+      return realApplyGameMove(...args);
+    });
+    applySpy.mockImplementationOnce(() => ({
+      ok: false,
+      reason: "illegal-move"
+    }));
+    applySpy.mockImplementation((...args: Parameters<typeof realApplyGameMove>) => {
+      return realApplyGameMove(...args);
+    });
+
+    renderApp({
+      initialGameState: {
+        position: createPosition({
+          points: {
+            8: { player: "white", checkerCount: 1 },
+            1: { player: "black", checkerCount: 1 }
+          },
+          borneOff: {
+            white: 14,
+            black: 14
+          }
+        }),
+        activePlayer: "white",
+        dice: {
+          dice: [1, 2]
+        }
+      },
+      initialOpeningRollState: resolvedOpeningState("white"),
+      moveEvaluator: evaluator,
+      randomSource: createRandomSource([0.0, 0.0]),
+      initialGameShellMode: "player-vs-computer"
+    });
+
+    selectSourcePoint(8);
+    selectDestinationPoint(7);
+    selectSourcePoint(7);
+    selectDestinationPoint(5);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Retry Computer Move/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Computer move unavailable/i)).toBeInTheDocument();
+    expect(evaluateSpy).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByRole("button", { name: /Retry Computer Move/i }));
+
+    await waitFor(() => {
+      expect(getHistoryCount()).toContain("Recorded turns: 2");
+    });
+
+    expect(evaluateSpy).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("button", { name: /^2\. Black - Normal - 1-1 -/ })).toBeInTheDocument();
+
+    applySpy.mockRestore();
+  });
+
+  it("ignores a stale black evaluation when a new game starts before the result resolves", async () => {
+    const { evaluator, evaluateSpy, getCapturedRequest, resolveEvaluation } =
+      createDeferredNonFixtureEvaluator();
+
+    renderApp({
+      initialGameState: {
+        position: createPosition({
+          points: {
+            8: { player: "white", checkerCount: 1 },
+            1: { player: "black", checkerCount: 1 }
+          },
+          borneOff: {
+            white: 14,
+            black: 14
+          }
+        }),
+        activePlayer: "black",
+        dice: {
+          dice: [1, 2]
+        }
+      },
+      initialOpeningRollState: resolvedOpeningState("black"),
+      moveEvaluator: evaluator,
+      randomSource: createRandomSource([0.8, 0.2, 0.7, 0.4]),
+      initialGameShellMode: "player-vs-computer"
+    });
+
+    await waitFor(() => {
+      expect(evaluateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "New Game" }));
+
+    const capturedRequest = getCapturedRequest();
+    expect(capturedRequest).not.toBeNull();
+    if (capturedRequest === null) {
+      return;
+    }
+
+    await act(async () => {
+      resolveEvaluation(buildCompleteEvaluationResult(capturedRequest));
+    });
+
+    await waitFor(() => {
+      expect(getHistoryCount()).toContain("Recorded turns: 0");
+    });
+
+    expect(screen.queryByRole("button", { name: /^1\. Black - Normal - / })).not.toBeInTheDocument();
   });
 });
 
@@ -1174,7 +1570,10 @@ describe("App game snapshot persistence", () => {
   it("updates durable save after opening roll, move, and new game but not staged-only selection", () => {
     const inspectable = createInspectableMemoryGameStorage();
 
-    renderApp({ randomSource: createRandomSource([0.8, 0.2]), gameStorage: inspectable.storage });
+    renderApp({
+      randomSource: createRandomSource([0.8, 0.2, 0.9, 0.1]),
+      gameStorage: inspectable.storage
+    });
 
     const baselineSaves = inspectable.saveCalls();
     clickOpeningRoll();
@@ -1197,7 +1596,10 @@ describe("App game snapshot persistence", () => {
   it("replaces previously saved progress with a fresh snapshot on New Game", () => {
     const inspectable = createInspectableMemoryGameStorage(createSavedSnapshotText());
 
-    renderApp({ gameStorage: inspectable.storage });
+    renderApp({
+      gameStorage: inspectable.storage,
+      randomSource: createRandomSource([0.8, 0.2])
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "New Game" }));
 
@@ -1211,11 +1613,16 @@ describe("App game snapshot persistence", () => {
     }
 
     expect(decoded.snapshot.turnHistory).toHaveLength(0);
-    expect(decoded.snapshot.gameState.dice).toBeNull();
+    expect(decoded.snapshot.gameState.dice).toEqual({
+      dice: [5, 2]
+    });
     expect(decoded.snapshot.gameState.activePlayer).toBe("white");
     expect(decoded.snapshot.openingState).toEqual({
-      phase: "waiting",
-      openingTurnPending: false
+      phase: "resolved",
+      whiteDie: 5,
+      blackDie: 2,
+      startingPlayer: "white",
+      openingTurnPending: true
     });
   });
 
@@ -1488,7 +1895,8 @@ describe("App legal move outcomes panel", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderApp({
       initialGameState: createGameState(createUndoPreviewPosition(), "white"),
-      initialOpeningRollState: resolvedOpeningState("white")
+      initialOpeningRollState: resolvedOpeningState("white"),
+      randomSource: createRandomSource([0.8, 0.2])
     });
 
     setDiceManually("1", "2");
@@ -1498,8 +1906,6 @@ describe("App legal move outcomes panel", () => {
     fireEvent.click(screen.getByRole("button", { name: "New Game" }));
     expect(screen.queryByTestId("move-outcome-preview-banner")).not.toBeInTheDocument();
 
-    clickOpeningRoll();
-    setDiceManually("1", "2");
     openImportSection();
     fireEvent.change(screen.getByTestId("import-snapshot-text"), {
       target: { value: createSavedSnapshotText() }
@@ -1798,7 +2204,6 @@ describe("App legal move outcomes panel", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "New Game" }));
-    clickOpeningRoll();
     await waitFor(() => {
       expect(evaluateSpy).toHaveBeenCalledTimes(2);
     });

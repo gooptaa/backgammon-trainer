@@ -7,6 +7,7 @@ import type {
   JsonValue,
   PositionEvaluator
 } from "@backgammon-trainer/backgammon-analysis";
+import { getCanonicalMoveFingerprint } from "@backgammon-trainer/backgammon-analysis";
 
 import { matchGnuBgMoveToLegalOutcome } from "./matching.js";
 import { parseGnuBgEvaluationOutput } from "./parser.js";
@@ -103,7 +104,15 @@ const createDefaultAnalysisRequestFactory = (
   pythonBridgeScriptPath: string
 ): BuildGnuBgAnalysisRequest => {
   return (input: BuildGnuBgAnalysisRequestInput): BuildGnuBgAnalysisRequestResult => {
-    const expectedMoves = Math.min(Math.max(input.request.legalOutcomes.length, 0), 256);
+    const expectedMoves = Math.min(
+      Math.max(
+        new Set(
+          input.request.legalOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome.move))
+        ).size,
+        0
+      ),
+      256
+    );
     const stdin =
       JSON.stringify({
         boardSimple: toSimpleBoardNotation(input.translatedBoard),

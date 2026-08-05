@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeLegalMoveOutcomes,
   evaluateLegalMoves,
+  getCanonicalMoveFingerprint,
   getMoveFingerprint,
   type EvaluatePositionRequest,
   type LegalMoveOutcome
@@ -35,6 +36,17 @@ const getLegalOutcomes = (
   }
   return result.analysis.outcomes;
 };
+
+const DUPLICATE_AUDIT_POSITION = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    9: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 13,
+    black: 15
+  }
+});
 
 describe("createGnuBgPositionEvaluator", () => {
   it("builds default python-bridge process requests with bounded args and JSON stdin", async () => {
@@ -81,6 +93,45 @@ describe("createGnuBgPositionEvaluator", () => {
     expect(captured.request.args).toEqual(["-t", "-q", "-r", "--python=/tmp/bridge.py"]);
     expect(captured.request.stdin).toContain('"dice":[1,2]');
     expect(captured.request.stdin).toContain(`"expectedMoves":${String(legalOutcomes.length)}`);
+  });
+
+  it("counts canonical-equivalent legal move classes for the bridge payload", async () => {
+    let capturedRequest: { stdin: string } | null = null;
+
+    const evaluator = createGnuBgPositionEvaluator({
+      executable: "gnubg-test",
+      pythonBridgeScriptPath: "/tmp/bridge.py",
+      processRunner: createFakeGnuBgProcessRunner(async (request) => {
+        capturedRequest = { stdin: request.stdin };
+        return {
+          ok: true,
+          exitCode: 0,
+          stdout: readFixture("success-white-complete.txt"),
+          stderr: ""
+        };
+      })
+    });
+
+    const legalOutcomes = getLegalOutcomes(DUPLICATE_AUDIT_POSITION, "white");
+    const expectedMoves = new Set(
+      legalOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome.move))
+    ).size;
+
+    const result = await evaluator.evaluate({
+      position: DUPLICATE_AUDIT_POSITION,
+      player: "white",
+      dice: DICE,
+      legalOutcomes
+    });
+
+    expect(result.ok).toBe(true);
+    expect(capturedRequest).not.toBeNull();
+    if (capturedRequest === null) {
+      throw new Error("Expected process request to be captured.");
+    }
+
+    expect(capturedRequest.stdin).toContain(`"expectedMoves":${String(expectedMoves)}`);
+    expect(capturedRequest.stdin).not.toContain(`"expectedMoves":${String(legalOutcomes.length)}`);
   });
 
   it("implements PositionEvaluator and sends translated execution options through the process boundary", async () => {

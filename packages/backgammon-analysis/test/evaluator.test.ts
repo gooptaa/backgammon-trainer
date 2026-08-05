@@ -6,7 +6,12 @@ import type {
   Position,
   PositionEvaluator
 } from "../src/index";
-import { analyzeLegalMoveOutcomes, evaluateLegalMoves, getMoveFingerprint } from "../src/index";
+import {
+  analyzeLegalMoveOutcomes,
+  evaluateLegalMoves,
+  getCanonicalMoveFingerprint,
+  getMoveFingerprint
+} from "../src/index";
 import { createFixturePositionEvaluator } from "../src/fixture";
 
 const createEmptyPoints = (): Position["points"] => ({
@@ -64,6 +69,17 @@ const PLAYABLE_POSITION = createPosition({
   borneOff: {
     white: 14,
     black: 14
+  }
+});
+
+const DUPLICATE_AUDIT_POSITION = createPosition({
+  points: {
+    8: { player: "white", checkerCount: 1 },
+    9: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 13,
+    black: 15
   }
 });
 
@@ -204,6 +220,84 @@ describe("evaluateLegalMoves", () => {
     expect(result.analysis.coverage).toBe("complete");
     expect(result.analysis.unevaluatedMoves).toHaveLength(0);
     expect(result.analysis.rankedMoves).toHaveLength(result.analysis.factualOutcomes.length);
+  });
+
+  it("treats canonical-equivalent move classes as complete coverage and propagates their score to every raw variant", async () => {
+    const evaluator: PositionEvaluator = {
+      evaluate: async (request) => {
+        const seenCanonicalFingerprints = new Set<string>();
+        const scores = [] as {
+          moveFingerprint: string;
+          normalizedScore: number;
+        }[];
+
+        for (const outcome of request.legalOutcomes) {
+          const canonicalFingerprint = getCanonicalMoveFingerprint(outcome.move);
+
+          if (seenCanonicalFingerprints.has(canonicalFingerprint)) {
+            continue;
+          }
+
+          seenCanonicalFingerprints.add(canonicalFingerprint);
+          scores.push({
+            moveFingerprint: getMoveFingerprint(outcome.move),
+            normalizedScore: 100 - scores.length
+          });
+        }
+
+        return {
+          ok: true,
+          coverage: "complete",
+          scores,
+          scoreScale: { kind: "relative" },
+          provenance: {
+            provider: "test",
+            providerVersion: "1",
+            adapterVersion: "1",
+            settings: {}
+          },
+          warnings: []
+        };
+      }
+    };
+
+    const result = await evaluateLegalMoves(
+      {
+        position: DUPLICATE_AUDIT_POSITION,
+        player: "white",
+        dice: DICE
+      },
+      evaluator
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.analysis.kind !== "evaluated") {
+      return;
+    }
+
+    const canonicalFingerprints = result.analysis.factualOutcomes.map((outcome) =>
+      getCanonicalMoveFingerprint(outcome.move)
+    );
+    const duplicateCanonicalFingerprint = canonicalFingerprints.find(
+      (fingerprint, index) => canonicalFingerprints.indexOf(fingerprint) !== index
+    );
+
+    expect(result.analysis.coverage).toBe("complete");
+    expect(result.analysis.unevaluatedMoves).toHaveLength(0);
+    expect(result.analysis.rankedMoves).toHaveLength(result.analysis.factualOutcomes.length);
+    expect(new Set(canonicalFingerprints).size).toBeLessThan(result.analysis.factualOutcomes.length);
+
+    if (duplicateCanonicalFingerprint === undefined) {
+      return;
+    }
+
+    const duplicateClass = result.analysis.rankedMoves.filter(
+      (row) => getCanonicalMoveFingerprint(row.outcome.move) === duplicateCanonicalFingerprint
+    );
+
+    expect(duplicateClass.length).toBeGreaterThan(1);
+    expect(new Set(duplicateClass.map((row) => row.normalizedScore)).size).toBe(1);
+    expect(new Set(duplicateClass.map((row) => row.lossFromBest)).size).toBe(1);
   });
 
   it("supports partial coverage and preserves unevaluated moves", async () => {

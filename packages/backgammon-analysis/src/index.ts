@@ -566,7 +566,7 @@ interface ValidatedEvaluationSuccess {
   readonly scoreScale: EvaluationScoreScale;
   readonly provenance: EvaluatorProvenance;
   readonly warnings: readonly string[];
-  readonly scoredByFingerprint: ReadonlyMap<string, EvaluatedMoveScore>;
+  readonly scoredByCanonicalFingerprint: ReadonlyMap<string, EvaluatedMoveScore>;
 }
 
 const validateEvaluationSuccess = (
@@ -584,7 +584,13 @@ const validateEvaluationSuccess = (
   const legalFingerprints = new Set(
     legalOutcomes.map((outcome) => getMoveFingerprint(outcome.move))
   );
-  const scoredByFingerprint = new Map<string, EvaluatedMoveScore>();
+  const legalCanonicalFingerprints = new Set(
+    legalOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome.move))
+  );
+  const legalOutcomeByFingerprint = new Map(
+    legalOutcomes.map((outcome) => [getMoveFingerprint(outcome.move), outcome] as const)
+  );
+  const scoredByCanonicalFingerprint = new Map<string, EvaluatedMoveScore>();
 
   for (const score of result.scores) {
     if (!isFiniteNumber(score.normalizedScore)) {
@@ -602,18 +608,33 @@ const validateEvaluationSuccess = (
       return "Evaluator reported a move that is not in the legal move set.";
     }
 
-    if (scoredByFingerprint.has(score.moveFingerprint)) {
-      return "Evaluator reported duplicate scores for one move.";
+    const matchingOutcome = legalOutcomeByFingerprint.get(score.moveFingerprint);
+
+    if (matchingOutcome === undefined) {
+      return "Evaluator reported a move that is not in the legal move set.";
     }
 
-    scoredByFingerprint.set(score.moveFingerprint, score);
+    const canonicalFingerprint = getCanonicalMoveFingerprint(matchingOutcome.move);
+
+    if (scoredByCanonicalFingerprint.has(canonicalFingerprint)) {
+      return "Evaluator reported duplicate scores for one move class.";
+    }
+
+    scoredByCanonicalFingerprint.set(canonicalFingerprint, score);
   }
 
-  if (result.coverage === "complete" && scoredByFingerprint.size !== legalFingerprints.size) {
-    return "Evaluator marked complete coverage but did not score every legal move.";
+  if (
+    result.coverage === "complete" &&
+    scoredByCanonicalFingerprint.size !== legalCanonicalFingerprints.size
+  ) {
+    return "Evaluator marked complete coverage but did not score every legal move class.";
   }
 
-  if (result.coverage === "partial" && scoredByFingerprint.size === 0 && legalOutcomes.length > 0) {
+  if (
+    result.coverage === "partial" &&
+    scoredByCanonicalFingerprint.size === 0 &&
+    legalOutcomes.length > 0
+  ) {
     return "Evaluator marked partial coverage but did not score any legal move.";
   }
 
@@ -622,7 +643,7 @@ const validateEvaluationSuccess = (
     scoreScale: result.scoreScale,
     provenance: result.provenance,
     warnings: result.warnings,
-    scoredByFingerprint
+    scoredByCanonicalFingerprint
   };
 };
 
@@ -792,7 +813,8 @@ export const evaluateLegalMoves = async (
 
   const scoredOutcomes = factual.analysis.outcomes.flatMap((outcome) => {
     const moveFingerprint = getMoveFingerprint(outcome.move);
-    const score = validated.scoredByFingerprint.get(moveFingerprint);
+    const canonicalFingerprint = getCanonicalMoveFingerprint(outcome.move);
+    const score = validated.scoredByCanonicalFingerprint.get(canonicalFingerprint);
 
     if (score === undefined) {
       return [];
@@ -808,7 +830,10 @@ export const evaluateLegalMoves = async (
   });
 
   const unevaluatedMoves = factual.analysis.outcomes
-    .filter((outcome) => !validated.scoredByFingerprint.has(getMoveFingerprint(outcome.move)))
+    .filter(
+      (outcome) =>
+        !validated.scoredByCanonicalFingerprint.has(getCanonicalMoveFingerprint(outcome.move))
+    )
     .map((outcome) => cloneLegalMoveOutcome(outcome));
 
   return {

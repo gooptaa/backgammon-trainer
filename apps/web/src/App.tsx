@@ -106,6 +106,7 @@ import {
   createLocalGameLineageStorage,
   decodePersistedGameLineage,
   encodePersistedGameLineage,
+  type GameShellMode,
   type GameLineageStorage
 } from "./features/profile/lineageStorage";
 import { rollDice, type RandomSource } from "./features/sandbox/rollDice";
@@ -375,9 +376,51 @@ interface InitialLearnerProfileState {
 
 interface InitialLineageState {
   readonly lineageId: string;
+  readonly shellMode: GameShellMode;
   readonly message: string | null;
   readonly writable: boolean;
 }
+
+type ComputerTurnState =
+  | {
+      readonly status: "idle";
+    }
+  | {
+      readonly status: "rolling" | "evaluating" | "applying" | "failed";
+      readonly turnKey: string;
+      readonly decisionKey?: string;
+      readonly message?: string;
+      readonly failureKind?: "evaluation" | "selection" | "application";
+    };
+
+type ComputerTurnExecutionState = {
+  turnKey: string | null;
+  phase: ComputerTurnState["status"];
+  decisionKey?: string;
+  message?: string;
+  failureKind?: "evaluation" | "selection" | "application";
+};
+
+const DEFAULT_GAME_SHELL_MODE: GameShellMode = "exploratory";
+const MAX_OPENING_REROLL_ATTEMPTS = 32;
+
+const isFixtureEvaluatorProvenance = (provider: string): boolean => {
+  return provider.toLowerCase().includes("fixture");
+};
+
+const resolveAutomaticOpeningRoll = (
+  randomSource: RandomSource
+): ReturnType<typeof rollOpeningDice> | null => {
+  for (let attempt = 0; attempt < MAX_OPENING_REROLL_ATTEMPTS; attempt += 1) {
+    const openingResult = rollOpeningDice(randomSource);
+
+    if (openingResult.outcome === "resolved") {
+      return openingResult;
+    }
+  }
+
+  return null;
+};
 
 const createFreshDurableAppState = (
   initialGameState?: GameState,
@@ -508,7 +551,10 @@ const resolveInitialLearnerProfileState = (
   };
 };
 
-const resolveInitialLineageState = (storage: GameLineageStorage): InitialLineageState => {
+const resolveInitialLineageState = (
+  storage: GameLineageStorage,
+  defaultShellMode: GameShellMode
+): InitialLineageState => {
   let savedText: string | null = null;
 
   try {
@@ -516,6 +562,7 @@ const resolveInitialLineageState = (storage: GameLineageStorage): InitialLineage
   } catch {
     return {
       lineageId: createLineageId(),
+      shellMode: defaultShellMode,
       message: "Lineage metadata storage is unavailable. Using in-memory lineage identity.",
       writable: false
     };
@@ -524,6 +571,7 @@ const resolveInitialLineageState = (storage: GameLineageStorage): InitialLineage
   if (savedText === null) {
     return {
       lineageId: createLineageId(),
+      shellMode: defaultShellMode,
       message: null,
       writable: true
     };
@@ -533,6 +581,7 @@ const resolveInitialLineageState = (storage: GameLineageStorage): InitialLineage
   if (!decoded.ok) {
     return {
       lineageId: createLineageId(),
+      shellMode: defaultShellMode,
       message: "Stored lineage metadata was invalid and has been replaced.",
       writable: true
     };
@@ -540,6 +589,7 @@ const resolveInitialLineageState = (storage: GameLineageStorage): InitialLineage
 
   return {
     lineageId: decoded.value.lineageId,
+    shellMode: decoded.value.shellMode,
     message: null,
     writable: true
   };
@@ -550,6 +600,7 @@ interface AppProps {
   randomSource?: RandomSource;
   initialOpeningRollState?: OpeningRollState;
   initialOpeningTurnPending?: boolean;
+  initialGameShellMode?: GameShellMode;
   gameStorage?: GameStorage;
   profileStorage?: LearnerProfileStorage;
   lineageStorage?: GameLineageStorage;
@@ -590,6 +641,7 @@ function App({
   randomSource,
   initialOpeningRollState,
   initialOpeningTurnPending,
+  initialGameShellMode,
   gameStorage,
   profileStorage,
   lineageStorage,
@@ -603,6 +655,7 @@ function App({
   coachKnowledgeRetriever,
   coachProviderStatus
 }: AppProps): JSX.Element {
+  const resolvedRandomSource = randomSource ?? Math.random;
   const snapshotStorage = useMemo(
     () => gameStorage ?? createLocalGameStorage(DEFAULT_GAME_STORAGE_KEY),
     [gameStorage]
@@ -616,6 +669,7 @@ function App({
     [lineageStorage]
   );
   const bootstrapNow = useMemo(() => new Date().toISOString(), []);
+  const defaultShellMode = initialGameShellMode ?? DEFAULT_GAME_SHELL_MODE;
   const initialDurableState = useMemo(
     () =>
       resolveInitialDurableAppState(
@@ -631,8 +685,8 @@ function App({
     [bootstrapNow, learnerProfileStorage]
   );
   const initialLineageState = useMemo(
-    () => resolveInitialLineageState(gameLineageStorage),
-    [gameLineageStorage]
+    () => resolveInitialLineageState(gameLineageStorage, defaultShellMode),
+    [defaultShellMode, gameLineageStorage]
   );
   const captureRuntime = analysisCaptureRuntime ?? DEFAULT_ANALYSIS_CAPTURE_RUNTIME;
   const captureMetadata = analysisCaptureMetadata ?? DEFAULT_ANALYSIS_CAPTURE_METADATA;
@@ -659,6 +713,7 @@ function App({
   const [moveEvaluationResult, setMoveEvaluationResult] = useState<EvaluateLegalMovesResult | null>(
     null
   );
+  const [moveEvaluationDecisionKey, setMoveEvaluationDecisionKey] = useState<string | null>(null);
   const [moveEvaluationPending, setMoveEvaluationPending] = useState(false);
   const [analysisSession, setAnalysisSession] = useState<AnalysisSession | null>(null);
   const [pendingDecisionAnalysis, setPendingDecisionAnalysis] =
@@ -669,15 +724,25 @@ function App({
   const [lastCaptureFailure, setLastCaptureFailure] = useState<AnalysisCaptureFailure | null>(null);
   const [importText, setImportText] = useState<string>("");
   const [lineageId, setLineageId] = useState<string>(initialLineageState.lineageId);
+  const [gameShellMode, setGameShellMode] = useState<GameShellMode>(initialLineageState.shellMode);
   const [learnerProfile, setLearnerProfile] = useState<LearnerProfile>(initialProfileState.profile);
   const [profileWritable, setProfileWritable] = useState<boolean>(initialProfileState.writable);
   const [lineageWritable, setLineageWritable] = useState<boolean>(initialLineageState.writable);
   const [profileMessage, setProfileMessage] = useState<string | null>(
     initialProfileState.message ?? initialLineageState.message
   );
+  const [computerTurnState, setComputerTurnState] = useState<ComputerTurnState>({
+    status: "idle"
+  });
+  const [evaluationCycle, setEvaluationCycle] = useState(0);
+  const [computerApplyRetryCycle, setComputerApplyRetryCycle] = useState(0);
   const skipInitialPersistRef = useRef(true);
   const skipInitialProfilePersistRef = useRef(true);
   const moveEvaluationRequestIdRef = useRef(0);
+  const computerTurnExecutionRef = useRef<ComputerTurnExecutionState>({
+    turnKey: null,
+    phase: "idle"
+  });
 
   useEffect(() => {
     if (moveEvaluator === undefined) {
@@ -860,6 +925,35 @@ function App({
     turnHistory.length
   ]);
 
+  const currentDecisionKey = useMemo(() => {
+    if (
+      activeGameReference === null ||
+      gameState.dice === null ||
+      isInspectingHistory ||
+      openingRollState.phase !== "resolved" ||
+      gameStatus.state === "complete"
+    ) {
+      return null;
+    }
+
+    return getAnalysisDecisionKey({
+      gameReference: activeGameReference,
+      turnNumber: turnHistory.length + 1,
+      position: gameState.position,
+      player: gameState.activePlayer,
+      dice: gameState.dice
+    });
+  }, [
+    activeGameReference,
+    gameState.activePlayer,
+    gameState.dice,
+    gameState.position,
+    gameStatus.state,
+    isInspectingHistory,
+    openingRollState.phase,
+    turnHistory.length
+  ]);
+
   useEffect(() => {
     if (liveDecisionContext === null) {
       setPendingDecisionAnalysis(null);
@@ -882,11 +976,15 @@ function App({
       !isInspectingHistory &&
       openingRollState.phase === "resolved" &&
       gameStatus.state !== "complete" &&
-      gameState.dice !== null;
+      gameState.dice !== null &&
+      legalMovesResult.ok &&
+      legalMovesResult.moves.length > 0;
+    const liveDecisionKey = currentDecisionKey;
 
     if (!canEvaluate) {
       setMoveEvaluationPending(false);
       setMoveEvaluationResult(null);
+      setMoveEvaluationDecisionKey(null);
       setAnalysisEvaluatorStatus(moveEvaluator === undefined ? "not-configured" : "idle");
       return;
     }
@@ -914,6 +1012,7 @@ function App({
         }
 
         setMoveEvaluationResult(result);
+        setMoveEvaluationDecisionKey(liveDecisionKey);
         if (result.ok && liveDecisionContext !== null) {
           setPendingDecisionAnalysis(
             createPendingDecisionAnalysis({
@@ -958,6 +1057,7 @@ function App({
         } else {
           setMoveEvaluationResult(null);
         }
+        setMoveEvaluationDecisionKey(liveDecisionKey);
         setPendingDecisionAnalysis(null);
         setAnalysisEvaluatorStatus("failed");
         setMoveEvaluationPending(false);
@@ -967,12 +1067,14 @@ function App({
       disposed = true;
     };
   }, [
+    evaluationCycle,
     gameState.activePlayer,
     gameState.dice,
     gameState.position,
     gameStatus.state,
     isInspectingHistory,
     legalMoveOutcomesResult,
+    currentDecisionKey,
     liveDecisionContext,
     moveEvaluator,
     openingRollState.phase
@@ -1305,7 +1407,8 @@ function App({
       gameLineageStorage.save(
         encodePersistedGameLineage({
           lineageId,
-          updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            shellMode: gameShellMode
         })
       );
     } catch {
@@ -1314,7 +1417,7 @@ function App({
         "Lineage metadata could not be saved. Current session uses in-memory identity."
       );
     }
-  }, [gameLineageStorage, lineageId, lineageWritable]);
+    }, [gameLineageStorage, gameShellMode, lineageId, lineageWritable]);
 
   const resetTransientState = (): void => {
     setSelectedSteps([]);
@@ -1436,7 +1539,7 @@ function App({
       return;
     }
 
-    const result = setDice(gameState, rollDice(randomSource));
+    const result = setDice(gameState, rollDice(resolvedRandomSource));
 
     if (!result.ok) {
       setMessage(getSetDiceFailureMessage(result.reason));
@@ -1458,6 +1561,28 @@ function App({
     const result = applyGameMove(gameState, move);
 
     if (!result.ok) {
+      const currentExecution = computerTurnExecutionRef.current;
+
+      if (currentExecution.phase !== "idle" && currentExecution.turnKey === currentComputerTurnKey) {
+        computerTurnExecutionRef.current = {
+          ...currentExecution,
+          phase: "failed",
+          ...(currentComputerDecisionKey === null ? {} : { decisionKey: currentComputerDecisionKey }),
+          message: getApplyFailureMessage(result.reason),
+          failureKind: "application"
+        };
+
+        setComputerTurnState({
+          status: "failed",
+          turnKey: currentComputerTurnKey ?? currentExecution.turnKey ?? "unknown-turn",
+          ...(currentComputerDecisionKey === null ? {} : { decisionKey: currentComputerDecisionKey }),
+          message: getApplyFailureMessage(result.reason),
+          failureKind: "application"
+        });
+        setMessage("Computer move unavailable. Retry Computer Move.");
+        return;
+      }
+
       setMessage(getApplyFailureMessage(result.reason));
       return;
     }
@@ -1537,8 +1662,10 @@ function App({
       setOpeningTurnPending(false);
     }
 
-    if (result.status.state === "complete") {
-      setMessage(`Game complete: ${result.status.winner} wins.`);
+    const gameStatusAfter = getGameStatus(result.state.position);
+
+    if (gameStatusAfter.state === "complete") {
+      setMessage(`Game complete: ${gameStatusAfter.winner} wins.`);
       return;
     }
 
@@ -1614,6 +1741,13 @@ function App({
       setOpeningTurnPending(false);
     }
 
+    const gameStatusAfter = getGameStatus(result.state.position);
+
+    if (gameStatusAfter.state === "complete") {
+      setMessage(`Game complete: ${gameStatusAfter.winner} wins.`);
+      return;
+    }
+
     setMessage(
       openingTurnPending ? "Opening turn passed. Roll dice for the next turn." : "Turn passed."
     );
@@ -1621,8 +1755,9 @@ function App({
 
   const onRollForOpening = (): void => {
     moveEvaluationRequestIdRef.current += 1;
+    setComputerTurnState({ status: "idle" });
     setPendingDecisionAnalysis(null);
-    const openingResult = rollOpeningDice(randomSource);
+    const openingResult = rollOpeningDice(resolvedRandomSource);
 
     if (openingResult.outcome === "tie") {
       setOpeningRollState({
@@ -1661,11 +1796,34 @@ function App({
 
   const onNewGame = (): void => {
     moveEvaluationRequestIdRef.current += 1;
-    const nextGameState = createInitialGameState();
-    const nextOpeningRollState: OpeningRollState = {
-      phase: "waiting"
+    computerTurnExecutionRef.current = {
+      turnKey: null,
+      phase: "idle"
     };
-    const nextOpeningTurnPending = false;
+    const nextLineageId = createLineageId();
+    const openingResult = resolveAutomaticOpeningRoll(resolvedRandomSource);
+
+    if (openingResult === null || openingResult.outcome !== "resolved") {
+      setMessage("Unable to resolve the opening roll for a new game. Try again.");
+      return;
+    }
+
+    const nextOpeningRollState: OpeningRollState = {
+      phase: "resolved",
+      whiteDie: openingResult.whiteDie,
+      blackDie: openingResult.blackDie,
+      startingPlayer: openingResult.startingPlayer
+    };
+    const openingState = createGameState(STANDARD_STARTING_POSITION, openingResult.startingPlayer);
+    const assignedOpeningDice = setDice(openingState, openingResult.dice);
+
+    if (!assignedOpeningDice.ok) {
+      setMessage("Unable to start a new game. Try again.");
+      return;
+    }
+
+    const nextGameState = assignedOpeningDice.state;
+    const nextOpeningTurnPending = true;
     const nextTurnHistory: readonly TurnRecord[] = [];
     let saveFailed = false;
 
@@ -1685,7 +1843,8 @@ function App({
     }
 
     setGameState(nextGameState);
-    setLineageId(createLineageId());
+  setLineageId(nextLineageId);
+  setGameShellMode("player-vs-computer");
     setOpeningRollState(nextOpeningRollState);
     setOpeningTurnPending(nextOpeningTurnPending);
     setDieOne(DEFAULT_MANUAL_DIE_ONE);
@@ -1696,13 +1855,29 @@ function App({
     setPendingDecisionAnalysis(null);
     setLastCaptureFailure(null);
     setMoveEvaluationResult(null);
+    setMoveEvaluationDecisionKey(null);
     setMoveEvaluationPending(false);
+    setComputerTurnState({ status: "idle" });
+    setEvaluationCycle(0);
     setAnalysisEvaluatorStatus(moveEvaluator === undefined ? "not-configured" : "idle");
+    setLearnerProfile((current) =>
+      setLineageOwnership({
+        profile: current,
+        lineageId: nextLineageId,
+        mode: "white",
+        resolvedAt: new Date().toISOString()
+      })
+    );
     resetTransientState();
 
     if (saveFailed) {
       setMessage("Local save failed. Game continues in memory only.");
+      return;
     }
+
+    setMessage(
+      `New game started. White rolled ${openingResult.whiteDie}. Black rolled ${openingResult.blackDie}. ${getPlayerLabel(openingResult.startingPlayer)} starts with ${openingResult.whiteDie}-${openingResult.blackDie}.`
+    );
   };
 
   const copyExportSnapshot = async (): Promise<void> => {
@@ -1746,6 +1921,7 @@ function App({
 
     setGameState(parsed.snapshot.gameState);
     setLineageId(createLineageId());
+    setGameShellMode("exploratory");
     setTurnHistory(parsed.snapshot.turnHistory);
     setOpeningRollState(restoredOpening.openingRollState);
     setOpeningTurnPending(restoredOpening.openingTurnPending);
@@ -1754,7 +1930,10 @@ function App({
     setPendingDecisionAnalysis(null);
     setLastCaptureFailure(null);
     setMoveEvaluationResult(null);
+    setMoveEvaluationDecisionKey(null);
     setMoveEvaluationPending(false);
+    setComputerTurnState({ status: "idle" });
+    setEvaluationCycle(0);
     setAnalysisEvaluatorStatus(moveEvaluator === undefined ? "not-configured" : "idle");
     setImportText("");
     resetTransientState();
@@ -1765,6 +1944,7 @@ function App({
     try {
       snapshotStorage.clear();
       gameLineageStorage.clear();
+      setGameShellMode(DEFAULT_GAME_SHELL_MODE);
       setMessage(
         "Saved game cleared. Reloading now will start fresh unless this game is saved again."
       );
@@ -1772,6 +1952,244 @@ function App({
       setMessage("Unable to clear saved game.");
     }
   };
+
+  const onRetryComputerTurn = (): void => {
+    const currentExecution = computerTurnExecutionRef.current;
+    const canReuseEvaluation =
+      currentExecution.failureKind === "application" && moveEvaluationResult?.ok === true;
+
+    computerTurnExecutionRef.current = {
+      turnKey: null,
+      phase: "idle"
+    };
+    setComputerTurnState({ status: "idle" });
+    setMoveEvaluationPending(false);
+    setAnalysisEvaluatorStatus(moveEvaluator === undefined ? "not-configured" : "idle");
+
+    if (canReuseEvaluation) {
+      setComputerApplyRetryCycle((current) => current + 1);
+      setMessage("Retrying computer move.");
+      return;
+    }
+
+    setMoveEvaluationResult(null);
+    setMoveEvaluationDecisionKey(null);
+    setEvaluationCycle((current) => current + 1);
+    setMessage("Retrying computer move.");
+  };
+
+  const computerTurnEnabled = gameShellMode === "player-vs-computer";
+  const isComputerTurn =
+    computerTurnEnabled &&
+    openingResolved &&
+    !isReadOnlyInspection &&
+    gameStatus.state !== "complete" &&
+    gameState.activePlayer === "black";
+  const currentComputerTurnKey = isComputerTurn
+    ? `${lineageId}:${turnHistory.length + 1}:${openingTurnPending ? "opening" : "normal"}`
+    : null;
+  const currentComputerDecisionKey = isComputerTurn ? currentDecisionKey : null;
+
+  useEffect(() => {
+    const setExecutionState = (next: ComputerTurnExecutionState): void => {
+      computerTurnExecutionRef.current = next;
+
+      if (next.phase === "idle") {
+        setComputerTurnState({ status: "idle" });
+        return;
+      }
+
+      setComputerTurnState({
+        status: next.phase,
+        turnKey: next.turnKey ?? "unknown-turn",
+        ...(next.decisionKey === undefined ? {} : { decisionKey: next.decisionKey }),
+        ...(next.message === undefined ? {} : { message: next.message }),
+        ...(next.failureKind === undefined ? {} : { failureKind: next.failureKind })
+      });
+    };
+
+    if (!isComputerTurn || currentComputerTurnKey === null) {
+      if (computerTurnExecutionRef.current.phase !== "idle") {
+        setExecutionState({ turnKey: null, phase: "idle" });
+      }
+      return;
+    }
+
+    if (gameState.dice === null) {
+      const currentExecution = computerTurnExecutionRef.current;
+      if (currentExecution.phase === "rolling" && currentExecution.turnKey === currentComputerTurnKey) {
+        return;
+      }
+
+      setExecutionState({ turnKey: currentComputerTurnKey, phase: "rolling" });
+      onRollDice();
+      setMessage(openingTurnPending ? "Computer is playing the opening turn." : "Computer is rolling dice.");
+      return;
+    }
+
+    if (legalMovesResult.ok && legalMovesResult.moves.length === 0) {
+      const currentExecution = computerTurnExecutionRef.current;
+      if (currentExecution.phase === "applying" && currentExecution.turnKey === currentComputerTurnKey) {
+        return;
+      }
+
+      setExecutionState({
+        turnKey: currentComputerTurnKey,
+        phase: "applying",
+        ...(currentComputerDecisionKey === null ? {} : { decisionKey: currentComputerDecisionKey })
+      });
+      onPassTurn();
+      return;
+    }
+
+    const failedExecution = computerTurnExecutionRef.current;
+
+    if (failedExecution.phase === "failed" && failedExecution.turnKey === currentComputerTurnKey) {
+      return;
+    }
+
+    if (
+      currentComputerDecisionKey === null ||
+      moveEvaluationPending ||
+      moveEvaluationResult === null ||
+      moveEvaluationDecisionKey !== currentComputerDecisionKey
+    ) {
+      const currentExecution = computerTurnExecutionRef.current;
+      if (
+        currentExecution.phase === "evaluating" &&
+        currentExecution.turnKey === currentComputerTurnKey &&
+        currentExecution.decisionKey === currentComputerDecisionKey
+      ) {
+        return;
+      }
+
+      setExecutionState({
+        turnKey: currentComputerTurnKey,
+        phase: "evaluating",
+        ...(currentComputerDecisionKey === null ? {} : { decisionKey: currentComputerDecisionKey })
+      });
+      setMessage("Computer is evaluating the position.");
+      return;
+    }
+
+    if (!moveEvaluationResult.ok) {
+      const currentExecution = computerTurnExecutionRef.current;
+      if (
+        currentExecution.phase === "failed" &&
+        currentExecution.turnKey === currentComputerTurnKey &&
+        currentExecution.decisionKey === currentComputerDecisionKey &&
+        currentExecution.message === moveEvaluationResult.message
+      ) {
+        return;
+      }
+
+      setExecutionState({
+        turnKey: currentComputerTurnKey,
+        phase: "failed",
+        ...(currentComputerDecisionKey === null ? {} : { decisionKey: currentComputerDecisionKey }),
+        message: moveEvaluationResult.message,
+        failureKind: "evaluation"
+      });
+      setMessage("Computer move unavailable. Retry Computer Move.");
+      return;
+    }
+
+    const analysis = moveEvaluationResult.analysis;
+
+    if (
+      analysis.kind !== "evaluated" ||
+      analysis.coverage !== "complete" ||
+      isFixtureEvaluatorProvenance(analysis.provenance.provider) ||
+      analysis.rankedMoves.length === 0
+    ) {
+      const failureMessage =
+        analysis.kind !== "evaluated"
+          ? "Computer move requires ranked evaluator evidence."
+          : analysis.coverage !== "complete"
+            ? "Computer move requires complete ranked evaluator coverage."
+            : isFixtureEvaluatorProvenance(analysis.provenance.provider)
+              ? "Computer move requires non-fixture evaluator evidence."
+              : "Computer move could not be identified from evaluator output.";
+
+      const currentExecution = computerTurnExecutionRef.current;
+      if (
+        currentExecution.phase === "failed" &&
+        currentExecution.turnKey === currentComputerTurnKey &&
+        currentExecution.decisionKey === currentComputerDecisionKey &&
+        currentExecution.message === failureMessage
+      ) {
+        return;
+      }
+
+      setExecutionState({
+        turnKey: currentComputerTurnKey,
+        phase: "failed",
+        ...(currentComputerDecisionKey === null ? {} : { decisionKey: currentComputerDecisionKey }),
+        message: failureMessage,
+        failureKind: "selection"
+      });
+      setMessage("Computer move unavailable. Retry Computer Move.");
+      return;
+    }
+
+    const bestMove = analysis.rankedMoves[0]?.outcome.move;
+
+    if (bestMove === undefined) {
+      const currentExecution = computerTurnExecutionRef.current;
+      if (
+        currentExecution.phase === "failed" &&
+        currentExecution.turnKey === currentComputerTurnKey &&
+        currentExecution.decisionKey === currentComputerDecisionKey &&
+        currentExecution.message === "Computer move could not be matched to a legal move."
+      ) {
+        return;
+      }
+
+      setExecutionState({
+        turnKey: currentComputerTurnKey,
+        phase: "failed",
+        ...(currentComputerDecisionKey === null ? {} : { decisionKey: currentComputerDecisionKey }),
+        message: "Computer move could not be matched to a legal move.",
+        failureKind: "selection"
+      });
+      setMessage("Computer move unavailable. Retry Computer Move.");
+      return;
+    }
+
+    const applyingExecution = computerTurnExecutionRef.current;
+    if (
+      applyingExecution.phase === "applying" &&
+      applyingExecution.turnKey === currentComputerTurnKey &&
+      applyingExecution.decisionKey === currentComputerDecisionKey
+    ) {
+      return;
+    }
+
+    setExecutionState({
+      turnKey: currentComputerTurnKey,
+      phase: "applying",
+      ...(currentComputerDecisionKey === null ? {} : { decisionKey: currentComputerDecisionKey })
+    });
+    onApplyMove(bestMove);
+  }, [
+    currentComputerDecisionKey,
+    currentComputerTurnKey,
+    gameState.activePlayer,
+    gameState.dice,
+    isComputerTurn,
+    isReadOnlyInspection,
+    legalMovesResult,
+    liveDecisionContext,
+    moveEvaluationDecisionKey,
+    moveEvaluationPending,
+    moveEvaluationResult,
+    computerApplyRetryCycle,
+    openingResolved,
+    openingTurnPending,
+    gameStatus.state,
+    lineageId,
+    turnHistory.length
+  ]);
 
   const onSelectHistoryTurn = (turnNumber: number): void => {
     clearStagedSelection();
@@ -2073,7 +2491,15 @@ function App({
     !openingTurnPending &&
     gameStatus.state !== "complete" &&
     gameState.dice === null &&
-    !isReadOnlyInspection;
+    !isReadOnlyInspection &&
+    !isComputerTurn;
+  const canPassTurn =
+    !isReadOnlyInspection &&
+    !isComputerTurn &&
+    gameStatus.state !== "complete" &&
+    gameState.dice !== null &&
+    legalMovesResult.ok &&
+    legalMovesResult.moves.length === 0;
   const canSetDiceManually = canRollDice;
   const canCopySnapshot =
     typeof navigator !== "undefined" &&
@@ -2091,6 +2517,22 @@ function App({
   const interactionStatus = (() => {
     if (gameStatus.state === "complete") {
       return "Game complete";
+    }
+
+    if (computerTurnState.status === "rolling") {
+      return "Computer is rolling dice";
+    }
+
+    if (computerTurnState.status === "evaluating") {
+      return "Computer is evaluating the position";
+    }
+
+    if (computerTurnState.status === "applying") {
+      return "Computer is applying the move";
+    }
+
+    if (computerTurnState.status === "failed") {
+      return "Computer move failed. Retry available.";
     }
 
     if (isInspectingHistory && historyInspection !== null) {
@@ -2132,6 +2574,38 @@ function App({
     return `${candidateMoves.length} legal continuations remain`;
   })();
 
+  const openingSummary = (() => {
+    if (openingRollState.phase === "waiting") {
+      return "Opening not started";
+    }
+
+    if (openingRollState.phase === "tied") {
+      return `Opening tie ${openingRollState.whiteDie}-${openingRollState.blackDie}`;
+    }
+
+    return `${getPlayerLabel(openingRollState.startingPlayer)} opened ${openingRollState.whiteDie}-${openingRollState.blackDie}`;
+  })();
+
+  const turnDiceSummary =
+    gameState.dice === null ? "Dice not rolled" : `Turn dice ${gameState.dice.dice[0]}-${gameState.dice.dice[1]}`;
+
+  const showOpeningButton = openingRollState.phase !== "resolved";
+  const openingButtonLabel = openingRollState.phase === "tied" ? "Roll Again" : "Roll for Opening";
+
+  const coachQuickPrompts = useMemo(() => {
+    const prompts = ["What should I do?"];
+
+    if (turnHistory.length > 0) {
+      prompts.push("Review my last move");
+    }
+
+    if (learnerProgress.counts.recentWindow.totalEligible > 0) {
+      prompts.push("How am I doing?");
+    }
+
+    return prompts;
+  }, [learnerProgress.counts.recentWindow.totalEligible, turnHistory.length]);
+
   const hoverPreviewText = (() => {
     if (isReadOnlyInspection) {
       return "";
@@ -2168,19 +2642,66 @@ function App({
       <header className={styles.header}>
         <div>
           <h1>Backgammon Trainer</h1>
-          <p>
-            Study-oriented board view with deterministic position rendering and coaching panel
-            placeholders.
-          </p>
+          <p>Play White, study the position, and keep the coach beside the board.</p>
         </div>
         <p className={styles.status} aria-live="polite">
-          Server status: <span>mock-connected</span>
+          <span>Workspace</span> {computerTurnState.status === "failed" ? "computer paused" : "ready"}
         </p>
       </header>
 
       <main className={styles.mainLayout}>
         <section aria-labelledby="board-workspace-title" className={styles.boardSection}>
           <h2 id="board-workspace-title">Board Workspace</h2>
+          <section className={styles.gameBar} aria-label="Game status and actions">
+            <div className={styles.gameMetaCluster}>
+              <p className={styles.gameSeat}>You · White</p>
+              <p className={styles.gameSeat}>Computer · Black</p>
+              <p className={styles.gameMeta} aria-live="polite">
+                Turn: {getPlayerLabel(gameState.activePlayer)}
+              </p>
+              <p className={styles.gameMeta}>{openingSummary}</p>
+              <p className={styles.gameMeta}>{turnDiceSummary}</p>
+              <p className={styles.gameMeta} aria-live="polite">
+                {interactionStatus}
+              </p>
+            </div>
+            <div className={styles.gameActions}>
+              {showOpeningButton ? (
+                <button
+                  type="button"
+                  className={styles.primaryAction}
+                  onClick={onRollForOpening}
+                  disabled={isReadOnlyInspection || gameStatus.state === "complete"}
+                >
+                  {openingButtonLabel}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={!showOpeningButton && canRollDice ? styles.primaryAction : undefined}
+                onClick={onRollDice}
+                disabled={!canRollDice}
+              >
+                Roll Dice
+              </button>
+              <button
+                type="button"
+                className={!showOpeningButton && !canRollDice && canPassTurn ? styles.primaryAction : undefined}
+                onClick={onPassTurn}
+                disabled={!canPassTurn}
+              >
+                Pass Turn
+              </button>
+              {computerTurnState.status === "failed" ? (
+                <button type="button" className={styles.primaryAction} onClick={onRetryComputerTurn}>
+                  Retry Computer Move
+                </button>
+              ) : null}
+              <button type="button" onClick={onNewGame}>
+                New Game
+              </button>
+            </div>
+          </section>
           {isInspectingHistory && historyInspection !== null ? (
             <p className={styles.selectionMeta} data-testid="history-inspection-banner">
               History inspection mode: turn {historyInspection.turnNumber} ({historyInspection.view}
@@ -2315,6 +2836,7 @@ function App({
             lineageKey={coachLineageKey}
             context={coachContext}
             progressContext={progressContext}
+            quickPrompts={coachQuickPrompts}
             runtime={resolvedCoachRuntime}
             fixtureEnabled={coachFixtureEnabled}
             evaluatorConfigured={moveEvaluator !== undefined}
