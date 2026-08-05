@@ -67,23 +67,34 @@ export const STARTING_POSITION = createPosition({
   }
 });
 
+// Two checkers, each with exactly one intermediate waypoint blocked by an opposing
+// point, so each checker has exactly one legal way to play both dice. This yields
+// exactly two legal moves with no raw-path duplicates within a canonical move class
+// (a single checker with two different-valued dice and both waypoints open would
+// otherwise reach the same destination via two paths, which is one real move, not two).
 export const WHITE_SIMPLE_POSITION = createPosition({
   points: {
-    8: { player: "white", checkerCount: 1 }
+    8: { player: "white", checkerCount: 1 },
+    20: { player: "white", checkerCount: 1 },
+    7: { player: "black", checkerCount: 2 },
+    19: { player: "black", checkerCount: 2 }
   },
   borneOff: {
-    white: 14,
-    black: 15
+    white: 13,
+    black: 11
   }
 });
 
 export const BLACK_SIMPLE_POSITION = createPosition({
   points: {
-    1: { player: "black", checkerCount: 1 }
+    1: { player: "black", checkerCount: 1 },
+    13: { player: "black", checkerCount: 1 },
+    2: { player: "white", checkerCount: 2 },
+    14: { player: "white", checkerCount: 2 }
   },
   borneOff: {
-    white: 15,
-    black: 14
+    white: 11,
+    black: 13
   }
 });
 

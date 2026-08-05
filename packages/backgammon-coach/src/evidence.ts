@@ -1,5 +1,6 @@
 import {
   analyzePosition,
+  getCanonicalMoveFingerprint,
   getMoveFingerprint,
   type EvaluatorProvenance,
   type LegalMoveOutcome,
@@ -277,24 +278,15 @@ const moveStepKeys = (move: Move): readonly string[] => {
   return move.steps.map((step) => formatStepLabel(step.fromPoint, step.toPoint));
 };
 
-const getCanonicalMoveFingerprint = (move: Move): string => {
-  const stepKeys = move.steps
-    .map((step) => {
-      const hitKey = step.hit === undefined ? "" : `:${step.hit.player}:${step.hit.point}`;
-      return `${step.kind}:${step.fromPoint}:${step.toPoint}:${step.dieValue}:${step.hitsBlot}${hitKey}`;
-    })
-    .sort((left, right) => left.localeCompare(right));
-
-  return `${move.player}::${stepKeys.join("|")}`;
-};
-
-const buildCanonicalFingerprintSet = (moves: readonly Move[]): Set<string> => {
-  return new Set(moves.map((move) => getCanonicalMoveFingerprint(move)));
+const buildCanonicalFingerprintSet = (
+  outcomes: readonly Pick<LegalMoveOutcome, "move" | "positionAfter">[]
+): Set<string> => {
+  return new Set(outcomes.map((outcome) => getCanonicalMoveFingerprint(outcome)));
 };
 
 const summarizeCanonicalCoverage = (input: {
-  factualMoves: readonly Move[];
-  evaluatedMoves: readonly Move[];
+  factualOutcomes: readonly Pick<LegalMoveOutcome, "move" | "positionAfter">[];
+  evaluatedOutcomes: readonly Pick<LegalMoveOutcome, "move" | "positionAfter">[];
   providerCoverage: "complete" | "partial";
 }): {
   status: "complete" | "partial";
@@ -304,8 +296,8 @@ const summarizeCanonicalCoverage = (input: {
   unevaluatedMoveCount: number;
   countingBasis: "canonical-move-fingerprint";
 } => {
-  const totalSet = buildCanonicalFingerprintSet(input.factualMoves);
-  const evaluatedSet = buildCanonicalFingerprintSet(input.evaluatedMoves);
+  const totalSet = buildCanonicalFingerprintSet(input.factualOutcomes);
+  const evaluatedSet = buildCanonicalFingerprintSet(input.evaluatedOutcomes);
   const totalLegalMoveCount = totalSet.size;
   const evaluatedMoveCount = [...evaluatedSet].filter((fingerprint) =>
     totalSet.has(fingerprint)
@@ -1017,23 +1009,29 @@ export const buildCoachEvidence = (input: {
 
     if (turnRecord.outcome.kind === "move") {
       playedMoveFingerprint = getMoveFingerprint(turnRecord.outcome.move);
-      playedCanonicalFingerprint = getCanonicalMoveFingerprint(turnRecord.outcome.move);
+      playedCanonicalFingerprint = getCanonicalMoveFingerprint({
+        move: turnRecord.outcome.move,
+        positionAfter: turnRecord.positionAfter
+      });
     }
 
     if (playedMoveFingerprint !== undefined && rankedAnalysis?.kind === "evaluated") {
       evaluationCoverage = summarizeCanonicalCoverage({
-        factualMoves: rankedAnalysis.factualOutcomes.map((outcome) => outcome.move),
-        evaluatedMoves: rankedAnalysis.rankedMoves.map((row) => row.outcome.move),
+        factualOutcomes: rankedAnalysis.factualOutcomes,
+        evaluatedOutcomes: rankedAnalysis.rankedMoves.map((row) => row.outcome),
         providerCoverage: rankedAnalysis.coverage
       });
 
-      const rankedChosen = rankedAnalysis.rankedMoves.find((row) => {
-        return (
-          row.moveFingerprint === playedMoveFingerprint ||
-          (playedCanonicalFingerprint !== undefined &&
-            getCanonicalMoveFingerprint(row.outcome.move) === playedCanonicalFingerprint)
-        );
-      });
+      // An exact raw-fingerprint match must win over a canonical-class fallback match:
+      // when several raw move variants share a canonical class, only one of them is
+      // the literal move that was played, and the others may carry different rank/score data.
+      const rankedChosen =
+        rankedAnalysis.rankedMoves.find((row) => row.moveFingerprint === playedMoveFingerprint) ??
+        (playedCanonicalFingerprint === undefined
+          ? undefined
+          : rankedAnalysis.rankedMoves.find(
+              (row) => getCanonicalMoveFingerprint(row.outcome) === playedCanonicalFingerprint
+            ));
       playedMoveEvaluated = rankedChosen !== undefined;
       evaluatedChosenMove = {
         ...(rankedChosen === undefined ? {} : { evaluatorRank: rankedChosen.rank }),
@@ -1084,13 +1082,13 @@ export const buildCoachEvidence = (input: {
       }
 
       if (rankedAnalysis.rankedMoves.length > 0) {
-        const playedRanked = rankedAnalysis.rankedMoves.find((row) => {
-          return (
-            row.moveFingerprint === playedMoveFingerprint ||
-            (playedCanonicalFingerprint !== undefined &&
-              getCanonicalMoveFingerprint(row.outcome.move) === playedCanonicalFingerprint)
-          );
-        });
+        const playedRanked =
+          rankedAnalysis.rankedMoves.find((row) => row.moveFingerprint === playedMoveFingerprint) ??
+          (playedCanonicalFingerprint === undefined
+            ? undefined
+            : rankedAnalysis.rankedMoves.find(
+                (row) => getCanonicalMoveFingerprint(row.outcome) === playedCanonicalFingerprint
+              ));
         const playedRankedIndex =
           playedRanked === undefined ? -1 : rankedAnalysis.rankedMoves.indexOf(playedRanked);
         const rankedComparisonRows =
@@ -1122,7 +1120,7 @@ export const buildCoachEvidence = (input: {
             return (
               getMoveFingerprint(outcome.move) === playedMoveFingerprint ||
               (playedCanonicalFingerprint !== undefined &&
-                getCanonicalMoveFingerprint(outcome.move) === playedCanonicalFingerprint)
+                getCanonicalMoveFingerprint(outcome) === playedCanonicalFingerprint)
             );
           });
           if (playedUnevaluated !== undefined) {
@@ -1223,7 +1221,7 @@ export const buildCoachEvidence = (input: {
             legalMoves: [
               ...rankedAnalysis.rankedMoves.map((row) => ({
                 moveFingerprint: row.moveFingerprint,
-                canonicalMoveFingerprint: getCanonicalMoveFingerprint(row.outcome.move),
+                canonicalMoveFingerprint: getCanonicalMoveFingerprint(row.outcome),
                 moveLabel: formatMoveLabel(row.outcome.move),
                 evaluated: true,
                 evaluatorRank: row.rank,
@@ -1233,7 +1231,7 @@ export const buildCoachEvidence = (input: {
               })),
               ...rankedAnalysis.unevaluatedMoves.map((outcome) => ({
                 moveFingerprint: getMoveFingerprint(outcome.move),
-                canonicalMoveFingerprint: getCanonicalMoveFingerprint(outcome.move),
+                canonicalMoveFingerprint: getCanonicalMoveFingerprint(outcome),
                 moveLabel: formatMoveLabel(outcome.move),
                 evaluated: false,
                 featureDelta: structuredClone(outcome.featureDelta)

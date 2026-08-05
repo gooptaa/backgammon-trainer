@@ -6,5 +6,5 @@ score-scale: equity-points
 setting depth: 2
 setting noise: off
 info: deterministic static evaluation
-1. 8/7 7/5 | equity +0.125 | rank 1
-2. 8/6 6/5 | equity +0.100 | rank 2
+1. 8/6 6/5 | equity +0.125 | rank 1
+2. 20/18 18/17 | equity +0.100 | rank 2

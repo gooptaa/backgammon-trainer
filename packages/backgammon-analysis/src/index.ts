@@ -455,15 +455,21 @@ export const getMoveFingerprint = (move: Move): string => {
   return `${move.player}::${steps}`;
 };
 
-export const getCanonicalMoveFingerprint = (move: Move): string => {
-  const stepKeys = move.steps
-    .map((step) => {
-      const hitKey = step.hit === undefined ? "" : `:${step.hit.player}:${step.hit.point}`;
-      return `${step.kind}:${step.fromPoint}:${step.toPoint}:${step.dieValue}:${step.hitsBlot}${hitKey}`;
-    })
-    .sort((left, right) => left.localeCompare(right));
+export const getCanonicalMoveFingerprint = (
+  outcome: Pick<LegalMoveOutcome, "move" | "positionAfter">
+): string => {
+  // Two move sequences are the same move class exactly when they reach the same
+  // resulting position (bar, borne-off, and per-point occupancy). Fingerprinting by
+  // move steps instead under-collapses combined single-checker moves that can reach
+  // the same destination through different open intermediate waypoints (e.g. 1/4/5
+  // vs 1/2/5), which over-counts distinct move classes.
+  const position = outcome.positionAfter;
+  const pointsKey = POINTS.map((point) => {
+    const occupancy = position.points[point];
+    return occupancy === null ? "_" : `${occupancy.player[0]}${occupancy.checkerCount}`;
+  }).join(",");
 
-  return `${move.player}::${stepKeys.join("|")}`;
+  return `${outcome.move.player}::bar:${position.bar.white}:${position.bar.black}::off:${position.borneOff.white}:${position.borneOff.black}::pts:${pointsKey}`;
 };
 
 const clonePosition = (position: Position): Position => {
@@ -585,7 +591,7 @@ const validateEvaluationSuccess = (
     legalOutcomes.map((outcome) => getMoveFingerprint(outcome.move))
   );
   const legalCanonicalFingerprints = new Set(
-    legalOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome.move))
+    legalOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome))
   );
   const legalOutcomeByFingerprint = new Map(
     legalOutcomes.map((outcome) => [getMoveFingerprint(outcome.move), outcome] as const)
@@ -614,7 +620,7 @@ const validateEvaluationSuccess = (
       return "Evaluator reported a move that is not in the legal move set.";
     }
 
-    const canonicalFingerprint = getCanonicalMoveFingerprint(matchingOutcome.move);
+    const canonicalFingerprint = getCanonicalMoveFingerprint(matchingOutcome);
 
     if (scoredByCanonicalFingerprint.has(canonicalFingerprint)) {
       return "Evaluator reported duplicate scores for one move class.";
@@ -813,7 +819,7 @@ export const evaluateLegalMoves = async (
 
   const scoredOutcomes = factual.analysis.outcomes.flatMap((outcome) => {
     const moveFingerprint = getMoveFingerprint(outcome.move);
-    const canonicalFingerprint = getCanonicalMoveFingerprint(outcome.move);
+    const canonicalFingerprint = getCanonicalMoveFingerprint(outcome);
     const score = validated.scoredByCanonicalFingerprint.get(canonicalFingerprint);
 
     if (score === undefined) {
@@ -831,8 +837,7 @@ export const evaluateLegalMoves = async (
 
   const unevaluatedMoves = factual.analysis.outcomes
     .filter(
-      (outcome) =>
-        !validated.scoredByCanonicalFingerprint.has(getCanonicalMoveFingerprint(outcome.move))
+      (outcome) => !validated.scoredByCanonicalFingerprint.has(getCanonicalMoveFingerprint(outcome))
     )
     .map((outcome) => cloneLegalMoveOutcome(outcome));
 

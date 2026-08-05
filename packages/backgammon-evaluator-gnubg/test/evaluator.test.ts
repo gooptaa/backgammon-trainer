@@ -106,7 +106,15 @@ describe("createGnuBgPositionEvaluator", () => {
         return {
           ok: true,
           exitCode: 0,
-          stdout: readFixture("success-white-complete.txt"),
+          stdout: [
+            "GNU Backgammon 1.08.003",
+            "format: checker-play-v1",
+            "coverage: partial",
+            "perspective: player-on-roll",
+            "score-scale: equity-points",
+            "warning: provider returned only top candidates",
+            "1. 8/7 7/5 | equity +0.125 | rank 1"
+          ].join("\n"),
           stderr: ""
         };
       })
@@ -114,7 +122,7 @@ describe("createGnuBgPositionEvaluator", () => {
 
     const legalOutcomes = getLegalOutcomes(DUPLICATE_AUDIT_POSITION, "white");
     const expectedMoves = new Set(
-      legalOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome.move))
+      legalOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome))
     ).size;
 
     const result = await evaluator.evaluate({
@@ -361,7 +369,7 @@ describe("createGnuBgPositionEvaluator", () => {
       processRunner: createFakeGnuBgProcessRunner(async () => ({
         ok: true,
         exitCode: 0,
-        stdout: readFixture("success-partial.txt").replace("8/7 7/5", "8/7 7/6"),
+        stdout: readFixture("success-partial.txt").replace("8/6 6/5", "8/7 7/6"),
         stderr: ""
       })),
       analysisRequestFactory: ({ executable, timeoutMs }) => ({

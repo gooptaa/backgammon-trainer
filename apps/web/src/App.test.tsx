@@ -188,6 +188,25 @@ const createUndoPreviewPosition = (): BoardPosition =>
     }
   });
 
+// Two checkers, each with exactly one intermediate waypoint blocked by a black point,
+// so each checker has exactly one legal way to play both dice (1 and 2). A single
+// checker with two open waypoints would instead reach the same destination via two
+// paths, which is one real move, not two -- unsuitable for tests that need multiple
+// genuinely distinct legal moves for dice [1, 2].
+const createTwoDistinctMovesPosition = (): BoardPosition =>
+  createPosition({
+    points: {
+      8: { player: "white", checkerCount: 1 },
+      20: { player: "white", checkerCount: 1 },
+      7: { player: "black", checkerCount: 2 },
+      19: { player: "black", checkerCount: 2 }
+    },
+    borneOff: {
+      white: 13,
+      black: 11
+    }
+  });
+
 const createTwoPassHistoryPosition = (): BoardPosition =>
   createPosition({
     points: {
@@ -457,7 +476,7 @@ const createCompleteNonFixtureEvaluator = (): {
         const scores: Array<{ moveFingerprint: string; normalizedScore: number }> = [];
 
         for (const outcome of request.legalOutcomes) {
-          const canonicalFingerprint = getCanonicalMoveFingerprint(outcome.move);
+          const canonicalFingerprint = getCanonicalMoveFingerprint(outcome);
 
           if (seenCanonicalFingerprints.has(canonicalFingerprint)) {
             continue;
@@ -538,7 +557,7 @@ const buildCompleteEvaluationResult = (
     const scores: Array<{ moveFingerprint: string; normalizedScore: number }> = [];
 
     for (const outcome of request.legalOutcomes) {
-      const canonicalFingerprint = getCanonicalMoveFingerprint(outcome.move);
+      const canonicalFingerprint = getCanonicalMoveFingerprint(outcome);
 
       if (seenCanonicalFingerprints.has(canonicalFingerprint)) {
         continue;
@@ -2083,7 +2102,7 @@ describe("App legal move outcomes panel", () => {
   });
 
   it("renders partial coverage and keeps unevaluated legal moves visible", async () => {
-    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+    const initialGameState = createGameState(createTwoDistinctMovesPosition(), "white");
     const evaluator = createFixturePositionEvaluator({ mode: "partial" });
 
     renderApp({
@@ -2105,7 +2124,7 @@ describe("App legal move outcomes panel", () => {
   });
 
   it("supports tied ranks and ranked-row preview of the exact canonical outcome", async () => {
-    const initialGameState = createGameState(createUndoPreviewPosition(), "white");
+    const initialGameState = createGameState(createTwoDistinctMovesPosition(), "white");
     const tieEvaluateSpy = vi.fn(
       async (request: EvaluatePositionRequest): Promise<EvaluatePositionResult> => {
         const outcomes = request.legalOutcomes;

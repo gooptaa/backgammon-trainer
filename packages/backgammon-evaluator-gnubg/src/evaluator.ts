@@ -106,9 +106,8 @@ const createDefaultAnalysisRequestFactory = (
   return (input: BuildGnuBgAnalysisRequestInput): BuildGnuBgAnalysisRequestResult => {
     const expectedMoves = Math.min(
       Math.max(
-        new Set(
-          input.request.legalOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome.move))
-        ).size,
+        new Set(input.request.legalOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome)))
+          .size,
         0
       ),
       256

@@ -24,7 +24,7 @@ describe("parseGnuBgEvaluationOutput", () => {
     expect(result.evaluation.settings).toEqual({ depth: 2, noise: "off" });
     expect(result.evaluation.rows[0]).toEqual(
       expect.objectContaining({
-        notation: "8/7 7/5",
+        notation: "8/6 6/5",
         sourceScore: 0.125,
         normalizedScore: 0.125,
         providerRank: 1
@@ -32,7 +32,7 @@ describe("parseGnuBgEvaluationOutput", () => {
     );
     expect(result.evaluation.rows[1]).toEqual(
       expect.objectContaining({
-        notation: "8/6 6/5",
+        notation: "20/18 18/17",
         sourceScore: 0.1,
         normalizedScore: 0.1,
         providerRank: 2
@@ -55,7 +55,7 @@ describe("parseGnuBgEvaluationOutput", () => {
       expect.objectContaining({ fromPoint: 1, toPoint: 3 })
     );
     expect(result.evaluation.rows[1]?.parsedMove.steps[0]).toEqual(
-      expect.objectContaining({ fromPoint: 1, toPoint: 2 })
+      expect.objectContaining({ fromPoint: 13, toPoint: 15 })
     );
   });
 

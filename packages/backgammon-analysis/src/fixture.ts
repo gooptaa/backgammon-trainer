@@ -102,7 +102,7 @@ export const createFixturePositionEvaluator = (
         const representativeFingerprints: string[] = [];
 
         for (const outcome of request.legalOutcomes) {
-          const canonicalFingerprint = getCanonicalMoveFingerprint(outcome.move);
+          const canonicalFingerprint = getCanonicalMoveFingerprint(outcome);
           if (seenCanonicalFingerprints.has(canonicalFingerprint)) {
             continue;
           }

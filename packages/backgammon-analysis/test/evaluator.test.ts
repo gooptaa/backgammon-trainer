@@ -62,13 +62,21 @@ const createPosition = (input?: {
   }
 });
 
+// Two white checkers, each with exactly one intermediate waypoint blocked by a black
+// point, so each checker has exactly one legal way to play both dice. This yields
+// exactly two legal moves with no raw-path duplicates within a canonical move class,
+// which keeps the generic evaluator plumbing tests independent of move-deduplication
+// behavior (that is covered separately by DUPLICATE_AUDIT_POSITION below).
 const PLAYABLE_POSITION = createPosition({
   points: {
-    8: { player: "white", checkerCount: 1 }
+    8: { player: "white", checkerCount: 1 },
+    20: { player: "white", checkerCount: 1 },
+    7: { player: "black", checkerCount: 2 },
+    19: { player: "black", checkerCount: 2 }
   },
   borneOff: {
-    white: 14,
-    black: 14
+    white: 13,
+    black: 11
   }
 });
 
@@ -232,7 +240,7 @@ describe("evaluateLegalMoves", () => {
         }[];
 
         for (const outcome of request.legalOutcomes) {
-          const canonicalFingerprint = getCanonicalMoveFingerprint(outcome.move);
+          const canonicalFingerprint = getCanonicalMoveFingerprint(outcome);
 
           if (seenCanonicalFingerprints.has(canonicalFingerprint)) {
             continue;
@@ -276,7 +284,7 @@ describe("evaluateLegalMoves", () => {
     }
 
     const canonicalFingerprints = result.analysis.factualOutcomes.map((outcome) =>
-      getCanonicalMoveFingerprint(outcome.move)
+      getCanonicalMoveFingerprint(outcome)
     );
     const duplicateCanonicalFingerprint = canonicalFingerprints.find(
       (fingerprint, index) => canonicalFingerprints.indexOf(fingerprint) !== index
@@ -294,7 +302,7 @@ describe("evaluateLegalMoves", () => {
     }
 
     const duplicateClass = result.analysis.rankedMoves.filter(
-      (row) => getCanonicalMoveFingerprint(row.outcome.move) === duplicateCanonicalFingerprint
+      (row) => getCanonicalMoveFingerprint(row.outcome) === duplicateCanonicalFingerprint
     );
 
     expect(duplicateClass.length).toBeGreaterThan(1);

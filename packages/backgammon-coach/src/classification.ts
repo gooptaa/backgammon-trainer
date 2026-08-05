@@ -1,8 +1,8 @@
 import {
+  getCanonicalMoveFingerprint,
   getMoveFingerprint,
   type RankedLegalMoveAnalysis
 } from "@backgammon-trainer/backgammon-analysis";
-import type { Move } from "@backgammon-trainer/backgammon-engine";
 
 export type CoachMoveClassificationLabel = "best" | "reasonable" | "mistake" | "major mistake";
 
@@ -115,17 +115,6 @@ const classifyLossFromBest = (lossFromBest: number): CoachMoveClassificationLabe
   return "major mistake";
 };
 
-const getCanonicalMoveFingerprint = (move: Move): string => {
-  const stepKeys = move.steps
-    .map((step) => {
-      const hitKey = step.hit === undefined ? "" : `:${step.hit.player}:${step.hit.point}`;
-      return `${step.kind}:${step.fromPoint}:${step.toPoint}:${step.dieValue}:${step.hitsBlot}${hitKey}`;
-    })
-    .sort((left, right) => left.localeCompare(right));
-
-  return `${move.player}::${stepKeys.join("|")}`;
-};
-
 export const formatUnclassifiedReason = (
   reason: CoachMoveClassificationUnclassifiedReason
 ): string => {
@@ -196,15 +185,15 @@ export const classifyCommittedMove = (input: {
   }
 
   const totalCanonicalMoveCount = new Set(
-    input.rankedAnalysis.factualOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome.move))
+    input.rankedAnalysis.factualOutcomes.map((outcome) => getCanonicalMoveFingerprint(outcome))
   ).size;
   const evaluatedCanonicalSet = new Set(
-    input.rankedAnalysis.rankedMoves.map((row) => getCanonicalMoveFingerprint(row.outcome.move))
+    input.rankedAnalysis.rankedMoves.map((row) => getCanonicalMoveFingerprint(row.outcome))
   );
   const evaluatedCanonicalMoveCount = evaluatedCanonicalSet.size;
   const hasCanonicalOverlapBetweenEvaluatedAndUnevaluated =
     input.rankedAnalysis.unevaluatedMoves.some((outcome) =>
-      evaluatedCanonicalSet.has(getCanonicalMoveFingerprint(outcome.move))
+      evaluatedCanonicalSet.has(getCanonicalMoveFingerprint(outcome))
     );
   const hasCompleteCanonicalCoverage =
     totalCanonicalMoveCount > 0 &&
@@ -224,15 +213,20 @@ export const classifyCommittedMove = (input: {
     (outcome) => getMoveFingerprint(outcome.move) === input.playedMoveFingerprint
   );
   const playedCanonicalFingerprint =
-    playedOutcome === undefined ? undefined : getCanonicalMoveFingerprint(playedOutcome.move);
+    playedOutcome === undefined ? undefined : getCanonicalMoveFingerprint(playedOutcome);
 
-  const playedRanked = input.rankedAnalysis.rankedMoves.find((row) => {
-    return (
-      row.moveFingerprint === input.playedMoveFingerprint ||
-      (playedCanonicalFingerprint !== undefined &&
-        getCanonicalMoveFingerprint(row.outcome.move) === playedCanonicalFingerprint)
-    );
-  });
+  // An exact raw-fingerprint match must win over a canonical-class fallback match:
+  // when several raw move variants share a canonical class, only one of them is the
+  // literal move that was played, and the others may carry different rank/score data.
+  const playedRanked =
+    input.rankedAnalysis.rankedMoves.find(
+      (row) => row.moveFingerprint === input.playedMoveFingerprint
+    ) ??
+    (playedCanonicalFingerprint === undefined
+      ? undefined
+      : input.rankedAnalysis.rankedMoves.find(
+          (row) => getCanonicalMoveFingerprint(row.outcome) === playedCanonicalFingerprint
+        ));
 
   if (playedRanked === undefined) {
     return unclassified("played-move-not-evaluated");
