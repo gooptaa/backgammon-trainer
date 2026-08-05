@@ -1,4 +1,5 @@
 import {
+  getCanonicalMoveFingerprint,
   getMoveFingerprint,
   type EvaluatePositionResult,
   type EvaluationScoreScale,
@@ -96,18 +97,34 @@ export const createFixturePositionEvaluator = (
         return createFixtureFailure("unsupported-position");
       }
 
-      const outcomeFingerprints = request.legalOutcomes.map((outcome) =>
-        getMoveFingerprint(outcome.move)
+      const canonicalRepresentativeFingerprints = (() => {
+        const seenCanonicalFingerprints = new Set<string>();
+        const representativeFingerprints: string[] = [];
+
+        for (const outcome of request.legalOutcomes) {
+          const canonicalFingerprint = getCanonicalMoveFingerprint(outcome.move);
+          if (seenCanonicalFingerprints.has(canonicalFingerprint)) {
+            continue;
+          }
+
+          seenCanonicalFingerprints.add(canonicalFingerprint);
+          representativeFingerprints.push(getMoveFingerprint(outcome.move));
+        }
+
+        return representativeFingerprints;
+      })();
+
+      const deterministicScoreMap = createDeterministicScoreMap(
+        canonicalRepresentativeFingerprints
       );
-      const deterministicScoreMap = createDeterministicScoreMap(outcomeFingerprints);
       const scoreMap = {
         ...deterministicScoreMap,
         ...(options.scoresByFingerprint ?? {})
       };
       const scoredFingerprints =
         mode === "partial"
-          ? (options.partialFingerprints ?? outcomeFingerprints.slice(0, 1))
-          : outcomeFingerprints;
+          ? (options.partialFingerprints ?? canonicalRepresentativeFingerprints.slice(0, 1))
+          : canonicalRepresentativeFingerprints;
 
       const scores = scoredFingerprints.map((fingerprint) => ({
         moveFingerprint: fingerprint,
@@ -126,7 +143,7 @@ export const createFixturePositionEvaluator = (
           scores: [
             ...scores,
             {
-              moveFingerprint: outcomeFingerprints[0] ?? "missing",
+              moveFingerprint: canonicalRepresentativeFingerprints[0] ?? "missing",
               normalizedScore: Number.NaN
             }
           ],

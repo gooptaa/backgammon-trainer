@@ -461,4 +461,26 @@ describe("CoachPanel", () => {
     expect(screen.getByText(/Context kind/)).toBeInTheDocument();
     expect(screen.getByText(/Curated knowledge entries/)).toBeInTheDocument();
   });
+
+  it("submits a quick prompt through the same coach pipeline", async () => {
+    render(
+      <CoachPanel
+        lineageKey="game-1"
+        context={currentContext}
+        runtime={runtime}
+        model={createFixtureChatModel()}
+        fixtureEnabled={true}
+        quickPrompts={["What should I do?"]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "What should I do?" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Fixture coach response/)).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/^You/)).toBeInTheDocument();
+    expect(screen.getAllByText(/What should I do\?/)).toHaveLength(2);
+  });
 });

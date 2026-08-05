@@ -96,13 +96,13 @@ describe("createGnuBgPositionEvaluator", () => {
   });
 
   it("counts canonical-equivalent legal move classes for the bridge payload", async () => {
-    let capturedRequest: { stdin: string } | null = null;
+    const capturedPayloadRequest = { stdin: "" };
 
     const evaluator = createGnuBgPositionEvaluator({
       executable: "gnubg-test",
       pythonBridgeScriptPath: "/tmp/bridge.py",
       processRunner: createFakeGnuBgProcessRunner(async (request) => {
-        capturedRequest = { stdin: request.stdin };
+        capturedPayloadRequest.stdin = request.stdin;
         return {
           ok: true,
           exitCode: 0,
@@ -125,20 +125,21 @@ describe("createGnuBgPositionEvaluator", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(capturedRequest).not.toBeNull();
-    if (capturedRequest === null) {
-      throw new Error("Expected process request to be captured.");
-    }
-
-    expect(capturedRequest.stdin).toContain(`"expectedMoves":${String(expectedMoves)}`);
-    expect(capturedRequest.stdin).not.toContain(`"expectedMoves":${String(legalOutcomes.length)}`);
+    expect(capturedPayloadRequest.stdin).toContain(`"expectedMoves":${String(expectedMoves)}`);
+    expect(capturedPayloadRequest.stdin).not.toContain(
+      `"expectedMoves":${String(legalOutcomes.length)}`
+    );
   });
 
   it("implements PositionEvaluator and sends translated execution options through the process boundary", async () => {
-    let capturedRequest: { executable: string; args: readonly string[]; timeoutMs: number } | null =
-      null;
+    let capturedExecutionRequest: {
+      executable: string;
+      args: readonly string[];
+      timeoutMs: number;
+      stdin: string;
+    } | null = null;
     const runner = createFakeGnuBgProcessRunner(async (request) => {
-      capturedRequest = request;
+      capturedExecutionRequest = request;
       return {
         ok: true,
         exitCode: 0,
@@ -175,7 +176,7 @@ describe("createGnuBgPositionEvaluator", () => {
       context: { gameMode: "money" }
     });
 
-    expect(capturedRequest).toEqual({
+    expect(capturedExecutionRequest).toEqual({
       executable: "gnubg-test",
       args: ["-t", "-q", "-r", "--commands=/tmp/gnubg-commands.txt"],
       stdin: "",

@@ -568,6 +568,12 @@ const buildCompleteEvaluationResult = (
 });
 
 const openDevelopmentControls = (): void => {
+  const developmentToolsSummary = screen.getByText("Development Tools");
+  const developmentTools = developmentToolsSummary.closest("details");
+  if (developmentTools !== null && !developmentTools.hasAttribute("open")) {
+    fireEvent.click(developmentToolsSummary);
+  }
+
   fireEvent.click(screen.getByText("Development controls"));
 };
 
@@ -582,11 +588,31 @@ const clickOpeningRoll = (): void => {
   fireEvent.click(screen.getByRole("button", { name: /Roll for Opening|Roll Again/i }));
 };
 
+const openDevelopmentTools = (): void => {
+  const developmentToolsSummary = screen.getByText("Development Tools");
+  const developmentTools = developmentToolsSummary.closest("details");
+  if (developmentTools !== null && !developmentTools.hasAttribute("open")) {
+    fireEvent.click(developmentToolsSummary);
+  }
+};
+
 const openExportSection = (): void => {
+  const developmentToolsSummary = screen.getByText("Development Tools");
+  const developmentTools = developmentToolsSummary.closest("details");
+  if (developmentTools !== null && !developmentTools.hasAttribute("open")) {
+    fireEvent.click(developmentToolsSummary);
+  }
+
   fireEvent.click(screen.getByText("Export Game"));
 };
 
 const openImportSection = (): void => {
+  const developmentToolsSummary = screen.getByText("Development Tools");
+  const developmentTools = developmentToolsSummary.closest("details");
+  if (developmentTools !== null && !developmentTools.hasAttribute("open")) {
+    fireEvent.click(developmentToolsSummary);
+  }
+
   fireEvent.click(screen.getByText("Import Game"));
 };
 
@@ -757,7 +783,7 @@ describe("App turn history and inspection", () => {
       initialOpeningTurnPending: true
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
+    fireEvent.click(screen.getByRole("button", { name: "No legal moves - Pass" }));
 
     expect(getHistoryCount()).toContain("Recorded turns: 1");
     expect(
@@ -796,9 +822,7 @@ describe("App turn history and inspection", () => {
 
     expect(getHistoryCount()).toContain("Recorded turns: 0");
 
-    const passButton = screen.getByRole("button", { name: "Pass Turn" });
-    expect(passButton).toBeDisabled();
-    fireEvent.click(passButton);
+    expect(screen.queryByRole("button", { name: "No legal moves - Pass" })).not.toBeInTheDocument();
     expect(getHistoryCount()).toContain("Recorded turns: 0");
   });
 
@@ -855,7 +879,7 @@ describe("App turn history and inspection", () => {
     expect(screen.getByTestId("history-inspection-banner")).toBeInTheDocument();
     expect(screen.queryAllByRole("button", { name: /Select source (point|bar)/i })).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Roll Dice" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Pass Turn" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "No legal moves - Pass" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Roll for Opening|Roll Again/i })
     ).not.toBeInTheDocument();
@@ -879,12 +903,12 @@ describe("App turn history and inspection", () => {
       initialOpeningTurnPending: false
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
+    fireEvent.click(screen.getByRole("button", { name: "No legal moves - Pass" }));
     const firstRecordSnapshot = screen.getByRole("button", {
       name: /^1\. White - Normal - 1-1 - Pass$/
     }).textContent;
     setDiceManually("1", "1");
-    fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
+    fireEvent.click(screen.getByRole("button", { name: "No legal moves - Pass" }));
 
     expect(getHistoryCount()).toContain("Recorded turns: 2");
     expect(
@@ -937,7 +961,7 @@ describe("App turn history and inspection", () => {
       randomSource: createRandomSource([0.7, 0.4, 0.7, 0.4])
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
+    fireEvent.click(screen.getByRole("button", { name: "No legal moves - Pass" }));
     expect(
       screen.getByRole("button", { name: /^1\. White - Opening - 1-1 - Pass$/ })
     ).toBeInTheDocument();
@@ -1265,7 +1289,7 @@ describe("App turn transitions and reset behavior", () => {
       initialOpeningTurnPending: true
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Pass Turn" }));
+    fireEvent.click(screen.getByRole("button", { name: "No legal moves - Pass" }));
 
     expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
     expect(screen.getByRole("button", { name: "Roll Dice" })).toBeEnabled();
@@ -1310,7 +1334,9 @@ describe("App turn transitions and reset behavior", () => {
       expect(getHistoryCount()).toContain("Recorded turns: 1");
     });
 
-    expect(screen.getByRole("button", { name: /^1\. Black - Opening - 1-6 -/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^1\. Black - Opening - 1-6 -/ })
+    ).toBeInTheDocument();
     expect(screen.getByTestId("turn-dice-value")).toHaveTextContent("Turn dice: not set");
     expect(screen.getByRole("button", { name: "Roll Dice" })).toBeEnabled();
     expect(evaluateSpy).toHaveBeenCalledTimes(1);
@@ -1519,7 +1545,77 @@ describe("App turn transitions and reset behavior", () => {
       expect(getHistoryCount()).toContain("Recorded turns: 0");
     });
 
-    expect(screen.queryByRole("button", { name: /^1\. Black - Normal - / })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^1\. Black - Normal - / })
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps pass unavailable while legal white moves exist", () => {
+    renderApp({ randomSource: createRandomSource([0.7, 0.4]) });
+
+    clickOpeningRoll();
+
+    expect(screen.queryByRole("button", { name: "No legal moves - Pass" })).not.toBeInTheDocument();
+  });
+
+  it("defaults development tools collapsed and keeps primary controls out of sandbox", () => {
+    renderApp();
+
+    const developmentToolsSummary = screen.getByText("Development Tools");
+    const developmentTools = developmentToolsSummary.closest("details");
+    expect(developmentTools).not.toHaveAttribute("open");
+
+    expect(screen.getAllByRole("button", { name: "New Game" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Roll Dice" })).toHaveLength(1);
+
+    openDevelopmentTools();
+
+    const sandbox = screen.getByRole("heading", { name: "Engine Game Sandbox" }).closest("section");
+    if (sandbox === null) {
+      throw new Error("Expected engine sandbox panel");
+    }
+
+    expect(within(sandbox).queryByRole("button", { name: "New Game" })).not.toBeInTheDocument();
+    expect(within(sandbox).queryByRole("button", { name: "Roll Dice" })).not.toBeInTheDocument();
+    expect(
+      within(sandbox).queryByRole("button", { name: "No legal moves - Pass" })
+    ).not.toBeInTheDocument();
+    expect(
+      within(sandbox).queryByRole("button", { name: /Retry Computer Move/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps hint actions evaluator-gated and non-committing", async () => {
+    renderApp({
+      initialGameState: createGameState(createUndoPreviewPosition(), "white"),
+      initialOpeningRollState: resolvedOpeningState("white")
+    });
+
+    expect(screen.getByRole("button", { name: "Hint" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Show Best Move" })).toBeDisabled();
+
+    cleanup();
+
+    const { evaluator } = createCompleteNonFixtureEvaluator();
+    renderApp({
+      initialGameState: createGameState(createUndoPreviewPosition(), "white"),
+      initialOpeningRollState: resolvedOpeningState("white"),
+      moveEvaluator: evaluator
+    });
+
+    setDiceManually("1", "2");
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Hint" })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Hint" }));
+    expect(screen.getByText(/Hint: consider/i)).toBeInTheDocument();
+    expect(getHistoryCount()).toContain("Recorded turns: 0");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show Best Move" }));
+    expect(screen.getByTestId("move-outcome-preview-banner")).toBeInTheDocument();
+    expect(getHistoryCount()).toContain("Recorded turns: 0");
   });
 });
 
@@ -1839,7 +1935,7 @@ describe("App legal move outcomes panel", () => {
 
     expect(screen.queryAllByRole("button", { name: /Select source (point|bar)/i })).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Roll Dice" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Pass Turn" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "No legal moves - Pass" })).not.toBeInTheDocument();
     openDevelopmentControls();
     expect(screen.getByRole("button", { name: "Set Dice Manually" })).toBeDisabled();
   });

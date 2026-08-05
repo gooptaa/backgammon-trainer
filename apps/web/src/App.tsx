@@ -1407,8 +1407,8 @@ function App({
       gameLineageStorage.save(
         encodePersistedGameLineage({
           lineageId,
-            updatedAt: new Date().toISOString(),
-            shellMode: gameShellMode
+          updatedAt: new Date().toISOString(),
+          shellMode: gameShellMode
         })
       );
     } catch {
@@ -1417,7 +1417,7 @@ function App({
         "Lineage metadata could not be saved. Current session uses in-memory identity."
       );
     }
-    }, [gameLineageStorage, gameShellMode, lineageId, lineageWritable]);
+  }, [gameLineageStorage, gameShellMode, lineageId, lineageWritable]);
 
   const resetTransientState = (): void => {
     setSelectedSteps([]);
@@ -1563,11 +1563,16 @@ function App({
     if (!result.ok) {
       const currentExecution = computerTurnExecutionRef.current;
 
-      if (currentExecution.phase !== "idle" && currentExecution.turnKey === currentComputerTurnKey) {
+      if (
+        currentExecution.phase !== "idle" &&
+        currentExecution.turnKey === currentComputerTurnKey
+      ) {
         computerTurnExecutionRef.current = {
           ...currentExecution,
           phase: "failed",
-          ...(currentComputerDecisionKey === null ? {} : { decisionKey: currentComputerDecisionKey }),
+          ...(currentComputerDecisionKey === null
+            ? {}
+            : { decisionKey: currentComputerDecisionKey }),
           message: getApplyFailureMessage(result.reason),
           failureKind: "application"
         };
@@ -1575,7 +1580,9 @@ function App({
         setComputerTurnState({
           status: "failed",
           turnKey: currentComputerTurnKey ?? currentExecution.turnKey ?? "unknown-turn",
-          ...(currentComputerDecisionKey === null ? {} : { decisionKey: currentComputerDecisionKey }),
+          ...(currentComputerDecisionKey === null
+            ? {}
+            : { decisionKey: currentComputerDecisionKey }),
           message: getApplyFailureMessage(result.reason),
           failureKind: "application"
         });
@@ -1843,8 +1850,8 @@ function App({
     }
 
     setGameState(nextGameState);
-  setLineageId(nextLineageId);
-  setGameShellMode("player-vs-computer");
+    setLineageId(nextLineageId);
+    setGameShellMode("player-vs-computer");
     setOpeningRollState(nextOpeningRollState);
     setOpeningTurnPending(nextOpeningTurnPending);
     setDieOne(DEFAULT_MANUAL_DIE_ONE);
@@ -2017,19 +2024,27 @@ function App({
 
     if (gameState.dice === null) {
       const currentExecution = computerTurnExecutionRef.current;
-      if (currentExecution.phase === "rolling" && currentExecution.turnKey === currentComputerTurnKey) {
+      if (
+        currentExecution.phase === "rolling" &&
+        currentExecution.turnKey === currentComputerTurnKey
+      ) {
         return;
       }
 
       setExecutionState({ turnKey: currentComputerTurnKey, phase: "rolling" });
       onRollDice();
-      setMessage(openingTurnPending ? "Computer is playing the opening turn." : "Computer is rolling dice.");
+      setMessage(
+        openingTurnPending ? "Computer is playing the opening turn." : "Computer is rolling dice."
+      );
       return;
     }
 
     if (legalMovesResult.ok && legalMovesResult.moves.length === 0) {
       const currentExecution = computerTurnExecutionRef.current;
-      if (currentExecution.phase === "applying" && currentExecution.turnKey === currentComputerTurnKey) {
+      if (
+        currentExecution.phase === "applying" &&
+        currentExecution.turnKey === currentComputerTurnKey
+      ) {
         return;
       }
 
@@ -2500,6 +2515,42 @@ function App({
     gameState.dice !== null &&
     legalMovesResult.ok &&
     legalMovesResult.moves.length === 0;
+  const bestEvaluatedOutcome = useMemo(() => {
+    if (!moveEvaluationResult?.ok || moveEvaluationResult.analysis.kind !== "evaluated") {
+      return null;
+    }
+
+    if (
+      moveEvaluationResult.analysis.coverage !== "complete" ||
+      isFixtureEvaluatorProvenance(moveEvaluationResult.analysis.provenance.provider)
+    ) {
+      return null;
+    }
+
+    return moveEvaluationResult.analysis.rankedMoves[0]?.outcome ?? null;
+  }, [moveEvaluationResult]);
+  const canUseHintControls =
+    bestEvaluatedOutcome !== null &&
+    !isReadOnlyInspection &&
+    !isComputerTurn &&
+    gameStatus.state !== "complete";
+
+  const onHint = (): void => {
+    if (!canUseHintControls || bestEvaluatedOutcome === null) {
+      return;
+    }
+
+    setMessage(`Hint: consider ${formatMoveBreadcrumb(bestEvaluatedOutcome.move)}.`);
+  };
+
+  const onShowBestMove = (): void => {
+    if (!canUseHintControls || bestEvaluatedOutcome === null) {
+      return;
+    }
+
+    onSelectOutcome(getMoveFingerprint(bestEvaluatedOutcome.move));
+  };
+
   const canSetDiceManually = canRollDice;
   const canCopySnapshot =
     typeof navigator !== "undefined" &&
@@ -2587,7 +2638,9 @@ function App({
   })();
 
   const turnDiceSummary =
-    gameState.dice === null ? "Dice not rolled" : `Turn dice ${gameState.dice.dice[0]}-${gameState.dice.dice[1]}`;
+    gameState.dice === null
+      ? "Turn dice: not set"
+      : `Turn dice: ${gameState.dice.dice[0]}, ${gameState.dice.dice[1]}`;
 
   const showOpeningButton = openingRollState.phase !== "resolved";
   const openingButtonLabel = openingRollState.phase === "tied" ? "Roll Again" : "Roll for Opening";
@@ -2645,7 +2698,8 @@ function App({
           <p>Play White, study the position, and keep the coach beside the board.</p>
         </div>
         <p className={styles.status} aria-live="polite">
-          <span>Workspace</span> {computerTurnState.status === "failed" ? "computer paused" : "ready"}
+          <span>Workspace</span>{" "}
+          {computerTurnState.status === "failed" ? "computer paused" : "ready"}
         </p>
       </header>
 
@@ -2659,8 +2713,20 @@ function App({
               <p className={styles.gameMeta} aria-live="polite">
                 Turn: {getPlayerLabel(gameState.activePlayer)}
               </p>
+              <p className={styles.gameMeta} data-testid="opening-phase">
+                Opening phase: {openingRollState.phase}
+              </p>
+              {openingRollState.phase === "resolved" ? (
+                <p className={styles.gameMeta} data-testid="opening-resolution">
+                  {getPlayerLabel(openingRollState.startingPlayer)} starts with{" "}
+                  {openingRollState.whiteDie}-{openingRollState.blackDie}
+                  {openingTurnPending ? " (opening turn in progress)" : ""}
+                </p>
+              ) : null}
               <p className={styles.gameMeta}>{openingSummary}</p>
-              <p className={styles.gameMeta}>{turnDiceSummary}</p>
+              <p className={styles.gameMeta} data-testid="turn-dice-value">
+                {turnDiceSummary}
+              </p>
               <p className={styles.gameMeta} aria-live="polite">
                 {interactionStatus}
               </p>
@@ -2684,16 +2750,17 @@ function App({
               >
                 Roll Dice
               </button>
-              <button
-                type="button"
-                className={!showOpeningButton && !canRollDice && canPassTurn ? styles.primaryAction : undefined}
-                onClick={onPassTurn}
-                disabled={!canPassTurn}
-              >
-                Pass Turn
-              </button>
+              {canPassTurn ? (
+                <button type="button" className={styles.primaryAction} onClick={onPassTurn}>
+                  No legal moves - Pass
+                </button>
+              ) : null}
               {computerTurnState.status === "failed" ? (
-                <button type="button" className={styles.primaryAction} onClick={onRetryComputerTurn}>
+                <button
+                  type="button"
+                  className={styles.primaryAction}
+                  onClick={onRetryComputerTurn}
+                >
                   Retry Computer Move
                 </button>
               ) : null}
@@ -2738,97 +2805,14 @@ function App({
           <p className={styles.selectionMeta} data-testid="hover-preview" aria-live="polite">
             {hoverPreviewText}
           </p>
-          <section className={styles.candidatePanel} aria-label="Remaining move candidates">
-            <h3>Remaining candidates</h3>
-            {isReadOnlyInspection ? (
-              <p className={styles.selectionMeta} data-testid="candidate-panel-locked">
-                Candidate previews are hidden while inspecting a read-only position.
-              </p>
-            ) : null}
-            <p
-              className={styles.selectionMeta}
-              data-testid="continuations-count"
-              aria-live="polite"
-            >
-              Continuations: {isReadOnlyInspection ? 0 : continuationSummaryRows.length}
-            </p>
-            {!isReadOnlyInspection && continuationSummaryRows.length > 0 ? (
-              <ul className={styles.candidateList} data-testid="candidate-continuations">
-                {continuationSummaryRows.map((row) => (
-                  <li key={`continuation-${row.stepText}`}>
-                    {row.stepText}
-                    {row.count > 1 ? ` (${row.count} matches)` : ""}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className={styles.selectionMeta} data-testid="candidate-continuations">
-                No continuation steps remain.
-              </p>
-            )}
-            <p
-              className={styles.selectionMeta}
-              data-testid="completed-moves-count"
-              aria-live="polite"
-            >
-              Completed moves: {isReadOnlyInspection ? 0 : completedMoveSummaryRows.length}
-            </p>
-            {!isReadOnlyInspection && completedMoveSummaryRows.length > 0 ? (
-              <ul className={styles.candidateList} data-testid="candidate-completed-moves">
-                {completedMoveSummaryRows.map((row) => (
-                  <li key={`completed-${row.moveText}`}>
-                    {row.moveText}
-                    {row.count > 1 ? ` (${row.count} matches)` : ""}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className={styles.selectionMeta} data-testid="candidate-completed-moves">
-                No completed move candidates for the current prefix.
-              </p>
-            )}
-          </section>
           <div className={styles.controlsRow}>
-            <button type="button" disabled>
+            <button type="button" onClick={onHint} disabled={!canUseHintControls}>
               Hint
             </button>
-            <button type="button" disabled>
+            <button type="button" onClick={onShowBestMove} disabled={!canUseHintControls}>
               Show Best Move
             </button>
           </div>
-
-          <TurnHistoryPanel
-            history={turnHistory}
-            inspectionTurnNumber={historyInspection?.turnNumber ?? null}
-            inspectionView={historyInspection?.view ?? "after"}
-            inspectionActive={isInspectingHistory}
-            onSelectTurn={onSelectHistoryTurn}
-            onSelectView={onSelectInspectionView}
-            onSelectPreviousTurn={onSelectPreviousInspectionTurn}
-            onSelectNextTurn={onSelectNextInspectionTurn}
-            onReturnToCurrentGame={onReturnToCurrentGame}
-          />
-
-          <LegalMoveOutcomesPanel
-            openingRollPhase={openingRollState.phase}
-            gameComplete={gameStatus.state === "complete"}
-            turnDiceAssigned={gameState.dice !== null}
-            isInspectingHistory={isInspectingHistory}
-            analysisResult={legalMoveOutcomesResult}
-            evaluatorConfigured={moveEvaluator !== undefined}
-            evaluatorPending={moveEvaluationPending}
-            evaluationResult={moveEvaluationResult}
-            selectedOutcomeKey={selectedOutcomeKey}
-            previewActive={isPreviewingOutcome}
-            onSelectOutcome={onSelectOutcome}
-            onReturnToCurrentGame={onReturnFromOutcomePreview}
-          />
-
-          <AnalysisSessionPanel
-            session={analysisSession}
-            evaluatorStatus={analysisEvaluatorStatus}
-            lastCaptureFailure={lastCaptureFailure}
-          />
         </section>
 
         <section className={styles.sidebarSection}>
@@ -2851,52 +2835,141 @@ function App({
               : { knowledgeRetriever: coachKnowledgeRetriever })}
           />
 
-          <EngineSandboxPanel
-            gameState={gameState}
-            gameStatus={gameStatus}
-            dieOne={dieOne}
-            dieTwo={dieTwo}
-            message={message}
-            legalMovesResult={legalMovesResult}
-            onDieOneChange={setDieOne}
-            onDieTwoChange={setDieTwo}
-            openingRollState={openingRollState}
-            openingTurnPending={openingTurnPending}
-            interactionLocked={isReadOnlyInspection}
-            canRollDice={canRollDice}
-            canSetDiceManually={canSetDiceManually}
-            exportSnapshotText={exportSnapshotText}
-            importText={importText}
-            canCopySnapshot={canCopySnapshot}
-            snapshotFormat={GAME_SNAPSHOT_FORMAT}
-            snapshotVersion={GAME_SNAPSHOT_VERSION}
-            learnerOwnershipMode={learnerOwnershipMode}
-            recentWindowSize={learnerProgress.recentWindowSize}
-            recentBestOrReasonableCount={learnerProgress.counts.recentWindow.bestOrReasonable}
-            recentMistakeCount={learnerProgress.counts.recentWindow.mistake}
-            recentMajorMistakeCount={learnerProgress.counts.recentWindow.majorMistake}
-            recentUnclassifiedCount={learnerProgress.counts.recentWindow.unclassified}
-            recentMainPatternLabel={recentMainPatternSummary.label}
-            {...(recentMainPatternSummary.detail === undefined
-              ? {}
-              : { recentMainPatternDetail: recentMainPatternSummary.detail })}
-            profileGamesRepresented={learnerProgress.gamesRepresented.fullProfile}
-            profileStorageStatus={
-              profileWritable ? (lineageWritable ? "ready" : "lineage-memory-only") : "memory-only"
-            }
-            profileMessage={profileMessage}
-            onRollForOpening={onRollForOpening}
-            onRollDice={onRollDice}
-            onSetDice={onSetDice}
-            onPassTurn={onPassTurn}
-            onNewGame={onNewGame}
-            onSetLearnerOwnership={onSetLearnerOwnership}
-            onClearLearnerProfile={onClearLearnerProfile}
-            onCopyExportSnapshot={onCopyExportSnapshot}
-            onImportTextChange={setImportText}
-            onValidateAndImportSnapshot={onValidateAndImportSnapshot}
-            onClearSavedGame={onClearSavedGame}
+          <TurnHistoryPanel
+            history={turnHistory}
+            inspectionTurnNumber={historyInspection?.turnNumber ?? null}
+            inspectionView={historyInspection?.view ?? "after"}
+            inspectionActive={isInspectingHistory}
+            onSelectTurn={onSelectHistoryTurn}
+            onSelectView={onSelectInspectionView}
+            onSelectPreviousTurn={onSelectPreviousInspectionTurn}
+            onSelectNextTurn={onSelectNextInspectionTurn}
+            onReturnToCurrentGame={onReturnToCurrentGame}
           />
+
+          <details className={styles.secondaryDisclosure} open>
+            <summary>Move Analysis</summary>
+            <section className={styles.candidatePanel} aria-label="Remaining move candidates">
+              <h3>Remaining candidates</h3>
+              {isReadOnlyInspection ? (
+                <p className={styles.selectionMeta} data-testid="candidate-panel-locked">
+                  Candidate previews are hidden while inspecting a read-only position.
+                </p>
+              ) : null}
+              <p
+                className={styles.selectionMeta}
+                data-testid="continuations-count"
+                aria-live="polite"
+              >
+                Continuations: {isReadOnlyInspection ? 0 : continuationSummaryRows.length}
+              </p>
+              {!isReadOnlyInspection && continuationSummaryRows.length > 0 ? (
+                <ul className={styles.candidateList} data-testid="candidate-continuations">
+                  {continuationSummaryRows.map((row) => (
+                    <li key={`continuation-${row.stepText}`}>
+                      {row.stepText}
+                      {row.count > 1 ? ` (${row.count} matches)` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={styles.selectionMeta} data-testid="candidate-continuations">
+                  No continuation steps remain.
+                </p>
+              )}
+              <p
+                className={styles.selectionMeta}
+                data-testid="completed-moves-count"
+                aria-live="polite"
+              >
+                Completed moves: {isReadOnlyInspection ? 0 : completedMoveSummaryRows.length}
+              </p>
+              {!isReadOnlyInspection && completedMoveSummaryRows.length > 0 ? (
+                <ul className={styles.candidateList} data-testid="candidate-completed-moves">
+                  {completedMoveSummaryRows.map((row) => (
+                    <li key={`completed-${row.moveText}`}>
+                      {row.moveText}
+                      {row.count > 1 ? ` (${row.count} matches)` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className={styles.selectionMeta} data-testid="candidate-completed-moves">
+                  No completed move candidates for the current prefix.
+                </p>
+              )}
+            </section>
+
+            <LegalMoveOutcomesPanel
+              openingRollPhase={openingRollState.phase}
+              gameComplete={gameStatus.state === "complete"}
+              turnDiceAssigned={gameState.dice !== null}
+              isInspectingHistory={isInspectingHistory}
+              analysisResult={legalMoveOutcomesResult}
+              evaluatorConfigured={moveEvaluator !== undefined}
+              evaluatorPending={moveEvaluationPending}
+              evaluationResult={moveEvaluationResult}
+              selectedOutcomeKey={selectedOutcomeKey}
+              previewActive={isPreviewingOutcome}
+              onSelectOutcome={onSelectOutcome}
+              onReturnToCurrentGame={onReturnFromOutcomePreview}
+            />
+          </details>
+
+          <details className={styles.secondaryDisclosure}>
+            <summary>Development Tools</summary>
+            <AnalysisSessionPanel
+              session={analysisSession}
+              evaluatorStatus={analysisEvaluatorStatus}
+              lastCaptureFailure={lastCaptureFailure}
+            />
+
+            <EngineSandboxPanel
+              gameState={gameState}
+              gameStatus={gameStatus}
+              dieOne={dieOne}
+              dieTwo={dieTwo}
+              message={message}
+              legalMovesResult={legalMovesResult}
+              onDieOneChange={setDieOne}
+              onDieTwoChange={setDieTwo}
+              openingRollState={openingRollState}
+              openingTurnPending={openingTurnPending}
+              interactionLocked={isReadOnlyInspection}
+              canSetDiceManually={canSetDiceManually}
+              exportSnapshotText={exportSnapshotText}
+              importText={importText}
+              canCopySnapshot={canCopySnapshot}
+              snapshotFormat={GAME_SNAPSHOT_FORMAT}
+              snapshotVersion={GAME_SNAPSHOT_VERSION}
+              learnerOwnershipMode={learnerOwnershipMode}
+              recentWindowSize={learnerProgress.recentWindowSize}
+              recentBestOrReasonableCount={learnerProgress.counts.recentWindow.bestOrReasonable}
+              recentMistakeCount={learnerProgress.counts.recentWindow.mistake}
+              recentMajorMistakeCount={learnerProgress.counts.recentWindow.majorMistake}
+              recentUnclassifiedCount={learnerProgress.counts.recentWindow.unclassified}
+              recentMainPatternLabel={recentMainPatternSummary.label}
+              {...(recentMainPatternSummary.detail === undefined
+                ? {}
+                : { recentMainPatternDetail: recentMainPatternSummary.detail })}
+              profileGamesRepresented={learnerProgress.gamesRepresented.fullProfile}
+              profileStorageStatus={
+                profileWritable
+                  ? lineageWritable
+                    ? "ready"
+                    : "lineage-memory-only"
+                  : "memory-only"
+              }
+              profileMessage={profileMessage}
+              onSetDice={onSetDice}
+              onSetLearnerOwnership={onSetLearnerOwnership}
+              onClearLearnerProfile={onClearLearnerProfile}
+              onCopyExportSnapshot={onCopyExportSnapshot}
+              onImportTextChange={setImportText}
+              onValidateAndImportSnapshot={onValidateAndImportSnapshot}
+              onClearSavedGame={onClearSavedGame}
+            />
+          </details>
         </section>
       </main>
     </div>

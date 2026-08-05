@@ -23,6 +23,7 @@ interface CoachPanelProps {
   readonly lineageKey: string;
   readonly context: CoachQuestionContext;
   readonly progressContext?: Extract<CoachQuestionContext, { kind: "progress-profile" }>;
+  readonly quickPrompts?: readonly string[];
   readonly model?: ChatModel;
   readonly runtime: CoachRuntime;
   readonly fixtureEnabled: boolean;
@@ -336,6 +337,7 @@ export function CoachPanel({
   lineageKey,
   context,
   progressContext,
+  quickPrompts = [],
   model,
   runtime,
   fixtureEnabled,
@@ -372,7 +374,7 @@ export function CoachPanel({
   const currentPositionAnalysisPending =
     context.kind === "current-position" && evaluatorConfigured && analysisPending;
 
-  const onSubmit = (): void => {
+  const submitQuestion = (question: string): void => {
     if (pending) {
       return;
     }
@@ -384,6 +386,11 @@ export function CoachPanel({
 
     if (!hasModel) {
       setFailure("No coach model configured.");
+      return;
+    }
+
+    const trimmedQuestion = question.trim();
+    if (trimmedQuestion.length === 0) {
       return;
     }
 
@@ -399,7 +406,7 @@ export function CoachPanel({
       knowledgeRetriever: retriever,
       runtime,
       conversation,
-      question: draft,
+      question: trimmedQuestion,
       context,
       ...(progressContext === undefined ? {} : { progressContext }),
       ...(analysisSession === undefined ? {} : { analysisSession }),
@@ -450,6 +457,10 @@ export function CoachPanel({
         setStatusText(null);
         setPending(false);
       });
+  };
+
+  const onSubmit = (): void => {
+    submitQuestion(draft);
   };
 
   const onInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -513,6 +524,22 @@ export function CoachPanel({
           ))
         )}
       </div>
+
+      {quickPrompts.length > 0 ? (
+        <div className={styles.quickPrompts} aria-label="Coach quick prompts">
+          {quickPrompts.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              className={styles.quickPromptButton}
+              disabled={pending || currentPositionAnalysisPending || !hasModel}
+              onClick={() => submitQuestion(prompt)}
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <form
         className={styles.form}

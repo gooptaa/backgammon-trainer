@@ -285,7 +285,9 @@ describe("evaluateLegalMoves", () => {
     expect(result.analysis.coverage).toBe("complete");
     expect(result.analysis.unevaluatedMoves).toHaveLength(0);
     expect(result.analysis.rankedMoves).toHaveLength(result.analysis.factualOutcomes.length);
-    expect(new Set(canonicalFingerprints).size).toBeLessThan(result.analysis.factualOutcomes.length);
+    expect(new Set(canonicalFingerprints).size).toBeLessThan(
+      result.analysis.factualOutcomes.length
+    );
 
     if (duplicateCanonicalFingerprint === undefined) {
       return;

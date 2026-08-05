@@ -18,7 +18,6 @@ interface EngineSandboxPanelProps {
   openingRollState: OpeningRollState;
   openingTurnPending: boolean;
   interactionLocked: boolean;
-  canRollDice: boolean;
   canSetDiceManually: boolean;
   exportSnapshotText: string;
   importText: string;
@@ -38,11 +37,7 @@ interface EngineSandboxPanelProps {
   profileMessage: string | null;
   onDieOneChange: (value: DieValue) => void;
   onDieTwoChange: (value: DieValue) => void;
-  onRollForOpening: () => void;
-  onRollDice: () => void;
   onSetDice: () => void;
-  onPassTurn: () => void;
-  onNewGame: () => void;
   onSetLearnerOwnership: (value: "white" | "black" | "both" | "unknown") => void;
   onClearLearnerProfile: () => void;
   onCopyExportSnapshot: () => void;
@@ -95,7 +90,6 @@ export function EngineSandboxPanel({
   openingRollState,
   openingTurnPending,
   interactionLocked,
-  canRollDice,
   canSetDiceManually,
   exportSnapshotText,
   importText,
@@ -115,11 +109,7 @@ export function EngineSandboxPanel({
   profileMessage,
   onDieOneChange,
   onDieTwoChange,
-  onRollForOpening,
-  onRollDice,
   onSetDice,
-  onPassTurn,
-  onNewGame,
   onSetLearnerOwnership,
   onClearLearnerProfile,
   onCopyExportSnapshot,
@@ -129,15 +119,7 @@ export function EngineSandboxPanel({
 }: EngineSandboxPanelProps): JSX.Element {
   const isComplete = gameStatus.state === "complete";
   const legalMoves = legalMovesResult.ok ? legalMovesResult.moves : [];
-  const canPass =
-    !interactionLocked &&
-    !isComplete &&
-    gameState.dice !== null &&
-    legalMovesResult.ok &&
-    legalMoves.length === 0;
   const occupiedPointRows = getOccupiedPointRows(gameState);
-  const canRollForOpening =
-    !interactionLocked && !isComplete && openingRollState.phase !== "resolved";
 
   return (
     <section aria-labelledby="engine-sandbox-title" className={styles.panel}>
@@ -150,9 +132,7 @@ export function EngineSandboxPanel({
         <p className={styles.meta}>Winner: {gameStatus.winner}</p>
       ) : null}
 
-      <p className={styles.meta} data-testid="opening-phase">
-        Opening phase: {openingRollState.phase}
-      </p>
+      <p className={styles.meta}>Opening phase: {openingRollState.phase}</p>
       {openingRollState.phase !== "waiting" ? (
         <>
           <p className={styles.meta} aria-label={`White opening die ${openingRollState.whiteDie}`}>
@@ -164,7 +144,7 @@ export function EngineSandboxPanel({
         </>
       ) : null}
       {openingRollState.phase === "resolved" ? (
-        <p className={styles.meta} data-testid="opening-resolution">
+        <p className={styles.meta}>
           {getPlayerLabel(openingRollState.startingPlayer)} starts with {openingRollState.whiteDie}-
           {openingRollState.blackDie}
           {openingTurnPending ? " (opening turn in progress)" : ""}
@@ -172,7 +152,7 @@ export function EngineSandboxPanel({
       ) : null}
 
       <DiceDisplay dice={gameState.dice} />
-      <p className={styles.meta} data-testid="turn-dice-value">
+      <p className={styles.meta}>
         Turn dice:{" "}
         {gameState.dice === null
           ? "not set"
@@ -180,24 +160,6 @@ export function EngineSandboxPanel({
       </p>
 
       <div className={styles.controls}>
-        {canRollForOpening ? (
-          <button type="button" onClick={onRollForOpening}>
-            {openingRollState.phase === "tied" ? "Roll Again" : "Roll for Opening"}
-          </button>
-        ) : null}
-
-        <button type="button" onClick={onRollDice} disabled={!canRollDice || interactionLocked}>
-          Roll Dice
-        </button>
-
-        <button type="button" onClick={onPassTurn} disabled={!canPass}>
-          Pass Turn
-        </button>
-
-        <button type="button" onClick={onNewGame}>
-          New Game
-        </button>
-
         <details className={styles.devControls}>
           <summary>Learner Profile</summary>
           <p className={styles.meta}>
