@@ -19,36 +19,36 @@ Engine legality & committed game state
   > Language-model interpretation (explains only what's already been decided deterministically)
 ```
 
-The LLM must never decide: legality, which move was played, evaluator's top move, whether evaluator coverage is complete, whether a move was a mistake, which pattern is supported, mistake counts, or learner side. All of that resolves deterministically in `backgammon-coach` *before* prompt construction. If you're about to let a prompt or model call make one of these decisions, stop — that's an architecture violation, not a shortcut.
+The LLM must never decide: legality, which move was played, evaluator's top move, whether evaluator coverage is complete, whether a move was a mistake, which pattern is supported, mistake counts, or learner side. All of that resolves deterministically in `backgammon-coach` _before_ prompt construction. If you're about to let a prompt or model call make one of these decisions, stop — that's an architecture violation, not a shortcut.
 
 Coverage semantics are not interchangeable: **complete / partial / fixture / missing / failed / unavailable** evaluator evidence must stay visibly distinct through UI, coach, classifier, and profile. Fixture evidence never supports authoritative move claims (ADR 0010).
 
 ## Package map (verified against `packages/` and `docs/architecture/overview.md`)
 
-| Package | Owns | Depends on |
-|---|---|---|
-| `backgammon-domain` | shared canonical types/constants | nothing app/UI/provider |
-| `backgammon-engine` | legal moves, application, turns, snapshots, history | domain only |
-| `backgammon-analysis` | factual position/move-outcome features, evaluator contract, ranking, fixture evaluator | engine |
-| `backgammon-analysis-session` | versioned, committed-turn-linked interpretation records | analysis, engine |
-| `backgammon-evaluator-gnubg` | Node-only GNU detection/invocation/parsing/move-mapping (`/node`, `/testing` subpaths) | analysis, engine, Node stdlib |
-| `ai-contracts` | provider-neutral `ChatModel` request/response contracts | nothing backgammon-specific |
-| `backgammon-knowledge` | authored Markdown → validated generated corpus → deterministic lexical retrieval | nothing app/UI/provider/rules |
-| `backgammon-coach` | conversation model, context/evidence/retrieval-plan/prompt orchestration, recommendation authority, classification policy, learner-profile domain, pattern-detection policy | ai-contracts, engine, analysis, analysis-session, knowledge |
-| `shared` | tiny cross-cutting transport types | nothing |
-| `apps/server` | trusted execution of real providers/GNU, config loading, routes | ai-contracts, shared, optionally domain |
-| `apps/web` | board, gameplay, Coach UI, browser persistence, profile UI | most packages except `backgammon-evaluator-gnubg` (forbidden) |
+| Package                       | Owns                                                                                                                                                                        | Depends on                                                    |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `backgammon-domain`           | shared canonical types/constants                                                                                                                                            | nothing app/UI/provider                                       |
+| `backgammon-engine`           | legal moves, application, turns, snapshots, history                                                                                                                         | domain only                                                   |
+| `backgammon-analysis`         | factual position/move-outcome features, evaluator contract, ranking, fixture evaluator                                                                                      | engine                                                        |
+| `backgammon-analysis-session` | versioned, committed-turn-linked interpretation records                                                                                                                     | analysis, engine                                              |
+| `backgammon-evaluator-gnubg`  | Node-only GNU detection/invocation/parsing/move-mapping (`/node`, `/testing` subpaths)                                                                                      | analysis, engine, Node stdlib                                 |
+| `ai-contracts`                | provider-neutral `ChatModel` request/response contracts                                                                                                                     | nothing backgammon-specific                                   |
+| `backgammon-knowledge`        | authored Markdown → validated generated corpus → deterministic lexical retrieval                                                                                            | nothing app/UI/provider/rules                                 |
+| `backgammon-coach`            | conversation model, context/evidence/retrieval-plan/prompt orchestration, recommendation authority, classification policy, learner-profile domain, pattern-detection policy | ai-contracts, engine, analysis, analysis-session, knowledge   |
+| `shared`                      | tiny cross-cutting transport types                                                                                                                                          | nothing                                                       |
+| `apps/server`                 | trusted execution of real providers/GNU, config loading, routes                                                                                                             | ai-contracts, shared, optionally domain                       |
+| `apps/web`                    | board, gameplay, Coach UI, browser persistence, profile UI                                                                                                                  | most packages except `backgammon-evaluator-gnubg` (forbidden) |
 
 Forbidden edges are enforced by `pnpm architecture:check` (`scripts/validate-architecture.mjs`) and ESLint `no-restricted-imports` — see `docs/architecture/dependency-guardrails.md` for the exact list before adding an import that feels boundary-adjacent. Notably: engine/analysis/analysis-session must never depend on coach or knowledge; ai-contracts must never depend on any backgammon package; web must never import `backgammon-evaluator-gnubg`.
 
-`backgammon-coach` is intentionally accumulating a lot (conversation, evidence, recommendation authority, classification, patterns, learner profile, knowledge retrieval planning). The repo's own docs flag this as worth *watching*, not casually splitting — don't refactor package boundaries without a concrete cohesion problem and an ADR.
+`backgammon-coach` is intentionally accumulating a lot (conversation, evidence, recommendation authority, classification, patterns, learner profile, knowledge retrieval planning). The repo's own docs flag this as worth _watching_, not casually splitting — don't refactor package boundaries without a concrete cohesion problem and an ADR.
 
 ## Documentation — read in this order
 
 1. `README.md` — current implemented/not-implemented status (most current single source)
 2. `docs/README.md` — full doc index
 3. `docs/architecture/overview.md` + `docs/architecture/dependency-guardrails.md`
-4. All 14 ADRs in `docs/adr/` (short, each ~30-70 lines) — these encode *why*, and rejected alternatives matter as much as decisions
+4. All 14 ADRs in `docs/adr/` (short, each ~30-70 lines) — these encode _why_, and rejected alternatives matter as much as decisions
 5. `docs/coach/*`, `docs/analysis/*`, `docs/knowledge/*` for domain detail
 6. `docs/worklog/` in reverse chronological order — most current record of what actually happened, including rejected approaches and deferred work. The latest worklog + `git log` outrank this guide and outrank `docs/roadmap.md`.
 7. Package `README.md` files — each states Purpose, Responsibilities, Allowed/Forbidden Dependencies, Public API, Non-goals. Read the target package's README before touching it.
@@ -83,7 +83,7 @@ Every package uses plain `vitest run` (no `CI=1` gating convention in this repo 
 pnpm check   # format:check -> architecture:check -> knowledge:check -> lint -> typecheck -> test -> build
 ```
 
-During a milestone: run focused package tests while iterating (`pnpm --filter @backgammon-trainer/<pkg> test`), then run the full `pnpm check` once near the end rather than repeatedly. Don't reflexively rerun the whole matrix before *and* after every small change.
+During a milestone: run focused package tests while iterating (`pnpm --filter @backgammon-trainer/<pkg> test`), then run the full `pnpm check` once near the end rather than repeatedly. Don't reflexively rerun the whole matrix before _and_ after every small change.
 
 ## Milestone workflow (as practiced in worklogs)
 

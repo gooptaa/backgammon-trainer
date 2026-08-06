@@ -156,13 +156,15 @@ Matching behavior:
 - parse GNU-style coordinate text into ordered coordinate steps
 - convert coordinates back into canonical engine coordinates using player-on-roll mapping
 - compare against the complete canonical legal move set supplied by analysis
+- support compressed GNU checker-play notation where one token may represent a multi-die path for one checker (for example `6/1*`)
 - keep canonical `Move` identity internal by returning `getMoveFingerprint(canonicalMove)`
 
 Ambiguity policy:
 
-- if one parsed GNU move matches multiple canonical moves, the adapter rejects the result
-- it does not choose arbitrarily
-- coordinate-equivalent canonical moves that differ by die-index metadata remain distinct
+- if one parsed GNU move matches no canonical legal move, the adapter rejects the result
+- if one parsed GNU move matches multiple canonical moves that resolve to different resulting positions, the adapter rejects the result
+- if one parsed GNU move matches multiple canonical moves that resolve to one canonical-equivalent resulting position class (for example legal die-order variants), the adapter accepts the row and deterministically selects a canonical representative by stable fingerprint order
+- coordinate-equivalent canonical moves that differ by die-index metadata remain distinct canonical identities even when one evaluator-equivalent class score is shared across them
 
 ## Transcript parser and score normalization
 
@@ -190,6 +192,7 @@ Preferred long-term behavior remains complete scoring of all legal moves.
 Current spike behavior:
 
 - supports `complete` and `partial` provider coverage
+- coverage completion is interpreted over canonical-equivalent legal move classes (same resulting position), not raw canonical move rows
 - partial coverage preserves explicit warnings and leaves remaining legal moves unevaluated in the shared analysis layer
 - the adapter does not invent scores for omitted moves
 

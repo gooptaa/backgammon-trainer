@@ -9,6 +9,7 @@ Provide a Node-only adapter that translates GNU Backgammon capability/evaluation
 - Detect GNU executable capability and CLI support.
 - Encapsulate process-runner invocation and timeout handling.
 - Translate/match GNU-oriented move data to canonical engine move identity.
+- Match compressed GNU checker-play notation (for example `6/1*`) to engine-legal multi-step outcomes when they are evaluator-equivalent.
 - Provide a bounded Python-bridge invocation path for real GNU checker-play evaluation.
 - Parse supported transcript output into normalized evaluator responses.
 - Expose smoke validation for local adapter availability checks.
@@ -43,6 +44,13 @@ Why these exports are public:
 - Strategic recommendation generation.
 - Heuristic fallback scoring.
 - Owning recommendation authority or coaching guidance policy.
+
+## Matching and coverage notes
+
+- Engine-generated legal outcomes remain the only legality source.
+- A GNU row is accepted only when it matches exactly one evaluator-equivalent legal outcome class.
+- Multiple canonical die-order variants may map to one evaluator-equivalent class when they produce the same resulting position.
+- Ambiguous or unmatched GNU rows fail closed as invalid-provider-result.
 
 ## Server-hosted integration note
 

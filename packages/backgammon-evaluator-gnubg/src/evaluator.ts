@@ -272,10 +272,18 @@ export const createGnuBgPositionEvaluator = (
         const matched = matchGnuBgMoveToLegalOutcome(row.parsedMove, request.legalOutcomes);
 
         if (!matched.ok) {
+          const firstStep = row.parsedMove.steps[0];
+          const lastStep = row.parsedMove.steps[row.parsedMove.steps.length - 1];
+          const normalizedPath =
+            firstStep === undefined || lastStep === undefined
+              ? ""
+              : `; normalized=${String(firstStep.fromPoint)}/${String(lastStep.toPoint)}${lastStep.hitsBlot ? "*" : ""}`;
+          const sourceRank = row.providerRank === undefined ? "unknown" : String(row.providerRank);
+
           return {
             ok: false,
             reason: "invalid-provider-result",
-            message: matched.message,
+            message: `${matched.message} (source-rank=${sourceRank}; notation=${row.notation}${normalizedPath}; candidate-count=${matched.candidateFingerprints.length}; failure=${matched.reason})`,
             provenance: buildProvenance(
               executable,
               options.providerVersion ?? parsedOutput.evaluation.providerVersion,

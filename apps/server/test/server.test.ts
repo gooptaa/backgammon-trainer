@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ChatModel } from "@backgammon-trainer/ai-contracts";
-import type { PositionEvaluator } from "@backgammon-trainer/backgammon-analysis";
+import {
+  analyzeLegalMoveOutcomes,
+  getMoveFingerprint,
+  type PositionEvaluator
+} from "@backgammon-trainer/backgammon-analysis";
 
 import { buildServer } from "../src/app";
 import type { CoachProviderRuntime } from "../src/coachProvider";
@@ -352,5 +356,136 @@ describe("server route unconfigured provider mode", () => {
         message: "Evaluator disabled"
       }
     });
+  });
+});
+
+describe("server evaluator route compressed GNU matching", () => {
+  const evaluatorApp = buildServer({
+    coachProviderRuntime: buildConfiguredRuntime(),
+    evaluatorProviderRuntime: {
+      evaluator: {
+        evaluate: async (request) => {
+          if (
+            request.player !== "black" ||
+            request.dice.dice[0] !== 2 ||
+            request.dice.dice[1] !== 3 ||
+            request.legalOutcomes.length === 0
+          ) {
+            return {
+              ok: false,
+              reason: "invalid-provider-result",
+              message: "Unexpected regression request shape."
+            };
+          }
+
+          return {
+            ok: true,
+            coverage: "complete",
+            scores: [
+              {
+                moveFingerprint: getMoveFingerprint(request.legalOutcomes[0]!.move),
+                normalizedScore: 0.25,
+                providerRank: 1
+              }
+            ],
+            scoreScale: {
+              kind: "equity",
+              unit: "points"
+            },
+            provenance: {
+              provider: "gnubg",
+              providerVersion: "1.08.003",
+              adapterVersion: "0.1.0",
+              settings: {
+                invocationMode: "test-compressed-row"
+              }
+            },
+            warnings: []
+          };
+        }
+      } satisfies PositionEvaluator,
+      status: {
+        configured: true,
+        mode: "gnubg",
+        providerFamily: "gnubg",
+        providerLabel: "gnubg",
+        availability: "available",
+        message: "Configured"
+      }
+    }
+  });
+
+  beforeAll(async () => {
+    await evaluatorApp.ready();
+  });
+
+  afterAll(async () => {
+    await evaluatorApp.close();
+  });
+
+  it("accepts the captured black 2-3 compressed hit case instead of returning invalid-provider-result", async () => {
+    const position = {
+      points: {
+        1: null,
+        2: null,
+        3: null,
+        4: null,
+        5: null,
+        6: null,
+        7: null,
+        8: null,
+        9: null,
+        10: null,
+        11: null,
+        12: null,
+        13: null,
+        14: null,
+        15: null,
+        16: null,
+        17: null,
+        18: null,
+        19: { player: "black", checkerCount: 1 },
+        20: null,
+        21: null,
+        22: null,
+        23: null,
+        24: { player: "white", checkerCount: 1 }
+      },
+      bar: {
+        white: 0,
+        black: 0
+      },
+      borneOff: {
+        white: 14,
+        black: 14
+      }
+    } as const;
+    const legalOutcomeAnalysis = analyzeLegalMoveOutcomes(position, "black", {
+      dice: [2, 3]
+    });
+    expect(legalOutcomeAnalysis.ok).toBe(true);
+    if (!legalOutcomeAnalysis.ok) {
+      throw new Error(legalOutcomeAnalysis.message);
+    }
+
+    const response = await evaluatorApp.inject({
+      method: "POST",
+      url: "/api/evaluator/evaluate-position",
+      payload: {
+        position,
+        player: "black",
+        dice: {
+          dice: [2, 3]
+        },
+        legalOutcomes: legalOutcomeAnalysis.analysis.outcomes
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    const json = response.json<{ data: { result: { ok: boolean } } }>();
+    expect(json.data.result.ok).toBe(true);
+    expect(response.body).not.toContain(
+      "GNU move is not present in the canonical legal move set: 6/1*."
+    );
   });
 });

@@ -225,11 +225,11 @@ const canCollapseMatch = (
         break;
       }
 
-      if (groupEnd > groupStart && step.hitsBlot) {
-        sawIntermediateHit = true;
-      }
-
       if (step.toPoint !== parsedStep.toPoint) {
+        if (groupEnd > groupStart && step.hitsBlot) {
+          sawIntermediateHit = true;
+        }
+
         continue;
       }
 

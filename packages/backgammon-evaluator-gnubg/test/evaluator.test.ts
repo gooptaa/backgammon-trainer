@@ -48,6 +48,21 @@ const DUPLICATE_AUDIT_POSITION = createPosition({
   }
 });
 
+const BLACK_COMPRESSED_HIT_POSITION = createPosition({
+  points: {
+    19: { player: "black", checkerCount: 1 },
+    24: { player: "white", checkerCount: 1 }
+  },
+  borneOff: {
+    white: 14,
+    black: 14
+  }
+});
+
+const COMPRESSED_HIT_DICE = {
+  dice: [2, 3] as const
+};
+
 describe("createGnuBgPositionEvaluator", () => {
   it("builds default python-bridge process requests with bounded args and JSON stdin", async () => {
     const captured = {
@@ -291,6 +306,67 @@ describe("createGnuBgPositionEvaluator", () => {
         completeBlack.analysis.rankedMoves[1]?.normalizedScore ?? -Infinity
       );
     }
+  });
+
+  it("accepts compressed black GNU hit notation and maps it to one canonical-equivalent legal class", async () => {
+    const evaluator = createGnuBgPositionEvaluator({
+      processRunner: createFakeGnuBgProcessRunner(async () => ({
+        ok: true,
+        exitCode: 0,
+        stdout: readFixture("success-black-compressed-hit.txt"),
+        stderr: ""
+      })),
+      analysisRequestFactory: ({ executable, timeoutMs }) => ({
+        ok: true,
+        processRequest: { executable, args: [], stdin: "", timeoutMs },
+        settings: { invocationMode: "fixture", analysisCommandVerified: false }
+      })
+    });
+
+    const evaluated = await evaluateLegalMoves(
+      {
+        position: BLACK_COMPRESSED_HIT_POSITION,
+        player: "black",
+        dice: COMPRESSED_HIT_DICE
+      },
+      evaluator
+    );
+
+    expect(evaluated.ok).toBe(true);
+    if (!evaluated.ok || evaluated.analysis.kind !== "evaluated") {
+      return;
+    }
+
+    const compressedClass = evaluated.analysis.factualOutcomes.filter((outcome) => {
+      const steps = outcome.move.steps;
+      return (
+        steps.length === 2 &&
+        steps[0]?.fromPoint === 19 &&
+        (steps[0]?.toPoint === 21 || steps[0]?.toPoint === 22) &&
+        steps[1]?.fromPoint === steps[0]?.toPoint &&
+        steps[1]?.toPoint === 24 &&
+        steps[1]?.hitsBlot
+      );
+    });
+
+    expect(compressedClass).toHaveLength(2);
+    expect(evaluated.analysis.coverage).toBe("complete");
+    expect(evaluated.analysis.unevaluatedMoves).toHaveLength(0);
+    expect(
+      new Set(compressedClass.map((outcome) => getCanonicalMoveFingerprint(outcome))).size
+    ).toBe(1);
+
+    const classRows = evaluated.analysis.rankedMoves.filter((row) =>
+      compressedClass.some(
+        (outcome) => getMoveFingerprint(outcome.move) === getMoveFingerprint(row.outcome.move)
+      )
+    );
+
+    expect(classRows).toHaveLength(2);
+    expect(new Set(classRows.map((row) => row.normalizedScore))).toEqual(new Set([0.25]));
+    expect(new Set(classRows.map((row) => row.lossFromBest))).toEqual(new Set([0]));
+    expect(new Set(classRows.map((row) => row.rank))).toEqual(new Set([1]));
+    expect(new Set(classRows.map((row) => row.providerRank))).toEqual(new Set([1]));
   });
 
   it("maps unavailable, timeout, nonzero exit, malformed output, unknown moves, and ambiguity to shared failure reasons", async () => {

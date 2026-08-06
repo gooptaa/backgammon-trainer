@@ -207,6 +207,18 @@ const createTwoDistinctMovesPosition = (): BoardPosition =>
     }
   });
 
+const createBlackCompressedHitRegressionPosition = (): BoardPosition =>
+  createPosition({
+    points: {
+      19: { player: "black", checkerCount: 1 },
+      24: { player: "white", checkerCount: 1 }
+    },
+    borneOff: {
+      white: 14,
+      black: 14
+    }
+  });
+
 const createTwoPassHistoryPosition = (): BoardPosition =>
   createPosition({
     points: {
@@ -544,6 +556,62 @@ const createDeferredNonFixtureEvaluator = (): {
       resolveEvaluation(result);
       resolveEvaluation = null;
     }
+  };
+};
+
+const createCompressedClassEvaluator = (): {
+  evaluator: PositionEvaluator;
+  evaluateSpy: ReturnType<typeof vi.fn>;
+} => {
+  const evaluateSpy = vi.fn(
+    async (request: EvaluatePositionRequest): Promise<EvaluatePositionResult> => {
+      const compressedClass = request.legalOutcomes.filter((outcome) => {
+        const steps = outcome.move.steps;
+        return (
+          steps.length === 2 &&
+          steps[0]?.fromPoint === 19 &&
+          (steps[0]?.toPoint === 21 || steps[0]?.toPoint === 22) &&
+          steps[1]?.fromPoint === steps[0]?.toPoint &&
+          steps[1]?.toPoint === 24 &&
+          steps[1]?.hitsBlot === true
+        );
+      });
+
+      return {
+        ok: true,
+        coverage: "complete",
+        scores:
+          compressedClass.length === 0
+            ? []
+            : [
+                {
+                  moveFingerprint: getMoveFingerprint(compressedClass[0]!.move),
+                  normalizedScore: 0.25,
+                  providerRank: 1
+                }
+              ],
+        scoreScale: {
+          kind: "equity",
+          unit: "points"
+        },
+        provenance: {
+          provider: "gnubg",
+          providerVersion: "1.08.003",
+          adapterVersion: "0.1.0",
+          settings: {
+            invocationMode: "fixture"
+          }
+        },
+        warnings: []
+      };
+    }
+  );
+
+  return {
+    evaluator: {
+      evaluate: evaluateSpy
+    },
+    evaluateSpy
   };
 };
 
@@ -1513,6 +1581,51 @@ describe("App turn transitions and reset behavior", () => {
 
     expect(evaluateSpy).toHaveBeenCalledTimes(2);
     expect(screen.getByRole("button", { name: /^2\. Black - Normal - 1-1 -/ })).toBeInTheDocument();
+
+    applySpy.mockRestore();
+  });
+
+  it("applies exactly one automatic black move for compressed-class complete coverage and keeps learner observations non-black", async () => {
+    const { evaluator, evaluateSpy } = createCompressedClassEvaluator();
+    const profileStorage = createInspectableMemoryLearnerProfileStorage();
+    const applySpy = vi.spyOn(engineModule, "applyGameMove");
+
+    renderApp({
+      initialGameState: {
+        position: createBlackCompressedHitRegressionPosition(),
+        activePlayer: "black",
+        dice: {
+          dice: [2, 3]
+        }
+      },
+      initialOpeningRollState: resolvedOpeningState("black"),
+      initialOpeningTurnPending: false,
+      moveEvaluator: evaluator,
+      initialGameShellMode: "player-vs-computer",
+      profileStorage: profileStorage.storage
+    });
+
+    await waitFor(() => {
+      expect(getHistoryCount()).toContain("Recorded turns: 1");
+    });
+
+    expect(screen.getByRole("button", { name: /^1\. Black - Normal - 2-3 -/ })).toBeInTheDocument();
+    expect(screen.getByText("Turn: White")).toBeInTheDocument();
+    expect(evaluateSpy).toHaveBeenCalledTimes(1);
+    expect(applySpy).toHaveBeenCalledTimes(1);
+
+    const storedProfileText = profileStorage.getValue();
+    if (storedProfileText !== null) {
+      const decodedProfile = decodeLearnerProfile(storedProfileText);
+      expect(decodedProfile.ok).toBe(true);
+      if (decodedProfile.ok) {
+        expect(
+          decodedProfile.profile.observations.every(
+            (observation) => observation.actingSide !== "black"
+          )
+        ).toBe(true);
+      }
+    }
 
     applySpy.mockRestore();
   });

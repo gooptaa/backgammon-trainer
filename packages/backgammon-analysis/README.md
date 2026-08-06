@@ -11,6 +11,7 @@ Provide deterministic factual analysis over engine-authoritative legal moves and
 - Define and validate provider-neutral evaluator request/response contracts.
 - Produce deterministic ranked legal-move analysis from validated evaluator data.
 - Provide canonical move fingerprinting for cross-layer identity matching.
+- Validate evaluator coverage at canonical-equivalent move-class granularity (shared resulting positions) while preserving canonical move identity for application/history.
 
 ## Allowed Dependencies
 
